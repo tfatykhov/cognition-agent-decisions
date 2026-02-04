@@ -17,22 +17,51 @@ Decision intelligence for AI agents. Query similar past decisions before making 
 
 ## Quick Start
 
-### Query Similar Decisions
-Find past decisions similar to your current context:
+### Pre-Decision Protocol (Recommended)
+Single command that does everything:
+```bash
+uv run {baseDir}/scripts/decide.py "context of your decision" \
+  --title "Short decision title" \
+  --category architecture \
+  --stakes high \
+  --confidence 0.85
+```
+
+**What it does:**
+1. 📍 Queries similar past decisions
+2. 📍 Checks guardrails (blocks if violated)
+3. 📍 Logs decision YAML automatically
+
+**Options:**
+- `--dry-run` — Preview without saving
+- `--force` — Override guardrail blocks (not recommended)
+- `--category` — architecture, process, integration, tooling, security
+- `--stakes` — low, medium, high
+- `--confidence` — 0.0-1.0
+
+### Individual Commands
+If you need fine-grained control:
+
+**Query Similar Decisions:**
 ```bash
 uv run {baseDir}/scripts/query.py "choosing a database for vector storage" --top 5
 ```
 
-### Check Guardrails
-Verify a decision doesn't violate policies before logging:
+**Check Guardrails:**
 ```bash
 uv run {baseDir}/scripts/check.py --category architecture --stakes high --confidence 0.8
 ```
 
-### Index Decisions
-Index decision YAML files for semantic search:
+**Index Decisions:**
 ```bash
 uv run {baseDir}/scripts/index.py /path/to/decisions/ --incremental
+```
+
+**Pattern Analysis:**
+```bash
+uv run {baseDir}/scripts/patterns.py calibration --dir /path/to/decisions/
+uv run {baseDir}/scripts/patterns.py categories --dir /path/to/decisions/
+uv run {baseDir}/scripts/patterns.py antipatterns --dir /path/to/decisions/
 ```
 
 ## Environment Variables
