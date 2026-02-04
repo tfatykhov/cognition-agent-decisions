@@ -1,12 +1,12 @@
 """Query service for semantic decision search.
 
 Wraps ChromaDB HTTP API for querying decisions.
+Uses httpx for async HTTP to avoid blocking the event loop.
 """
 
 import json
 import os
 import time
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,12 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TENANT = "default_tenant"
 DATABASE = "default_database"
 COLLECTION_NAME = "cognition_decisions"
+
+# Configurable secrets paths (can be overridden via env)
+SECRETS_PATHS = os.getenv(
+    "SECRETS_PATHS",
+    "/home/node/.openclaw/workspace/.secrets:~/.secrets",
+).split(":")
 
 
 @dataclass(slots=True)
@@ -45,70 +51,100 @@ class QueryResponse:
     error: str | None = None
 
 
+def _get_secrets_paths() -> list[Path]:
+    """Get list of paths to search for secrets."""
+    paths = []
+    for p in SECRETS_PATHS:
+        expanded = Path(p.strip()).expanduser()
+        paths.append(expanded)
+    return paths
+
+
 def _load_gemini_key() -> str:
     """Load Gemini API key from env or secrets."""
     global GEMINI_API_KEY
     if GEMINI_API_KEY:
         return GEMINI_API_KEY
 
-    secrets_paths = [
-        Path("/home/node/.openclaw/workspace/.secrets/gemini.env"),
-        Path.home() / ".secrets" / "gemini.env",
-    ]
-
-    for path in secrets_paths:
-        if path.exists():
-            for line in path.read_text().splitlines():
+    for path in _get_secrets_paths():
+        gemini_env = path / "gemini.env"
+        if gemini_env.exists():
+            for line in gemini_env.read_text().splitlines():
                 if line.startswith("GEMINI_API_KEY="):
                     GEMINI_API_KEY = line.split("=", 1)[1].strip().strip('"').strip("'")
                     return GEMINI_API_KEY
 
-    raise ValueError("GEMINI_API_KEY not found")
+    raise ValueError("GEMINI_API_KEY not found in environment or secrets paths")
 
 
-def _api_request(method: str, url: str, data: dict | None = None) -> tuple[int, Any]:
-    """Make HTTP request to ChromaDB API."""
-    headers = {"Content-Type": "application/json"}
-    body = json.dumps(data).encode() if data else None
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+async def _async_request(
+    method: str, url: str, data: dict | None = None, headers: dict | None = None
+) -> tuple[int, Any]:
+    """Make async HTTP request using httpx.
 
+    Falls back to sync urllib if httpx not available.
+    """
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            content = resp.read().decode()
-            return resp.status, json.loads(content) if content else {}
-    except urllib.error.HTTPError as e:
-        content = e.read().decode() if e.fp else ""
-        return e.code, {"error": content}
-    except Exception as e:
-        return 0, {"error": str(e)}
+        import httpx
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            if method == "GET":
+                response = await client.get(url, headers=headers)
+            else:
+                response = await client.request(
+                    method, url, json=data, headers=headers
+                )
+            return response.status_code, response.json() if response.text else {}
+    except ImportError:
+        # Fallback to sync (less ideal but works)
+        import urllib.request
+
+        req_headers = {"Content-Type": "application/json"}
+        if headers:
+            req_headers.update(headers)
+        body = json.dumps(data).encode() if data else None
+        req = urllib.request.Request(url, data=body, headers=req_headers, method=method)
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                content = resp.read().decode()
+                return resp.status, json.loads(content) if content else {}
+        except urllib.error.HTTPError as e:
+            content = e.read().decode() if e.fp else ""
+            return e.code, {"error": content}
+        except Exception as e:
+            return 0, {"error": str(e)}
 
 
-def _generate_embedding(text: str) -> list[float]:
-    """Generate embedding using Gemini."""
+async def _generate_embedding(text: str) -> list[float]:
+    """Generate embedding using Gemini API.
+
+    API key is sent via header, not URL query param, for security.
+    """
     api_key = _load_gemini_key()
 
     if len(text) > 8000:
         text = text[:8000]
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key,
+    }
     data = {"content": {"parts": [{"text": text}]}}
 
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(data).encode(),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    status, result = await _async_request("POST", url, data, headers)
 
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode())
-        return result["embedding"]["values"]
+    if status != 200:
+        raise RuntimeError(f"Embedding API error: {result}")
+
+    return result["embedding"]["values"]
 
 
-def _get_collection_id() -> str | None:
+async def _get_collection_id() -> str | None:
     """Get the decisions collection ID."""
     base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
-    status, data = _api_request("GET", f"{base}/collections")
+    status, data = await _async_request("GET", f"{base}/collections")
 
     if status == 200 and isinstance(data, list):
         for c in data:
@@ -143,7 +179,7 @@ async def query_decisions(
     start_time = time.time()
 
     # Get collection
-    coll_id = _get_collection_id()
+    coll_id = await _get_collection_id()
     if not coll_id:
         return QueryResponse(
             results=[],
@@ -154,7 +190,7 @@ async def query_decisions(
 
     # Generate embedding
     try:
-        embedding = _generate_embedding(query)
+        embedding = await _generate_embedding(query)
     except Exception as e:
         return QueryResponse(
             results=[],
@@ -184,7 +220,9 @@ async def query_decisions(
     if where:
         payload["where"] = where
 
-    status, data = _api_request("POST", f"{base}/collections/{coll_id}/query", payload)
+    status, data = await _async_request(
+        "POST", f"{base}/collections/{coll_id}/query", payload
+    )
 
     if status != 200:
         return QueryResponse(
