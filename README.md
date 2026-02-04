@@ -228,6 +228,27 @@ export CHROMA_HOST="your-shared-db.example.com"
 export CHROMA_PORT="8000"
 ```
 
+## Remote Access (CSTP)
+
+**New in v0.7.0:** Cognition Engines now supports **CSTP (Cognition State Transfer Protocol)**, allowing remote agents to query your decision history via JSON-RPC.
+
+**Endpoint:** `POST /cstp`
+
+**Method: `cstp.queryDecisions`**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.queryDecisions",
+  "params": {
+    "query": "database migration",
+    "filters": { "category": "architecture", "minConfidence": 0.8 }
+  },
+  "id": 1
+}
+```
+
+See [CSTP Design](docs/CSTP-v0.7.0-DESIGN.md) for full protocol details.
+
 ## Guardrail Example
 
 ```yaml
@@ -252,7 +273,7 @@ message: "High-stakes decisions require ≥50% confidence"
 | v0.5.0 | Semantic Decision Index | ✅ Shipped |
 | v0.6.0 | Pattern Detection Engine | ✅ Shipped |
 | v0.6.0 | Enhanced Guardrails + Audit Trail | ✅ Shipped |
-| v0.7.0 | Cross-Agent Federation | 🔜 Next |
+| v0.7.0 | Cross-Agent Federation (CSTP) | ⚠️ Beta |
 | v0.8.0 | Shared Intent Protocol | Planned |
 | v0.9.0 | Context Graphs | Planned |
 | v1.0.0 | Multi-Agent Cognition Network | Planned |
@@ -302,6 +323,7 @@ cognition-agent-decisions/
 │   └── cognition_engines/
 │       ├── accelerators/     # Query, patterns, learning
 │       └── guardrails/       # Definitions, enforcement
+├── a2a/                      # CSTP Protocol (Server/Client)
 ├── guardrails/               # YAML guardrail definitions
 ├── tests/                    # Test suite
 ├── docs/                     # Documentation

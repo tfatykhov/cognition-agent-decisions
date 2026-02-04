@@ -116,41 +116,96 @@ class QueryDecisionsResponse:
         }
 
 
+# ============================================================================
+# F003: checkGuardrails models
+# ============================================================================
+
+
+@dataclass(slots=True)
+class ActionContext:
+    """Action context for guardrail evaluation."""
+
+    description: str
+    category: str | None = None
+    stakes: str = "medium"
+    confidence: float | None = None
+    context: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ActionContext":
+        """Create ActionContext from dict."""
+        description = data.get("description", "")
+        if not description:
+            raise ValueError("Missing required field: action.description")
+
+        return cls(
+            description=description,
+            category=data.get("category"),
+            stakes=data.get("stakes", "medium"),
+            confidence=data.get("confidence"),
+            context=data.get("context", {}),
+        )
+
+
+@dataclass(slots=True)
+class AgentInfo:
+    """Information about the requesting agent."""
+
+    id: str | None = None
+    url: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "AgentInfo":
+        """Create AgentInfo from dict."""
+        if not data:
+            return cls()
+        return cls(
+            id=data.get("id"),
+            url=data.get("url"),
+        )
+
+
 @dataclass(slots=True)
 class CheckGuardrailsRequest:
     """Request for cstp.checkGuardrails."""
 
-    action: dict[str, Any]
-    context: dict[str, Any] | None = None
+    action: ActionContext
+    agent: AgentInfo = field(default_factory=AgentInfo)
 
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> "CheckGuardrailsRequest":
         """Create request from JSON-RPC params."""
-        action = params.get("action", {})
-        if not action:
+        action_data = params.get("action", {})
+        if not action_data:
             raise ValueError("Missing required parameter: action")
 
         return cls(
-            action=action,
-            context=params.get("context"),
+            action=ActionContext.from_dict(action_data),
+            agent=AgentInfo.from_dict(params.get("agent")),
         )
 
 
 @dataclass(slots=True)
 class GuardrailViolation:
-    """A guardrail violation."""
+    """A guardrail violation or warning."""
 
-    rule: str
+    guardrail_id: str
+    name: str
     message: str
-    severity: str = "error"
+    severity: str = "block"
+    suggestion: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict."""
-        return {
-            "rule": self.rule,
+        result: dict[str, Any] = {
+            "guardrailId": self.guardrail_id,
+            "name": self.name,
             "message": self.message,
             "severity": self.severity,
         }
+        if self.suggestion:
+            result["suggestion"] = self.suggestion
+        return result
 
 
 @dataclass(slots=True)
@@ -161,6 +216,7 @@ class CheckGuardrailsResponse:
     violations: list[GuardrailViolation]
     warnings: list[GuardrailViolation]
     evaluated: int
+    evaluated_at: datetime
     agent: str
 
     def to_dict(self) -> dict[str, Any]:
@@ -170,6 +226,7 @@ class CheckGuardrailsResponse:
             "violations": [v.to_dict() for v in self.violations],
             "warnings": [w.to_dict() for w in self.warnings],
             "evaluated": self.evaluated,
+            "evaluatedAt": self.evaluated_at.isoformat(),
             "agent": self.agent,
         }
 

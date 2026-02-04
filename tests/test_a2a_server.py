@@ -267,11 +267,23 @@ class TestQueryDecisions:
         assert len(data["result"]["decisions"]) == 1
 
 
-class TestCheckGuardrailsStub:
-    """Tests for cstp.checkGuardrails stub."""
+class TestCheckGuardrails:
+    """Tests for cstp.checkGuardrails (with mocked service)."""
 
-    def test_check_guardrails_returns_result(self, client: TestClient) -> None:
-        """checkGuardrails should return stub result."""
+    @patch("a2a.cstp.dispatcher.log_guardrail_check")
+    @patch("a2a.cstp.dispatcher.evaluate_guardrails")
+    def test_check_guardrails_returns_result(
+        self, mock_eval: AsyncMock, mock_log: AsyncMock, client: TestClient
+    ) -> None:
+        """checkGuardrails should return result."""
+        from a2a.cstp.guardrails_service import EvaluationResult
+
+        mock_eval.return_value = EvaluationResult(
+            allowed=True,
+            violations=[],
+            warnings=[],
+            evaluated=5,
+        )
         response = client.post(
             "/cstp",
             json={
