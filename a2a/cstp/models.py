@@ -1,7 +1,7 @@
 """CSTP request/response models for JSON-RPC methods."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 
