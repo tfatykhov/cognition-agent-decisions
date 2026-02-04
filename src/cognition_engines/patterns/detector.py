@@ -38,13 +38,17 @@ class CalibrationBucket:
     @property
     def brier_score(self) -> float:
         """Brier score for this bucket."""
-        with_outcomes = [d for d in self.decisions if d.get("outcome")]
+        # Only include decisions with explicit confidence
+        with_outcomes = [d for d in self.decisions 
+                        if d.get("outcome") and d.get("confidence") is not None]
         if not with_outcomes:
             return 0.0
         
         total = 0.0
         for d in with_outcomes:
             conf = d.get("confidence", 0.5)
+            if conf > 1:
+                conf = conf / 100
             actual = 1.0 if d.get("outcome") == "success" else 0.0
             total += (conf - actual) ** 2
         
@@ -149,28 +153,107 @@ class PatternDetector:
         except ImportError:
             pass
         
-        # Basic parsing
+        # Enhanced basic parsing (handles lists, multiline, nested)
         result = {}
+        current_key = None
+        current_list = None
+        in_multiline = False
+        multiline_lines = []
+        
         for line in content.split('\n'):
-            if line.strip().startswith('#'):
+            stripped = line.strip()
+            
+            # Skip comments and empty lines (unless in multiline)
+            if stripped.startswith('#'):
                 continue
+            if not stripped and not in_multiline:
+                continue
+            
+            # Handle multiline string continuation
+            if in_multiline:
+                if line.startswith('  ') or stripped == '':
+                    multiline_lines.append(stripped)
+                    continue
+                else:
+                    result[current_key] = '\n'.join(multiline_lines)
+                    in_multiline = False
+                    current_key = None
+            
+            # Handle list items
+            if stripped.startswith('- '):
+                item_val = stripped[2:].strip()
+                if current_list is not None:
+                    # Parse the list item value
+                    if item_val.lower() == 'true':
+                        current_list.append(True)
+                    elif item_val.lower() == 'false':
+                        current_list.append(False)
+                    elif ':' in item_val:
+                        # Dict-like item (e.g., "- type: pattern")
+                        item_dict = {}
+                        # Simple single-line dict parsing
+                        parts = item_val.split(':', 1)
+                        k, v = parts[0].strip(), parts[1].strip() if len(parts) > 1 else ''
+                        item_dict[k] = self._parse_value(v) if v else None
+                        current_list.append(item_dict)
+                    else:
+                        current_list.append(self._parse_value(item_val))
+                continue
+            
+            # Handle nested list item properties (e.g., "    description: ...")
+            if line.startswith('    ') and current_list and isinstance(current_list[-1], dict):
+                if ':' in stripped:
+                    k, v = stripped.split(':', 1)
+                    current_list[-1][k.strip()] = self._parse_value(v.strip())
+                continue
+            
+            # Handle key: value pairs at root level
             if ':' in line and not line.startswith(' '):
+                # End any current list
+                current_list = None
+                
                 key, val = line.split(':', 1)
                 key = key.strip()
                 val = val.strip()
-                if val:
-                    if val.lower() == 'true':
-                        result[key] = True
-                    elif val.lower() == 'false':
-                        result[key] = False
-                    elif val.startswith('"') and val.endswith('"'):
-                        result[key] = val[1:-1]
-                    else:
-                        try:
-                            result[key] = float(val)
-                        except ValueError:
-                            result[key] = val
+                
+                if val == '|':
+                    # Multiline string
+                    current_key = key
+                    in_multiline = True
+                    multiline_lines = []
+                elif val == '' or val == '[]':
+                    # Empty value or empty list - might be followed by list items
+                    result[key] = []
+                    current_list = result[key]
+                    current_key = key
+                elif val:
+                    result[key] = self._parse_value(val)
+                    current_key = key
+        
+        # Handle trailing multiline
+        if in_multiline and current_key:
+            result[current_key] = '\n'.join(multiline_lines)
+        
         return result
+    
+    def _parse_value(self, val: str):
+        """Parse a single YAML value."""
+        if not val:
+            return None
+        if val.lower() == 'true':
+            return True
+        if val.lower() == 'false':
+            return False
+        if val.startswith('"') and val.endswith('"'):
+            return val[1:-1]
+        if val.startswith("'") and val.endswith("'"):
+            return val[1:-1]
+        try:
+            if '.' in val:
+                return float(val)
+            return int(val)
+        except ValueError:
+            return val
     
     def calibration_report(self) -> dict:
         """
@@ -199,17 +282,20 @@ class PatternDetector:
                     break
         
         # Calculate overall Brier score
+        # Only include decisions with BOTH outcome AND explicit confidence
         with_outcomes = [d for d in self.decisions if d.get("outcome")]
+        with_outcomes_and_conf = [d for d in with_outcomes if d.get("confidence") is not None]
+        
         overall_brier = 0.0
-        if with_outcomes:
+        if with_outcomes_and_conf:
             total = 0.0
-            for d in with_outcomes:
+            for d in with_outcomes_and_conf:
                 conf = d.get("confidence", 0.5)
                 if conf > 1:
                     conf = conf / 100
                 actual = 1.0 if d.get("outcome") == "success" else 0.0
                 total += (conf - actual) ** 2
-            overall_brier = total / len(with_outcomes)
+            overall_brier = total / len(with_outcomes_and_conf)
         
         # Interpret Brier score
         if overall_brier < 0.1:

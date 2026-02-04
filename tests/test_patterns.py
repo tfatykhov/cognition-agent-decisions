@@ -110,6 +110,50 @@ class TestPatternDetector:
         detector = PatternDetector(decisions)
         assert len(detector.decisions) == 1
     
+    def test_parse_yaml_basic(self):
+        """Test basic YAML parsing."""
+        detector = PatternDetector()
+        content = """
+title: Test Decision
+confidence: 0.8
+outcome: success
+category: architecture
+"""
+        result = detector._parse_yaml(content)
+        assert result["title"] == "Test Decision"
+        assert result["confidence"] == 0.8
+        assert result["outcome"] == "success"
+    
+    def test_parse_yaml_with_list(self):
+        """Test YAML parsing with list items."""
+        detector = PatternDetector()
+        content = """
+title: Test
+reasons:
+  - type: pattern
+    description: First reason
+  - type: analysis
+    description: Second reason
+"""
+        result = detector._parse_yaml(content)
+        assert "reasons" in result
+        assert isinstance(result["reasons"], list)
+        assert len(result["reasons"]) >= 1
+    
+    def test_parse_yaml_multiline(self):
+        """Test YAML parsing with multiline string."""
+        detector = PatternDetector()
+        content = """
+title: Test
+context: |
+  This is a multiline
+  context string
+decision: Made it
+"""
+        result = detector._parse_yaml(content)
+        assert "context" in result
+        assert "multiline" in result["context"]
+    
     def test_calibration_report_empty(self):
         detector = PatternDetector([])
         report = detector.calibration_report()
