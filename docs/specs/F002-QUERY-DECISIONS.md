@@ -140,78 +140,44 @@ Implement `cstp.queryDecisions` method to enable remote agents to search this ag
 ### Handler
 
 ```python
-# a2a/cstp/methods.py
+# a2a/cstp/dispatcher.py
 
-from ..models.requests import QueryDecisionsRequest
-from ..models.responses import QueryDecisionsResponse
-from skills.cognition_engines.query import query_decisions
+from .models import QueryDecisionsRequest, QueryDecisionsResponse
+from .query_service import query_decisions
 
-async def handle_query_decisions(
-    params: QueryDecisionsRequest,
-    agent_id: str
-) -> QueryDecisionsResponse:
+async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     """Handle cstp.queryDecisions method."""
     
-    # Rate limit check
-    check_rate_limit(agent_id, "queryDecisions")
+    # Parse request
+    request = QueryDecisionsRequest.from_params(params)
     
-    # Execute query via existing infrastructure
+    # Execute query
     results = await query_decisions(
-        query=params.query,
-        category=params.filters.category if params.filters else None,
-        min_confidence=params.filters.minConfidence if params.filters else 0.0,
-        limit=min(params.limit, 50),
+        query=request.query,
+        n_results=request.limit,
+        category=request.filters.category,
+        # ...
     )
     
     # Map to response format
-    decisions = [
-        DecisionSummary(
-            id=r.id[:8],
-            title=r.title,
-            category=r.category,
-            confidence=r.confidence,
-            stakes=r.stakes,
-            status=r.status,
-            outcome=r.outcome,
-            date=r.date,
-            distance=r.distance,
-            reasons=r.reason_types if params.includeReasons else None,
-        )
-        for r in results
-    ]
-    
-    return QueryDecisionsResponse(
-        decisions=decisions,
-        total=len(decisions),
-        query=params.query,
-        queryTimeMs=results.query_time_ms,
-        agent=get_agent_name(),
-    )
+    # ...
 ```
 
 ### Models
 
 ```python
-# a2a/models/requests.py
+# a2a/cstp/models.py
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime
+from dataclasses import dataclass
+from typing import Any
 
-class QueryFilters(BaseModel):
-    category: Optional[str] = None
-    minConfidence: Optional[float] = Field(None, ge=0.0, le=1.0)
-    maxConfidence: Optional[float] = Field(None, ge=0.0, le=1.0)
-    dateAfter: Optional[datetime] = None
-    dateBefore: Optional[datetime] = None
-    stakes: Optional[List[str]] = None
-    status: Optional[List[str]] = None
+@dataclass(slots=True)
+class QueryFilters:
+    # ...
 
-class QueryDecisionsRequest(BaseModel):
-    query: str = Field(..., min_length=1)
-    filters: Optional[QueryFilters] = None
-    limit: int = Field(10, ge=1, le=50)
-    includeReasons: bool = False
+@dataclass(slots=True)
+class QueryDecisionsRequest:
+    # ...
 ```
 
 ---
