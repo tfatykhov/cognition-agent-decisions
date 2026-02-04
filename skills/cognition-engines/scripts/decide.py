@@ -307,6 +307,45 @@ def save_decision(yaml_content: str, title: str) -> Path:
     return filepath
 
 
+def index_decision(filepath: Path, context: str, category: str, confidence: float, title: str):
+    """Index a single decision to ChromaDB."""
+    coll_id = get_collection_id()
+    if not coll_id:
+        # Create collection if it doesn't exist
+        base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
+        payload = {"name": COLLECTION_NAME}
+        status, data = api_request("POST", f"{base}/collections", payload)
+        if status not in (200, 201):
+            raise ValueError(f"Failed to create collection: {data}")
+        coll_id = data.get("id")
+    
+    # Generate embedding
+    embedding = generate_embedding(context)
+    
+    # Create unique ID from filepath
+    doc_id = filepath.stem
+    
+    # Upsert to ChromaDB
+    base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
+    payload = {
+        "ids": [doc_id],
+        "embeddings": [embedding],
+        "documents": [context],
+        "metadatas": [{
+            "title": title,
+            "category": category,
+            "confidence": confidence,
+            "date": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "status": "decided",
+            "path": str(filepath),
+        }],
+    }
+    
+    status, data = api_request("POST", f"{base}/collections/{coll_id}/upsert", payload)
+    if status not in (200, 201):
+        raise ValueError(f"Failed to index: {data}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Pre-decision protocol: query + check + log")
     parser.add_argument("context", help="Context/description of the decision")
@@ -393,6 +432,14 @@ def main():
     else:
         filepath = save_decision(yaml_content, args.title)
         print(f"   ✅ Saved: {filepath}")
+        
+        # Step 4: Auto-index the new decision
+        print("\n📍 Step 4: Indexing decision...")
+        try:
+            index_decision(filepath, args.context, args.category, args.confidence, args.title)
+            print("   ✅ Indexed to ChromaDB")
+        except Exception as e:
+            print(f"   ⚠️ Index failed (will be picked up by cron): {e}")
     
     print("\n" + "=" * 60)
     print("✅ PRE-DECISION PROTOCOL COMPLETE")
