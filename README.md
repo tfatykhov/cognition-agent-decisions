@@ -243,14 +243,39 @@ message: "High-stakes decisions require ≥50% confidence"
 
 ## Roadmap
 
+*Inspired by Cisco Outshift's [Internet of Cognition](https://outshift.cisco.com/blog/from-connection-to-cognition-scaling-superintelligence) architecture.*
+
 | Version | Features | Status |
 |---------|----------|--------|
 | v0.5.0 | Semantic Decision Index | ✅ Shipped |
 | v0.6.0 | Pattern Detection Engine | ✅ Shipped |
 | v0.6.0 | Enhanced Guardrails + Audit Trail | ✅ Shipped |
 | v0.7.0 | Cross-Agent Federation | 🔜 Next |
-| v0.8.0 | Outcome-Based Learning | Planned |
+| v0.8.0 | Shared Intent Protocol | Planned |
+| v0.9.0 | Context Graphs | Planned |
 | v1.0.0 | Multi-Agent Cognition Network | Planned |
+
+### v0.7.0 — Cross-Agent Federation
+- **Cross-agent query**: `query.py --scope=org` — search all agents' decisions
+- **Federated ChromaDB**: Shared collection or cross-instance queries
+- **Guardrail inheritance**: Org-level GATs that all agents inherit
+- **Agent-specific overrides**: Local rules with audit trail
+
+### v0.8.0 — Shared Intent Protocol
+- **Decision proposals**: Multi-agent voting on shared decisions
+- **Conflict resolution**: When agents disagree, structured negotiation
+- **Intent alignment**: Agents negotiate common objectives before deciding
+
+### v0.9.0 — Context Graphs
+- **Entity relationships**: Not just decisions — connections between concepts
+- **Knowledge transfer**: "What does Agent A know that Agent B needs?"
+- **Emergent context**: Collective understanding beyond individual agents
+
+### v1.0.0 — Multi-Agent Cognition Network
+- **Semantic State Transfer**: Export decision context in portable format
+- **Reasoning continuity**: Another agent can "resume" a decision thread
+- **Collective innovation**: Agents reason together on novel problems
+- **COGs + GATs**: Full cognitive amplifiers and guardrail technologies
 
 ## Project Structure
 
