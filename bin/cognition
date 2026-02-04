@@ -32,12 +32,11 @@ def cmd_index(args):
     print(f"Found {len(yaml_files)} YAML files")
     
     # Parse and index
-    import yaml
     decisions = []
     for path in yaml_files:
         try:
             content = path.read_text()
-            data = yaml.safe_load(content)
+            data = parse_yaml_simple(content)
             if data and isinstance(data, dict) and ("decision" in data or "title" in data):
                 data["_source_file"] = str(path)
                 decisions.append(data)
@@ -51,6 +50,66 @@ def cmd_index(args):
         print(f"Indexed {count} decisions successfully")
     
     return 0
+
+
+def parse_yaml_simple(content: str) -> dict:
+    """Simple YAML parser for decision files (single document, flat-ish structure)."""
+    try:
+        import yaml
+        return yaml.safe_load(content)
+    except ImportError:
+        pass
+    
+    # Basic parsing
+    result = {}
+    current_key = None
+    current_value_lines = []
+    in_multiline = False
+    
+    for line in content.split('\n'):
+        # Skip comments
+        if line.strip().startswith('#'):
+            continue
+        
+        # Multiline string continuation
+        if in_multiline:
+            if line.startswith('  ') or line.strip() == '':
+                current_value_lines.append(line.strip())
+                continue
+            else:
+                result[current_key] = '\n'.join(current_value_lines)
+                in_multiline = False
+        
+        # Key: value pair
+        if ':' in line and not line.startswith(' '):
+            key, val = line.split(':', 1)
+            key = key.strip()
+            val = val.strip()
+            
+            if val == '|':
+                current_key = key
+                current_value_lines = []
+                in_multiline = True
+            elif val:
+                # Parse value
+                if val.lower() == 'true':
+                    result[key] = True
+                elif val.lower() == 'false':
+                    result[key] = False
+                elif val.startswith('"') and val.endswith('"'):
+                    result[key] = val[1:-1]
+                else:
+                    try:
+                        result[key] = float(val)
+                    except ValueError:
+                        result[key] = val
+            else:
+                result[key] = None
+    
+    if in_multiline and current_key:
+        result[current_key] = '\n'.join(current_value_lines)
+    
+    return result
 
 
 def cmd_query(args):
