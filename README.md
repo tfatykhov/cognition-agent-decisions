@@ -245,6 +245,8 @@ message: "High-stakes decisions require ≥50% confidence"
 
 *Inspired by Cisco Outshift's [Internet of Cognition](https://outshift.cisco.com/blog/from-connection-to-cognition-scaling-superintelligence) architecture.*
 
+![Roadmap Architecture](docs/images/roadmap-architecture.png)
+
 | Version | Features | Status |
 |---------|----------|--------|
 | v0.5.0 | Semantic Decision Index | ✅ Shipped |
