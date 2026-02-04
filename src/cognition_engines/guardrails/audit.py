@@ -76,7 +76,7 @@ class AuditRecord:
         ]
         
         if self.override:
-            lines.append(f"  override: true")
+            lines.append("  override: true")
             lines.append(f"  override_reason: \"{self.override_reason}\"")
         
         lines.append("  evaluations:")

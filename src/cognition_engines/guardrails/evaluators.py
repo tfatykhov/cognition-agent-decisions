@@ -3,7 +3,6 @@ Condition Evaluators for Guardrail v2
 Supports semantic similarity, temporal, and aggregate conditions.
 """
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Protocol
