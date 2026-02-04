@@ -13,18 +13,18 @@ class CalibrationBucket:
     min_conf: float
     max_conf: float
     decisions: list[dict] = field(default_factory=list)
-    
+
     @property
     def count(self) -> int:
         return len(self.decisions)
-    
+
     @property
     def predicted_rate(self) -> float:
         """Average confidence (predicted success rate)."""
         if not self.decisions:
             return 0.0
         return sum(d.get("confidence", 0) for d in self.decisions) / len(self.decisions)
-    
+
     @property
     def actual_rate(self) -> float:
         """Actual success rate based on outcomes."""
@@ -33,16 +33,16 @@ class CalibrationBucket:
             return 0.0
         successes = sum(1 for d in with_outcomes if d.get("outcome") == "success")
         return successes / len(with_outcomes)
-    
+
     @property
     def brier_score(self) -> float:
         """Brier score for this bucket."""
         # Only include decisions with explicit confidence
-        with_outcomes = [d for d in self.decisions 
+        with_outcomes = [d for d in self.decisions
                         if d.get("outcome") and d.get("confidence") is not None]
         if not with_outcomes:
             return 0.0
-        
+
         total = 0.0
         for d in with_outcomes:
             conf = d.get("confidence", 0.5)
@@ -50,9 +50,9 @@ class CalibrationBucket:
                 conf = conf / 100
             actual = 1.0 if d.get("outcome") == "success" else 0.0
             total += (conf - actual) ** 2
-        
+
         return total / len(with_outcomes)
-    
+
     def to_dict(self) -> dict:
         return {
             "range": f"{int(self.min_conf*100)}-{int(self.max_conf*100)}%",
@@ -68,17 +68,17 @@ class CategoryStats:
     """Statistics for a decision category."""
     category: str
     decisions: list[dict] = field(default_factory=list)
-    
+
     @property
     def count(self) -> int:
         return len(self.decisions)
-    
+
     @property
     def avg_confidence(self) -> float:
         if not self.decisions:
             return 0.0
         return sum(d.get("confidence", 0) for d in self.decisions) / len(self.decisions)
-    
+
     @property
     def success_rate(self) -> float:
         with_outcomes = [d for d in self.decisions if d.get("outcome")]
@@ -86,11 +86,11 @@ class CategoryStats:
             return 0.0
         successes = sum(1 for d in with_outcomes if d.get("outcome") == "success")
         return successes / len(with_outcomes)
-    
+
     @property
     def outcomes_count(self) -> int:
         return len([d for d in self.decisions if d.get("outcome")])
-    
+
     def to_dict(self) -> dict:
         return {
             "category": self.category,
@@ -108,7 +108,7 @@ class AntiPattern:
     description: str
     severity: str  # low, medium, high
     decisions: list[dict] = field(default_factory=list)
-    
+
     def to_dict(self) -> dict:
         return {
             "type": self.pattern_type,
@@ -121,16 +121,16 @@ class AntiPattern:
 
 class PatternDetector:
     """Analyzes decision history for patterns and insights."""
-    
+
     def __init__(self, decisions: list[dict] = None):
         self.decisions = decisions or []
-    
+
     def load_from_directory(self, directory: Path) -> int:
         """Load decisions from YAML files."""
         self.decisions = []
-        
+
         yaml_files = list(directory.rglob("*.yaml")) + list(directory.rglob("*.yml"))
-        
+
         for path in yaml_files:
             try:
                 content = path.read_text()
@@ -141,9 +141,9 @@ class PatternDetector:
                         self.decisions.append(data)
             except Exception:
                 pass
-        
+
         return len(self.decisions)
-    
+
     def _parse_yaml(self, content: str) -> dict:
         """Parse YAML content."""
         try:
@@ -151,23 +151,23 @@ class PatternDetector:
             return yaml.safe_load(content)
         except ImportError:
             pass
-        
+
         # Enhanced basic parsing (handles lists, multiline, nested)
         result = {}
         current_key = None
         current_list = None
         in_multiline = False
         multiline_lines = []
-        
+
         for line in content.split('\n'):
             stripped = line.strip()
-            
+
             # Skip comments and empty lines (unless in multiline)
             if stripped.startswith('#'):
                 continue
             if not stripped and not in_multiline:
                 continue
-            
+
             # Handle multiline string continuation
             if in_multiline:
                 if line.startswith('  ') or stripped == '':
@@ -177,7 +177,7 @@ class PatternDetector:
                     result[current_key] = '\n'.join(multiline_lines)
                     in_multiline = False
                     current_key = None
-            
+
             # Handle list items
             if stripped.startswith('- '):
                 item_val = stripped[2:].strip()
@@ -198,23 +198,23 @@ class PatternDetector:
                     else:
                         current_list.append(self._parse_value(item_val))
                 continue
-            
+
             # Handle nested list item properties (e.g., "    description: ...")
             if line.startswith('    ') and current_list and isinstance(current_list[-1], dict):
                 if ':' in stripped:
                     k, v = stripped.split(':', 1)
                     current_list[-1][k.strip()] = self._parse_value(v.strip())
                 continue
-            
+
             # Handle key: value pairs at root level
             if ':' in line and not line.startswith(' '):
                 # End any current list
                 current_list = None
-                
+
                 key, val = line.split(':', 1)
                 key = key.strip()
                 val = val.strip()
-                
+
                 if val == '|':
                     # Multiline string
                     current_key = key
@@ -228,13 +228,13 @@ class PatternDetector:
                 elif val:
                     result[key] = self._parse_value(val)
                     current_key = key
-        
+
         # Handle trailing multiline
         if in_multiline and current_key:
             result[current_key] = '\n'.join(multiline_lines)
-        
+
         return result
-    
+
     def _parse_value(self, val: str):
         """Parse a single YAML value."""
         if not val:
@@ -253,7 +253,7 @@ class PatternDetector:
             return int(val)
         except ValueError:
             return val
-    
+
     def calibration_report(self) -> dict:
         """
         Generate calibration report.
@@ -267,24 +267,24 @@ class PatternDetector:
             CalibrationBucket(0.6, 0.8),
             CalibrationBucket(0.8, 1.0),
         ]
-        
+
         # Assign decisions to buckets
         for d in self.decisions:
             conf = d.get("confidence", 0.5)
             # Normalize if stored as percentage
             if conf > 1:
                 conf = conf / 100
-            
+
             for bucket in buckets:
                 if bucket.min_conf <= conf < bucket.max_conf or (bucket.max_conf == 1.0 and conf == 1.0):
                     bucket.decisions.append(d)
                     break
-        
+
         # Calculate overall Brier score
         # Only include decisions with BOTH outcome AND explicit confidence
         with_outcomes = [d for d in self.decisions if d.get("outcome")]
         with_outcomes_and_conf = [d for d in with_outcomes if d.get("confidence") is not None]
-        
+
         overall_brier = 0.0
         if with_outcomes_and_conf:
             total = 0.0
@@ -295,7 +295,7 @@ class PatternDetector:
                 actual = 1.0 if d.get("outcome") == "success" else 0.0
                 total += (conf - actual) ** 2
             overall_brier = total / len(with_outcomes_and_conf)
-        
+
         # Interpret Brier score
         if overall_brier < 0.1:
             interpretation = "Excellent calibration"
@@ -305,7 +305,7 @@ class PatternDetector:
             interpretation = "Fair calibration"
         else:
             interpretation = "Poor calibration - review confidence estimates"
-        
+
         return {
             "total_decisions": len(self.decisions),
             "with_outcomes": len(with_outcomes),
@@ -313,23 +313,23 @@ class PatternDetector:
             "interpretation": interpretation,
             "buckets": [b.to_dict() for b in buckets if b.count > 0],
         }
-    
+
     def category_analysis(self) -> dict:
         """
         Analyze decisions by category.
         Returns success rates and patterns per category.
         """
         categories: dict[str, CategoryStats] = {}
-        
+
         for d in self.decisions:
             cat = d.get("category", "uncategorized")
             if cat not in categories:
                 categories[cat] = CategoryStats(cat)
             categories[cat].decisions.append(d)
-        
+
         # Sort by count
         sorted_cats = sorted(categories.values(), key=lambda c: c.count, reverse=True)
-        
+
         # Identify concerning categories
         concerning = []
         for cat in sorted_cats:
@@ -345,20 +345,20 @@ class PatternDetector:
                     "avg_confidence": round(cat.avg_confidence, 3),
                     "reason": "Low average confidence",
                 })
-        
+
         return {
             "total_categories": len(categories),
             "categories": [c.to_dict() for c in sorted_cats],
             "concerning": concerning,
         }
-    
+
     def detect_antipatterns(self) -> dict:
         """
         Detect decision anti-patterns.
         Returns list of detected issues.
         """
         antipatterns = []
-        
+
         # 1. Repeated failures (same category, multiple failures)
         category_failures: dict[str, list] = {}
         for d in self.decisions:
@@ -367,7 +367,7 @@ class PatternDetector:
                 if cat not in category_failures:
                     category_failures[cat] = []
                 category_failures[cat].append(d)
-        
+
         for cat, failures in category_failures.items():
             if len(failures) >= 2:
                 antipatterns.append(AntiPattern(
@@ -376,7 +376,7 @@ class PatternDetector:
                     severity="high" if len(failures) >= 3 else "medium",
                     decisions=failures,
                 ))
-        
+
         # 2. Low confidence decisions without review
         low_conf_no_review = [
             d for d in self.decisions
@@ -389,14 +389,14 @@ class PatternDetector:
                 severity="medium",
                 decisions=low_conf_no_review,
             ))
-        
+
         # 3. Single reason type (fragile reasoning)
         single_reason = []
         for d in self.decisions:
             reasons = d.get("reasons", [])
             if isinstance(reasons, list) and len(reasons) == 1:
                 single_reason.append(d)
-        
+
         if len(single_reason) >= 3:
             antipatterns.append(AntiPattern(
                 pattern_type="single_reason",
@@ -404,15 +404,15 @@ class PatternDetector:
                 severity="low",
                 decisions=single_reason,
             ))
-        
+
         # 4. Missing context (no similar query before decision)
         # This would require tracking query history - placeholder for now
-        
+
         return {
             "total_antipatterns": len(antipatterns),
             "antipatterns": [a.to_dict() for a in antipatterns],
         }
-    
+
     def full_report(self) -> dict:
         """Generate complete pattern analysis report."""
         return {
