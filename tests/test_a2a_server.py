@@ -3,8 +3,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from a2a.auth import AuthManager, set_auth_manager
+from a2a.config import AgentConfig, AuthConfig, AuthToken, Config, ServerConfig
+from a2a.cstp import get_dispatcher, register_methods
 from a2a.server import create_app
-from a2a.config import Config, ServerConfig, AgentConfig, AuthConfig, AuthToken
 
 
 @pytest.fixture
@@ -29,6 +31,19 @@ def config() -> Config:
 def client(config: Config) -> TestClient:
     """Create test client with configured app."""
     app = create_app(config)
+
+    # Manually initialize auth manager for tests (lifespan may not run)
+    auth_manager = AuthManager(config)
+    set_auth_manager(auth_manager)
+    app.state.auth_manager = auth_manager
+    app.state.config = config
+    app.state.start_time = 0.0
+
+    # Initialize dispatcher
+    dispatcher = get_dispatcher()
+    register_methods(dispatcher)
+    app.state.dispatcher = dispatcher
+
     return TestClient(app)
 
 
