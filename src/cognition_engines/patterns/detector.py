@@ -5,7 +5,6 @@ Analyzes decision history for patterns, calibration, and anti-patterns.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 
 @dataclass
