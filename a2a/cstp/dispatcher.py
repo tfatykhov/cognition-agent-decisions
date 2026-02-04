@@ -7,11 +7,11 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ..models.jsonrpc import (
+    INTERNAL_ERROR,
+    METHOD_NOT_FOUND,
     JsonRpcError,
     JsonRpcRequest,
     JsonRpcResponse,
-    METHOD_NOT_FOUND,
-    INTERNAL_ERROR,
 )
 
 

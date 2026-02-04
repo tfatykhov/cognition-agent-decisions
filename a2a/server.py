@@ -3,26 +3,25 @@
 FastAPI-based server exposing CSTP methods via JSON-RPC 2.0.
 """
 
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
 import time
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import FastAPI, Depends, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .auth import AuthManager, set_auth_manager, verify_bearer_token
 from .config import Config
 from .cstp import CstpDispatcher, get_dispatcher, register_methods
-from .models import AgentCard, AgentCapabilities, HealthResponse
+from .models import AgentCapabilities, AgentCard, HealthResponse
 from .models.jsonrpc import (
-    JsonRpcRequest,
-    JsonRpcError,
-    JsonRpcResponse,
-    PARSE_ERROR,
     INVALID_REQUEST,
+    PARSE_ERROR,
+    JsonRpcError,
+    JsonRpcRequest,
+    JsonRpcResponse,
 )
 
 
@@ -108,7 +107,7 @@ def _register_routes(app: FastAPI) -> None:
             status="healthy",
             version="0.7.0",
             uptime_seconds=uptime,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         return JSONResponse(content=response.to_dict())
 

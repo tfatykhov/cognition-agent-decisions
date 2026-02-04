@@ -3,10 +3,12 @@
 Loads configuration from YAML file and environment variables.
 """
 
+import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-import os
+
 import yaml
 
 
@@ -46,8 +48,6 @@ class AuthConfig:
         Returns:
             Agent ID if valid, None if invalid.
         """
-        import secrets
-
         for auth_token in self.tokens:
             if secrets.compare_digest(auth_token.token, token):
                 return auth_token.agent

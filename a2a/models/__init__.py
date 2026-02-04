@@ -1,8 +1,8 @@
 """Pydantic models for A2A/CSTP requests and responses."""
 
-from .agent_card import AgentCard, AgentCapabilities, CstpCapability
-from .jsonrpc import JsonRpcRequest, JsonRpcResponse, JsonRpcError
+from .agent_card import AgentCapabilities, AgentCard, CstpCapability
 from .health import HealthResponse
+from .jsonrpc import JsonRpcError, JsonRpcRequest, JsonRpcResponse
 
 __all__ = [
     "AgentCard",
