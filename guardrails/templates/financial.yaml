@@ -1,0 +1,54 @@
+# Financial Decisions Template
+# Apply to projects involving money, trading, or financial operations
+#
+# Usage: cognition guardrails apply-template financial --project CryptoTrader
+
+template:
+  name: financial
+  description: Guardrails for financial and trading decisions
+  version: "1.0"
+
+guardrails:
+  - id: require-backtest
+    description: Strategy changes require backtesting
+    condition_category: trading
+    condition_decision_type: strategy_change
+    requires_backtest_completed: true
+    action: block
+    message: "Trading strategy changes require completed backtest"
+
+  - id: require-risk-assessment
+    description: Financial decisions need risk assessment
+    condition_category: financial
+    condition_stakes: high
+    requires_risk_assessed: true
+    action: block
+    message: "High-stakes financial decisions require risk assessment"
+
+  - id: limit-single-position
+    description: Warn on large position sizes
+    condition_category: trading
+    condition_position_size_pct: "> 10"
+    action: warn
+    message: "Position size exceeds 10% of portfolio - review risk"
+
+  - id: require-approval-large-amounts
+    description: Large transactions need approval
+    condition_amount_usd: "> 10000"
+    requires_human_approval: true
+    action: block
+    message: "Transactions over $10k require human approval"
+
+  - id: no-trading-during-volatility
+    description: Pause new trades during high volatility
+    condition_category: trading
+    condition_market_volatility: high
+    action: warn
+    message: "High market volatility detected - consider pausing new positions"
+
+  - id: audit-trail-required
+    description: All financial decisions must be logged
+    condition_category: financial
+    requires_audit_logged: true
+    action: warn
+    message: "Ensure this decision is logged for audit trail"

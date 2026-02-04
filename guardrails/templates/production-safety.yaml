@@ -1,0 +1,47 @@
+# Production Safety Template
+# Apply to any project that deploys to production
+#
+# Usage: cognition guardrails apply-template production-safety --project MyApp
+
+template:
+  name: production-safety
+  description: Guardrails for production deployments
+  version: "1.0"
+
+guardrails:
+  - id: require-code-review
+    description: All production changes must be code reviewed
+    condition_affects_production: true
+    requires_code_review: true
+    action: block
+    message: "Production changes require completed code review"
+
+  - id: require-tests-passing
+    description: CI tests must pass before production deploy
+    condition_affects_production: true
+    requires_ci_green: true
+    action: block
+    message: "CI tests must pass before deploying to production"
+
+  - id: require-rollback-plan
+    description: Production deploys need rollback strategy
+    condition_affects_production: true
+    condition_change_type: deployment
+    requires_rollback_plan: true
+    action: warn
+    message: "Consider documenting rollback plan before deploying"
+
+  - id: no-friday-deploys
+    description: Avoid production deploys on Fridays
+    condition_affects_production: true
+    condition_day_of_week: friday
+    action: warn
+    message: "Friday deploys are risky - consider waiting until Monday"
+
+  - id: require-monitoring
+    description: Ensure monitoring is in place
+    condition_affects_production: true
+    condition_is_new_service: true
+    requires_monitoring_configured: true
+    action: warn
+    message: "New services should have monitoring configured"
