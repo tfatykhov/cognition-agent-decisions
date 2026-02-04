@@ -282,8 +282,10 @@ Check if an action is allowed by the remote agent's guardrails.
       "category": "process",
       "stakes": "high",
       "confidence": 0.6,
-      "affectsProduction": true,
-      "codeReviewCompleted": false
+      "context": {
+        "affectsProduction": true,
+        "codeReviewCompleted": false
+      }
     }
   }
 }
