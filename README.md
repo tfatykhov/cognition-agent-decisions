@@ -25,9 +25,30 @@ Based on Cisco Outshift's [Internet of Cognition](https://outshift.cisco.com/blo
 
 ## Prerequisites
 
-### ChromaDB (Vector Database)
+### Required
+- **Python 3.10+**
+- **ChromaDB** — Vector database for semantic search
+- **Gemini API key** — For embeddings (free tier available)
 
-Cognition Engines uses ChromaDB for semantic similarity search. You have two options:
+### Recommended
+- **[agent-decisions](https://github.com/tfatykhov/agent-decisions)** — Decision journal with Brier scoring
+
+Cognition Engines works best with agent-decisions for:
+- Consistent YAML schema for decisions
+- Confidence calibration tracking (Brier scores)
+- Multi-reason support with strength scoring
+- K-line context bundles
+
+**Without agent-decisions:** Cognition Engines can work with any YAML decision files that have these fields:
+```yaml
+title: "Decision title"
+category: architecture | process | integration | tooling | security
+confidence: 0.85  # 0.0-1.0
+date: "2026-02-04T03:45:00Z"
+context: "What you're deciding"
+```
+
+### ChromaDB (Vector Database)
 
 **Option 1: Docker (Recommended)**
 ```bash
