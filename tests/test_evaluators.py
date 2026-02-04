@@ -42,6 +42,17 @@ class TestFieldCondition:
     def test_missing_field(self):
         cond = FieldCondition("missing", "eq", "value")
         assert cond.evaluate({}) is False
+    
+    def test_string_operator_in_value(self):
+        """Test parsing operators from string values like '> 10'."""
+        cond = FieldCondition("amount", "eq", "> 10")
+        assert cond.evaluate({"amount": 15}) is True
+        assert cond.evaluate({"amount": 5}) is False
+    
+    def test_string_operator_gte(self):
+        cond = FieldCondition("score", "eq", ">= 50")
+        assert cond.evaluate({"score": 50}) is True
+        assert cond.evaluate({"score": 49}) is False
 
 
 class TestSemanticCondition:

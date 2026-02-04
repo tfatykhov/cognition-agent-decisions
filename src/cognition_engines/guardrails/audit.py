@@ -128,12 +128,21 @@ class AuditLog:
         """Query audit records for violations."""
         violations = []
         
-        cutoff = datetime.utcnow().isoformat()[:10]  # Simplified
-        
         if not self.log_dir.exists():
             return violations
         
+        # Calculate cutoff date for filtering
+        from datetime import datetime, timedelta
+        cutoff_date = (datetime.utcnow() - timedelta(days=since_days)).strftime("%Y-%m-%d")
+        
         for path in self.log_dir.glob("*.json"):
+            # Filter by filename date (format: YYYY-MM-DD-*.json)
+            filename = path.name
+            file_date = filename[:10] if len(filename) >= 10 else ""
+            
+            if file_date < cutoff_date:
+                continue  # Skip files older than cutoff
+            
             try:
                 with open(path) as f:
                     record = json.load(f)

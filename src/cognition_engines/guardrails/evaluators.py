@@ -29,6 +29,22 @@ class FieldCondition:
         if actual is None:
             return False
         
+        # Handle string comparison operators in value (e.g., "> 10")
+        value = self.value
+        operator = self.operator
+        
+        if isinstance(value, str) and value.strip().startswith((">", "<", "=", "!")):
+            import re
+            match = re.match(r"([><=!]+)\s*([\d.]+)", value.strip())
+            if match:
+                op_str, num_str = match.groups()
+                op_map = {"<": "lt", ">": "gt", "<=": "lte", ">=": "gte", "==": "eq", "!=": "ne"}
+                operator = op_map.get(op_str, operator)
+                try:
+                    value = float(num_str)
+                except ValueError:
+                    pass
+        
         ops = {
             "eq": lambda a, v: a == v,
             "ne": lambda a, v: a != v,
@@ -40,10 +56,10 @@ class FieldCondition:
             "contains": lambda a, v: v in str(a),
         }
         
-        op_fn = ops.get(self.operator)
+        op_fn = ops.get(operator)
         if op_fn:
             try:
-                return op_fn(actual, self.value)
+                return op_fn(actual, value)
             except (ValueError, TypeError):
                 return False
         return False
