@@ -15,21 +15,13 @@ Based on Cisco Outshift's [Internet of Cognition](https://outshift.cisco.com/blo
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                   Cognition Engines                      │
-├────────────────────────┬────────────────────────────────┤
-│      Accelerators      │          Guardrails            │
-│  ┌──────────────────┐  │  ┌──────────────────────────┐  │
-│  │ Semantic Index   │  │  │ Guardrail Definitions    │  │
-│  │ Pattern Detection│  │  │ Enforcement Hooks        │  │
-│  │ Cross-Agent Query│  │  │ Violation Handling       │  │
-│  └──────────────────┘  │  └──────────────────────────┘  │
-├────────────────────────┴────────────────────────────────┤
-│                    Decision Store                        │
-│              (ChromaDB + YAML files)                     │
-└─────────────────────────────────────────────────────────┘
-```
+![Cognition Engines Architecture](docs/images/architecture.png)
+
+**Components:**
+- **Top:** AI Agents (humans + bots) connect to the Cognition Engines brain
+- **Left (Accelerators):** Semantic Index, Pattern Detection, Cross-Agent Query
+- **Right (Guardrails):** Policy Validation, Enforcement Hooks, Violation Alerts
+- **Bottom:** Decision Store (ChromaDB + YAML files)
 
 ## Quick Start
 
