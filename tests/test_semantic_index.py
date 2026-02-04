@@ -1,7 +1,6 @@
 """Tests for semantic index."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from cognition_engines.accelerators.semantic_index import (
     decision_to_text,

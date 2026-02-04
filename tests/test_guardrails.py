@@ -1,12 +1,10 @@
 """Tests for guardrail engine."""
 
-import pytest
 from cognition_engines.guardrails.engine import (
     Guardrail,
     GuardrailCondition,
     GuardrailRequirement,
     GuardrailEngine,
-    parse_guardrail,
     parse_condition,
 )
 

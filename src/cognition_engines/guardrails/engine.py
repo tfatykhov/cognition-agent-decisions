@@ -5,7 +5,7 @@ Policy enforcement that prevents violations before they occur
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from dataclasses import dataclass, field
 
 
@@ -267,8 +267,6 @@ class GuardrailEngine:
     
     def _parse_yaml_basic(self, content: str) -> list:
         """Basic YAML list parsing without external deps."""
-        import re
-        
         items = []
         current_item = None
         current_section = None
