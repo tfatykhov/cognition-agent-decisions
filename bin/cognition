@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+Cognition Engines CLI
+Command-line interface for decision indexing, querying, and guardrail checking
+"""
+
+import sys
+import json
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+
+def cmd_index(args):
+    """Index decisions from YAML files."""
+    from cognition_engines.accelerators.semantic_index import get_index
+    
+    if len(args) < 1:
+        print("Usage: cognition index <decisions_directory>")
+        return 1
+    
+    decisions_dir = Path(args[0])
+    if not decisions_dir.exists():
+        print(f"Error: Directory not found: {decisions_dir}")
+        return 1
+    
+    index = get_index()
+    
+    # Find decision YAML files
+    yaml_files = list(decisions_dir.rglob("*.yaml")) + list(decisions_dir.rglob("*.yml"))
+    print(f"Found {len(yaml_files)} YAML files")
+    
+    # Parse and index
+    import yaml
+    decisions = []
+    for path in yaml_files:
+        try:
+            content = path.read_text()
+            data = yaml.safe_load(content)
+            if data and isinstance(data, dict) and ("decision" in data or "title" in data):
+                data["_source_file"] = str(path)
+                decisions.append(data)
+        except Exception as e:
+            print(f"Warning: Failed to parse {path}: {e}")
+    
+    print(f"Parsed {len(decisions)} decisions")
+    
+    if decisions:
+        count = index.index_decisions(decisions)
+        print(f"Indexed {count} decisions successfully")
+    
+    return 0
+
+
+def cmd_query(args):
+    """Query similar decisions."""
+    from cognition_engines.accelerators.semantic_index import get_index
+    
+    if len(args) < 1:
+        print("Usage: cognition query <context> [--category CAT] [--min-confidence N]")
+        return 1
+    
+    # Parse args
+    context = args[0]
+    category = None
+    min_confidence = None
+    
+    i = 1
+    while i < len(args):
+        if args[i] == "--category" and i + 1 < len(args):
+            category = args[i + 1]
+            i += 2
+        elif args[i] == "--min-confidence" and i + 1 < len(args):
+            min_confidence = float(args[i + 1])
+            i += 2
+        else:
+            i += 1
+    
+    index = get_index()
+    results = index.query(context, n_results=5, category=category, min_confidence=min_confidence)
+    
+    if not results:
+        print("No similar decisions found")
+        return 0
+    
+    print(f"\n{'='*60}")
+    print(f"Query: {context}")
+    print(f"{'='*60}\n")
+    
+    for i, r in enumerate(results, 1):
+        meta = r.get("metadata", {})
+        dist = r.get("distance")
+        
+        print(f"[{i}] {meta.get('title', 'Untitled')}")
+        print(f"    Category: {meta.get('category', 'N/A')}")
+        print(f"    Confidence: {meta.get('confidence', 'N/A')}")
+        print(f"    Distance: {dist:.4f}" if dist else "    Distance: N/A")
+        print(f"    Status: {meta.get('status', 'N/A')}")
+        print()
+    
+    return 0
+
+
+def cmd_check(args):
+    """Check guardrails for a decision context."""
+    from cognition_engines.guardrails.engine import get_engine, load_default_guardrails
+    
+    # Parse args into context dict
+    context = {}
+    i = 0
+    while i < len(args):
+        if args[i].startswith("--") and i + 1 < len(args):
+            key = args[i][2:].replace("-", "_")
+            value = args[i + 1]
+            # Try to parse as number or bool
+            if value.lower() == "true":
+                value = True
+            elif value.lower() == "false":
+                value = False
+            else:
+                try:
+                    value = float(value)
+                except ValueError:
+                    pass
+            context[key] = value
+            i += 2
+        else:
+            i += 1
+    
+    if not context:
+        print("Usage: cognition check --category CAT --stakes LEVEL --confidence N ...")
+        print("\nExample:")
+        print("  cognition check --category architecture --stakes high --confidence 0.8")
+        return 1
+    
+    # Load guardrails
+    count = load_default_guardrails()
+    print(f"Loaded {count} guardrails")
+    
+    engine = get_engine()
+    allowed, results = engine.check(context)
+    
+    print(f"\n{'='*60}")
+    print(f"Context: {json.dumps(context, indent=2)}")
+    print(f"{'='*60}\n")
+    
+    if allowed:
+        print("✅ ALLOWED - All guardrails passed")
+    else:
+        print("❌ BLOCKED - Guardrail violation")
+    
+    print()
+    
+    for r in results:
+        if r.passed:
+            print(f"  ✅ {r.guardrail_id}: {r.message}")
+        else:
+            icon = "🚫" if r.action == "block" else "⚠️"
+            print(f"  {icon} {r.guardrail_id}: {r.message}")
+    
+    return 0 if allowed else 1
+
+
+def cmd_guardrails(args):
+    """List loaded guardrails."""
+    from cognition_engines.guardrails.engine import get_engine, load_default_guardrails
+    
+    count = load_default_guardrails()
+    engine = get_engine()
+    guardrails = engine.list_guardrails()
+    
+    print(f"Loaded {count} guardrails:\n")
+    
+    for g in guardrails:
+        action_icon = "🚫" if g["action"] == "block" else "⚠️" if g["action"] == "warn" else "📝"
+        print(f"{action_icon} {g['id']}")
+        print(f"   {g['description']}")
+        if g["scope"]:
+            print(f"   Scope: {', '.join(g['scope'])}")
+        print()
+    
+    return 0
+
+
+def cmd_count(args):
+    """Count indexed decisions."""
+    from cognition_engines.accelerators.semantic_index import get_index
+    
+    index = get_index()
+    count = index.count()
+    print(f"Indexed decisions: {count}")
+    return 0
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Cognition Engines CLI")
+        print("\nCommands:")
+        print("  index <dir>      Index decisions from YAML files")
+        print("  query <context>  Query similar decisions")
+        print("  check <args>     Check guardrails for decision context")
+        print("  guardrails       List loaded guardrails")
+        print("  count            Count indexed decisions")
+        return 1
+    
+    cmd = sys.argv[1]
+    args = sys.argv[2:]
+    
+    commands = {
+        "index": cmd_index,
+        "query": cmd_query,
+        "check": cmd_check,
+        "guardrails": cmd_guardrails,
+        "count": cmd_count,
+    }
+    
+    if cmd in commands:
+        return commands[cmd](args)
+    else:
+        print(f"Unknown command: {cmd}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

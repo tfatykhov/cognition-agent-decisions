@@ -1,0 +1,25 @@
+# Cornerstone Guardrails
+# These are non-negotiable block-level rules established day 1
+
+- id: no-production-without-review
+  description: Production changes require code review
+  condition_affects_production: true
+  requires_code_review: true
+  action: block
+  message: Production changes require completed code review
+
+- id: no-high-stakes-low-confidence
+  description: High-stakes decisions need minimum confidence
+  condition_stakes: high
+  condition_confidence: "< 0.5"
+  action: block
+  message: High-stakes decisions require 50% confidence or more
+
+- id: no-trading-strategy-without-backtest
+  description: Trading strategy changes need backtesting
+  scope: CryptoTrader
+  condition_category: trading
+  condition_decision_type: strategy_change
+  requires_backtest_completed: true
+  action: block
+  message: Trading strategy changes require completed backtest
