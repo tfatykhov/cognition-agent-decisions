@@ -1,0 +1,22 @@
+# CSTP Server Configuration
+
+server:
+  host: "0.0.0.0"
+  port: 8100
+  cors_origins:
+    - "*"
+
+agent:
+  name: "cognition-engines"
+  description: "Decision intelligence for AI agents"
+  version: "0.7.0"
+  url: "http://localhost:8100"
+  contact: null
+
+auth:
+  enabled: true
+  tokens:
+    - agent: "emerson"
+      token: "${CSTP_TOKEN_EMERSON}"
+    - agent: "test"
+      token: "test-token-for-development"
