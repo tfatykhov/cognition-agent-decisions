@@ -1,11 +1,14 @@
 """Tests for CSTP server infrastructure (F001)."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 
 from a2a.auth import AuthManager, set_auth_manager
 from a2a.config import AgentConfig, AuthConfig, AuthToken, Config, ServerConfig
 from a2a.cstp import get_dispatcher, register_methods
+from a2a.cstp.query_service import QueryResponse, QueryResult
 from a2a.server import create_app
 
 
@@ -129,8 +132,14 @@ class TestCstpEndpointAuth:
         )
         assert response.status_code == 401
 
-    def test_cstp_accepts_valid_token(self, client: TestClient) -> None:
+    @patch("a2a.cstp.dispatcher.query_decisions")
+    def test_cstp_accepts_valid_token(
+        self, mock_query: AsyncMock, client: TestClient
+    ) -> None:
         """CSTP endpoint should accept valid tokens."""
+        mock_query.return_value = QueryResponse(
+            results=[], query="test", query_time_ms=0
+        )
         response = client.post(
             "/cstp",
             json={
@@ -147,8 +156,14 @@ class TestCstpEndpointAuth:
 class TestCstpEndpointJsonRpc:
     """Tests for POST /cstp JSON-RPC handling."""
 
-    def test_cstp_returns_jsonrpc_response(self, client: TestClient) -> None:
+    @patch("a2a.cstp.dispatcher.query_decisions")
+    def test_cstp_returns_jsonrpc_response(
+        self, mock_query: AsyncMock, client: TestClient
+    ) -> None:
         """CSTP endpoint should return JSON-RPC response."""
+        mock_query.return_value = QueryResponse(
+            results=[], query="test", query_time_ms=0
+        )
         response = client.post(
             "/cstp",
             json={
@@ -210,11 +225,31 @@ class TestCstpEndpointJsonRpc:
         assert data["error"]["code"] == -32601
 
 
-class TestQueryDecisionsStub:
-    """Tests for cstp.queryDecisions stub."""
+class TestQueryDecisions:
+    """Tests for cstp.queryDecisions (with mocked service)."""
 
-    def test_query_decisions_returns_result(self, client: TestClient) -> None:
-        """queryDecisions should return stub result."""
+    @patch("a2a.cstp.dispatcher.query_decisions")
+    def test_query_decisions_returns_result(
+        self, mock_query: AsyncMock, client: TestClient
+    ) -> None:
+        """queryDecisions should return result."""
+        mock_query.return_value = QueryResponse(
+            results=[
+                QueryResult(
+                    id="dec-123",
+                    title="Test decision",
+                    category="arch",
+                    confidence=0.9,
+                    stakes="high",
+                    status="decided",
+                    outcome=None,
+                    date="2026-01-20",
+                    distance=0.2,
+                )
+            ],
+            query="test query",
+            query_time_ms=45,
+        )
         response = client.post(
             "/cstp",
             json={
@@ -229,6 +264,7 @@ class TestQueryDecisionsStub:
         assert "result" in data
         assert data["result"]["query"] == "test query"
         assert "decisions" in data["result"]
+        assert len(data["result"]["decisions"]) == 1
 
 
 class TestCheckGuardrailsStub:
