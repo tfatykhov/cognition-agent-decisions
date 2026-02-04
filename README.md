@@ -112,6 +112,116 @@ uv run ~/.openclaw/workspace/skills/cognition-engines/scripts/query.py "your que
 uv run ~/.openclaw/workspace/skills/cognition-engines/scripts/check.py --stakes high
 ```
 
+## Framework Compatibility
+
+Cognition Engines is **agent-framework agnostic**. It's Python + ChromaDB — works anywhere.
+
+### LangChain / LangGraph
+
+```python
+from cognition_engines.accelerators import SemanticIndex
+from cognition_engines.guardrails import GuardrailEngine
+
+# Add to your agent's decision step
+def make_decision(context: str, confidence: float):
+    # Query similar past decisions
+    index = SemanticIndex()
+    similar = index.query(context, top_k=5)
+    
+    # Check guardrails
+    engine = GuardrailEngine()
+    result = engine.check({"stakes": "high", "confidence": confidence})
+    
+    if not result.allowed:
+        raise ValueError(f"Blocked: {result.violations}")
+    
+    return proceed_with_decision()
+```
+
+### AutoGen
+
+```python
+# In your AutoGen agent config
+from cognition_engines.accelerators import SemanticIndex
+
+class DecisionAgent(AssistantAgent):
+    def __init__(self):
+        self.decision_index = SemanticIndex()
+    
+    def before_decide(self, context):
+        similar = self.decision_index.query(context)
+        return f"Similar past decisions: {similar}"
+```
+
+### CrewAI
+
+```python
+from crewai import Agent, Task
+from cognition_engines.guardrails import GuardrailEngine
+
+# Create a guardrail-aware agent
+guardrails = GuardrailEngine()
+
+@tool
+def check_decision(stakes: str, confidence: float) -> str:
+    result = guardrails.check({"stakes": stakes, "confidence": confidence})
+    return "Allowed" if result.allowed else f"Blocked: {result.message}"
+```
+
+### Any Python Agent
+
+```python
+# Direct script usage
+import subprocess
+
+# Query similar decisions
+result = subprocess.run(
+    ["python", "scripts/query.py", "your context"],
+    capture_output=True, text=True
+)
+similar_decisions = result.stdout
+
+# Check guardrails
+result = subprocess.run(
+    ["python", "scripts/check.py", "--stakes", "high", "--confidence", "0.8"],
+    capture_output=True, text=True
+)
+```
+
+## Multi-Agent Shared Memory
+
+When using an **external ChromaDB instance**, multiple agents can share the same decision memory and guardrails:
+
+```
+┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+│   Agent A   │   │   Agent B   │   │   Agent C   │
+│  (OpenClaw) │   │ (LangGraph) │   │  (AutoGen)  │
+└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
+       │                 │                 │
+       └────────────┬────┴────────────────┘
+                    ▼
+         ┌─────────────────────┐
+         │  Shared ChromaDB    │
+         │  ────────────────   │
+         │  • Decision index   │
+         │  • Guardrail evals  │
+         │  • Pattern history  │
+         └─────────────────────┘
+```
+
+**Benefits:**
+- 🔍 **Cross-agent queries** — "Has anyone in my team seen this before?"
+- 🛡️ **Shared guardrails** — Org-level policies all agents inherit
+- 📊 **Collective learning** — One agent's lessons benefit all
+- 🔄 **Consistent decisions** — Same context → same guardrail checks
+
+**Setup:**
+```bash
+# Point all agents to the same ChromaDB
+export CHROMA_HOST="your-shared-chromadb.example.com"
+export CHROMA_PORT="8000"
+```
+
 ## Guardrail Example
 
 ```yaml
