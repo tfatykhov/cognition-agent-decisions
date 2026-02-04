@@ -190,24 +190,9 @@ result = subprocess.run(
 
 ## Multi-Agent Shared Memory
 
-When using an **external ChromaDB instance**, multiple agents can share the same decision memory and guardrails:
+When using an **external vector database**, multiple agents can share the same decision memory and guardrails:
 
-```
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   Agent A   │   │   Agent B   │   │   Agent C   │
-│  (OpenClaw) │   │ (LangGraph) │   │  (AutoGen)  │
-└──────┬──────┘   └──────┬──────┘   └──────┬──────┘
-       │                 │                 │
-       └────────────┬────┴────────────────┘
-                    ▼
-         ┌─────────────────────┐
-         │  Shared ChromaDB    │
-         │  ────────────────   │
-         │  • Decision index   │
-         │  • Guardrail evals  │
-         │  • Pattern history  │
-         └─────────────────────┘
-```
+![Multi-Agent Shared Memory Architecture](docs/images/multi-agent-architecture.png)
 
 **Benefits:**
 - 🔍 **Cross-agent queries** — "Has anyone in my team seen this before?"
@@ -217,8 +202,8 @@ When using an **external ChromaDB instance**, multiple agents can share the same
 
 **Setup:**
 ```bash
-# Point all agents to the same ChromaDB
-export CHROMA_HOST="your-shared-chromadb.example.com"
+# Point all agents to the same vector database
+export CHROMA_HOST="your-shared-db.example.com"
 export CHROMA_PORT="8000"
 ```
 
