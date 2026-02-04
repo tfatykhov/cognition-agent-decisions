@@ -247,6 +247,27 @@ export CHROMA_PORT="8000"
 }
 ```
 
+**Method: `cstp.checkGuardrails`**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.checkGuardrails",
+  "params": {
+    "action": {
+      "description": "Deploy to production",
+      "category": "process",
+      "stakes": "high",
+      "confidence": 0.85,
+      "context": {
+        "affectsProduction": true,
+        "codeReviewCompleted": true
+      }
+    }
+  },
+  "id": 2
+}
+```
+
 See [CSTP Design](docs/CSTP-v0.7.0-DESIGN.md) for full protocol details.
 
 ## Guardrail Example
