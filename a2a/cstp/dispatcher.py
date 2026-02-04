@@ -8,15 +8,28 @@ from typing import Any
 
 from ..models.jsonrpc import (
     INTERNAL_ERROR,
+    INVALID_PARAMS,
     METHOD_NOT_FOUND,
     JsonRpcError,
     JsonRpcRequest,
     JsonRpcResponse,
 )
+from .models import (
+    CheckGuardrailsRequest,
+    CheckGuardrailsResponse,
+    DecisionSummary,
+    QueryDecisionsRequest,
+    QueryDecisionsResponse,
+)
+from .query_service import query_decisions
 
 
 # Type alias for method handlers
 MethodHandler = Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]]
+
+# Custom error codes
+QUERY_FAILED = -32003
+RATE_LIMITED = -32002
 
 
 class CstpDispatcher:
@@ -74,6 +87,14 @@ class CstpDispatcher:
         try:
             result = await handler(request.params, agent_id)
             return JsonRpcResponse.success(request.id, result)
+        except ValueError as e:
+            return JsonRpcResponse.failure(
+                request.id,
+                JsonRpcError(
+                    code=INVALID_PARAMS,
+                    message=str(e),
+                ),
+            )
         except Exception as e:
             return JsonRpcResponse.failure(
                 request.id,
@@ -102,33 +123,86 @@ def get_dispatcher() -> CstpDispatcher:
 
 
 async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
-    """Stub handler for cstp.queryDecisions.
+    """Handle cstp.queryDecisions method.
 
-    TODO: Implement in F002.
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Query results as dict.
     """
-    return {
-        "decisions": [],
-        "total": 0,
-        "query": params.get("query", ""),
-        "queryTimeMs": 0,
-        "agent": "cognition-engines",
-        "note": "Not yet implemented - F002",
-    }
+    # Parse request
+    request = QueryDecisionsRequest.from_params(params)
+
+    # Execute query
+    response = await query_decisions(
+        query=request.query,
+        n_results=request.limit,
+        category=request.filters.category,
+        min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,
+        max_confidence=request.filters.max_confidence if request.filters.max_confidence < 1 else None,
+        stakes=request.filters.stakes,
+        status_filter=request.filters.status,
+    )
+
+    # Check for errors
+    if response.error:
+        raise RuntimeError(response.error)
+
+    # Map results to response format
+    decisions = [
+        DecisionSummary(
+            id=r.id,
+            title=r.title,
+            category=r.category,
+            confidence=r.confidence,
+            stakes=r.stakes,
+            status=r.status,
+            outcome=r.outcome,
+            date=r.date,
+            distance=r.distance,
+            reasons=r.reason_types if request.include_reasons else None,
+        )
+        for r in response.results
+    ]
+
+    result = QueryDecisionsResponse(
+        decisions=decisions,
+        total=len(decisions),
+        query=request.query,
+        query_time_ms=response.query_time_ms,
+        agent="cognition-engines",
+    )
+
+    return result.to_dict()
 
 
 async def _handle_check_guardrails(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
-    """Stub handler for cstp.checkGuardrails.
+    """Handle cstp.checkGuardrails method.
 
     TODO: Implement in F003.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Guardrail check results as dict.
     """
-    return {
-        "allowed": True,
-        "violations": [],
-        "warnings": [],
-        "evaluated": 0,
-        "agent": "cognition-engines",
-        "note": "Not yet implemented - F003",
-    }
+    # Parse request (validates params)
+    _request = CheckGuardrailsRequest.from_params(params)
+
+    # Stub response - will be implemented in F003
+    result = CheckGuardrailsResponse(
+        allowed=True,
+        violations=[],
+        warnings=[],
+        evaluated=0,
+        agent="cognition-engines",
+    )
+
+    return result.to_dict()
 
 
 def register_methods(dispatcher: CstpDispatcher) -> None:
