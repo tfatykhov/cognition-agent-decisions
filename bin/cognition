@@ -252,6 +252,119 @@ def cmd_count(args):
     return 0
 
 
+def cmd_patterns(args):
+    """Run pattern analysis on decisions."""
+    from cognition_engines.patterns.detector import PatternDetector
+    
+    if len(args) < 1:
+        print("Usage: cognition patterns <subcommand> [options]")
+        print("\nSubcommands:")
+        print("  calibration    Confidence calibration report")
+        print("  categories     Category success analysis")
+        print("  antipatterns   Detect decision anti-patterns")
+        print("  full           Full pattern report")
+        return 1
+    
+    subcmd = args[0]
+    
+    # Parse options
+    decisions_dir = "decisions/"
+    output_format = "text"
+    
+    i = 1
+    while i < len(args):
+        if args[i] in ("--dir", "-d") and i + 1 < len(args):
+            decisions_dir = args[i + 1]
+            i += 2
+        elif args[i] in ("--format", "-f") and i + 1 < len(args):
+            output_format = args[i + 1]
+            i += 2
+        else:
+            i += 1
+    
+    # Load decisions
+    detector = PatternDetector()
+    count = detector.load_from_directory(Path(decisions_dir))
+    
+    if count == 0:
+        print(f"No decisions found in {decisions_dir}")
+        return 1
+    
+    # Run analysis
+    if subcmd == "calibration":
+        report = detector.calibration_report()
+        if output_format == "json":
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"\n{'='*60}")
+            print("Confidence Calibration Report")
+            print(f"{'='*60}\n")
+            print(f"Total decisions: {report['total_decisions']}")
+            print(f"With outcomes: {report['with_outcomes']}")
+            print(f"Overall Brier: {report['overall_brier']}")
+            print(f"Interpretation: {report['interpretation']}\n")
+            
+            if report['buckets']:
+                print(f"{'Bucket':<12} {'Count':<8} {'Predicted':<10} {'Actual':<10} {'Brier':<8}")
+                print("-" * 50)
+                for b in report['buckets']:
+                    print(f"{b['range']:<12} {b['count']:<8} {b['predicted']:<10.2f} {b['actual']:<10.2f} {b['brier']:<8.4f}")
+    
+    elif subcmd == "categories":
+        report = detector.category_analysis()
+        if output_format == "json":
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"\n{'='*60}")
+            print("Category Analysis")
+            print(f"{'='*60}\n")
+            print(f"Total categories: {report['total_categories']}\n")
+            
+            print(f"{'Category':<20} {'Count':<8} {'Outcomes':<10} {'Confidence':<12} {'Success':<10}")
+            print("-" * 60)
+            for c in report['categories']:
+                print(f"{c['category']:<20} {c['count']:<8} {c['with_outcomes']:<10} {c['avg_confidence']:<12.2f} {c['success_rate']:<10.2f}")
+            
+            if report['concerning']:
+                print(f"\n⚠️  Concerning categories:")
+                for c in report['concerning']:
+                    print(f"  - {c['category']}: {c['reason']}")
+    
+    elif subcmd == "antipatterns":
+        report = detector.detect_antipatterns()
+        if output_format == "json":
+            print(json.dumps(report, indent=2))
+        else:
+            print(f"\n{'='*60}")
+            print("Anti-Pattern Detection")
+            print(f"{'='*60}\n")
+            
+            if report['total_antipatterns'] == 0:
+                print("✅ No anti-patterns detected")
+            else:
+                print(f"Found {report['total_antipatterns']} anti-patterns:\n")
+                for ap in report['antipatterns']:
+                    icon = "🚫" if ap['severity'] == "high" else "⚠️" if ap['severity'] == "medium" else "📝"
+                    print(f"{icon} {ap['type']} ({ap['severity']})")
+                    print(f"   {ap['description']}")
+                    print(f"   Decisions: {', '.join(ap['decisions'][:3])}")
+                    print()
+    
+    elif subcmd == "full":
+        report = detector.full_report()
+        if output_format == "json":
+            print(json.dumps(report, indent=2))
+        else:
+            print("Full report - use --format json for complete output")
+            print(json.dumps(report, indent=2))
+    
+    else:
+        print(f"Unknown subcommand: {subcmd}")
+        return 1
+    
+    return 0
+
+
 def main():
     if len(sys.argv) < 2:
         print("Cognition Engines CLI")
@@ -261,6 +374,7 @@ def main():
         print("  check <args>     Check guardrails for decision context")
         print("  guardrails       List loaded guardrails")
         print("  count            Count indexed decisions")
+        print("  patterns <sub>   Pattern analysis (calibration, categories, antipatterns)")
         return 1
     
     cmd = sys.argv[1]
@@ -272,6 +386,7 @@ def main():
         "check": cmd_check,
         "guardrails": cmd_guardrails,
         "count": cmd_count,
+        "patterns": cmd_patterns,
     }
     
     if cmd in commands:
