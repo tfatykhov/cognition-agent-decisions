@@ -23,6 +23,57 @@ Based on Cisco Outshift's [Internet of Cognition](https://outshift.cisco.com/blo
 - **Right (Guardrails):** Policy Validation, Enforcement Hooks, Violation Alerts
 - **Bottom:** Decision Store (ChromaDB + YAML files)
 
+## Prerequisites
+
+### ChromaDB (Vector Database)
+
+Cognition Engines uses ChromaDB for semantic similarity search. You have two options:
+
+**Option 1: Docker (Recommended)**
+```bash
+docker run -d \
+  --name chromadb \
+  -p 8000:8000 \
+  -v chromadb_data:/chroma/chroma \
+  chromadb/chroma:latest
+```
+
+**Option 2: Local Python**
+```bash
+pip install chromadb
+# Runs embedded (no separate server needed)
+```
+
+### Embeddings Provider
+
+You need an embeddings API. Supported providers:
+
+| Provider | Model | Dimensions | Setup |
+|----------|-------|------------|-------|
+| **Gemini** (default) | text-embedding-004 | 768 | `export GEMINI_API_KEY=your_key` |
+| OpenAI | text-embedding-3-small | 1536 | `export OPENAI_API_KEY=your_key` |
+| Local | sentence-transformers | varies | `pip install sentence-transformers` |
+
+**Get a Gemini API key:** https://aistudio.google.com/apikey (free tier available)
+
+### Environment Variables
+
+```bash
+# Required
+export GEMINI_API_KEY="your_gemini_api_key"
+
+# Optional (if using Docker ChromaDB)
+export CHROMA_HOST="localhost"
+export CHROMA_PORT="8000"
+```
+
+Or create a `.env` file:
+```
+GEMINI_API_KEY=your_gemini_api_key
+CHROMA_HOST=localhost
+CHROMA_PORT=8000
+```
+
 ## Quick Start
 
 ```bash
@@ -42,6 +93,25 @@ cognition check --category architecture --stakes high --confidence 0.7
 cognition patterns --min-decisions 10
 ```
 
+## OpenClaw Skill Installation
+
+If you're using OpenClaw, install as a skill:
+
+```bash
+# Copy to skills directory
+cp -r skills/cognition-engines ~/.openclaw/workspace/skills/
+
+# Or clone directly
+git clone https://github.com/tfatykhov/cognition-agent-decisions.git
+cp -r cognition-agent-decisions/skills/cognition-engines ~/.openclaw/workspace/skills/
+```
+
+Then use via uv:
+```bash
+uv run ~/.openclaw/workspace/skills/cognition-engines/scripts/query.py "your query"
+uv run ~/.openclaw/workspace/skills/cognition-engines/scripts/check.py --stakes high
+```
+
 ## Guardrail Example
 
 ```yaml
@@ -57,13 +127,14 @@ message: "High-stakes decisions require ≥50% confidence"
 
 ## Roadmap
 
-| Version | Features |
-|---------|----------|
-| v0.5.0 | Semantic Decision Index |
-| v0.6.0 | Pattern Detection Engine |
-| v0.7.0 | Guardrail Definition Language |
-| v0.8.0 | Enforcement Hooks |
-| v1.0.0 | Multi-Agent Federation |
+| Version | Features | Status |
+|---------|----------|--------|
+| v0.5.0 | Semantic Decision Index | ✅ Shipped |
+| v0.6.0 | Pattern Detection Engine | ✅ Shipped |
+| v0.6.0 | Enhanced Guardrails + Audit Trail | ✅ Shipped |
+| v0.7.0 | Cross-Agent Federation | 🔜 Next |
+| v0.8.0 | Outcome-Based Learning | Planned |
+| v1.0.0 | Multi-Agent Cognition Network | Planned |
 
 ## Project Structure
 
