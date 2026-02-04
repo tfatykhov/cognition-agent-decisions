@@ -265,17 +265,32 @@ message: "High-stakes decisions require ≥50% confidence"
 - **Decision proposals**: Multi-agent voting on shared decisions
 - **Conflict resolution**: When agents disagree, structured negotiation
 - **Intent alignment**: Agents negotiate common objectives before deciding
+- **SSTP foundation**: Semantic State Transfer Protocol for human-auditable coordination
 
 ### v0.9.0 — Context Graphs
 - **Entity relationships**: Not just decisions — connections between concepts
 - **Knowledge transfer**: "What does Agent A know that Agent B needs?"
 - **Emergent context**: Collective understanding beyond individual agents
+- **CSTP support**: Compressed state for efficient cross-agent sync
 
 ### v1.0.0 — Multi-Agent Cognition Network
 - **Semantic State Transfer**: Export decision context in portable format
 - **Reasoning continuity**: Another agent can "resume" a decision thread
 - **Collective innovation**: Agents reason together on novel problems
 - **COGs + GATs**: Full cognitive amplifiers and guardrail technologies
+- **Full protocol stack**: LSTP/CSTP/SSTP support based on use case
+
+### Cognition State Protocols (Future)
+
+Based on [Cisco Outshift's Internet of Cognition](https://outshift.cisco.com/blog/from-connection-to-cognition-scaling-superintelligence):
+
+| Protocol | Layer | Use Case |
+|----------|-------|----------|
+| **SSTP** | Semantic | Human-auditable, policy-governed decisions. Cross-vendor strategic coordination. |
+| **CSTP** | Compressed | Low-bandwidth environments (Edge, WAN). Abstracted feature representations. |
+| **LSTP** | Latent | High-fidelity inference continuity. Local clusters with unified execution. |
+
+**Our focus:** SSTP first — it's the decision-making layer. CSTP/LSTP for future performance optimization.
 
 ## Project Structure
 
