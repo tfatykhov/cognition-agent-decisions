@@ -18,7 +18,6 @@ from .models import (
     CheckGuardrailsRequest,
     CheckGuardrailsResponse,
     DecisionSummary,
-    GuardrailViolation,
     QueryDecisionsRequest,
     QueryDecisionsResponse,
 )

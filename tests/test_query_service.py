@@ -1,12 +1,10 @@
 """Unit tests for query_service.py."""
 
-import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from a2a.cstp.query_service import (
-    QueryResponse,
     QueryResult,
     _get_secrets_paths,
     _load_gemini_key,
