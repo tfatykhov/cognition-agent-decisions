@@ -201,12 +201,16 @@ def _parse_guardrail(data: dict[str, Any]) -> Guardrail:
 
 
 def _get_guardrails_paths(guardrails_dir: Path | None = None) -> list[Path]:
-    """Get list of guardrail directories to search."""
-    paths: list[Path] = []
+    """Get list of guardrail directories to search.
 
-    # Custom directory takes priority
+    If guardrails_dir is provided, ONLY that directory is used (for testing).
+    Otherwise, uses GUARDRAILS_PATHS env var + default locations.
+    """
+    # If custom directory provided, use ONLY that (for testing isolation)
     if guardrails_dir:
-        paths.append(guardrails_dir)
+        return [guardrails_dir]
+
+    paths: list[Path] = []
 
     # Configurable paths from environment
     for p in GUARDRAILS_PATHS:

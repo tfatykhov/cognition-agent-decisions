@@ -9,6 +9,7 @@ from a2a.cstp.guardrails_service import (
     GuardrailCondition,
     GuardrailRequirement,
     _parse_guardrail,
+    clear_guardrails_cache,
     evaluate_guardrails,
 )
 
@@ -158,6 +159,7 @@ class TestEvaluateGuardrails:
     @pytest.mark.asyncio
     async def test_no_guardrails_returns_allowed(self, tmp_path: Path) -> None:
         """Empty guardrails dir should return allowed."""
+        clear_guardrails_cache()  # Clear any cached guardrails
         result = await evaluate_guardrails({}, guardrails_dir=tmp_path)
         assert result.allowed is True
         assert result.evaluated == 0
@@ -165,6 +167,7 @@ class TestEvaluateGuardrails:
     @pytest.mark.asyncio
     async def test_with_mock_guardrails(self, tmp_path: Path) -> None:
         """Should evaluate guardrails from file."""
+        clear_guardrails_cache()  # Clear cache before test
         # Create a test guardrail file
         guardrail_yaml = tmp_path / "test.yaml"
         guardrail_yaml.write_text("""
