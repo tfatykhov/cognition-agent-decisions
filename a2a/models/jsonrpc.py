@@ -86,6 +86,12 @@ class JsonRpcRequest:
                 message=f"Unknown method: {self.method}",
                 data={"method": self.method},
             )
+        if not isinstance(self.params, dict):
+            return JsonRpcError(
+                code=INVALID_PARAMS,
+                message="Params must be an object (named parameters only)",
+                data={"got": type(self.params).__name__},
+            )
         return None
 
 

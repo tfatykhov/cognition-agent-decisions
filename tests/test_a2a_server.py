@@ -57,7 +57,7 @@ class TestHealthEndpoint:
         response = client.get("/health")
         data = response.json()
         assert "uptime_seconds" in data
-        assert isinstance(data["uptime_seconds"], float)
+        assert isinstance(data["uptime_seconds"], (int, float))
 
 
 class TestAgentCardEndpoint:

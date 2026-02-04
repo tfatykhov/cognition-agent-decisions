@@ -38,14 +38,18 @@ class AuthConfig:
     def validate_token(self, token: str) -> str | None:
         """Validate a bearer token.
 
+        Uses constant-time comparison to prevent timing attacks.
+
         Args:
             token: Bearer token to validate.
 
         Returns:
             Agent ID if valid, None if invalid.
         """
+        import secrets
+
         for auth_token in self.tokens:
-            if auth_token.token == token:
+            if secrets.compare_digest(auth_token.token, token):
                 return auth_token.agent
         return None
 

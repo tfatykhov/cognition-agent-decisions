@@ -26,48 +26,30 @@ from .models.jsonrpc import (
 )
 
 
-# Server start time for uptime calculation
-_start_time: float = 0.0
-
-# Server configuration
-_config: Config | None = None
-
-
-def get_config() -> Config:
-    """Get the server configuration.
-
-    Returns:
-        Server configuration.
-
-    Raises:
-        RuntimeError: If config not loaded.
-    """
-    if _config is None:
-        raise RuntimeError("Configuration not loaded")
-    return _config
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager.
 
     Initializes auth manager and dispatcher on startup.
+    Stores state in app.state instead of global variables.
     """
-    global _start_time, _config
+    # Use monotonic time for uptime (not affected by system clock changes)
+    app.state.start_time = time.monotonic()
 
-    _start_time = time.time()
-
-    # Load configuration
-    config_path = Path("config/server.yaml")
-    _config = Config.from_yaml(config_path)
+    # Load configuration (use provided or load from file)
+    if not hasattr(app.state, "config") or app.state.config is None:
+        config_path = Path("config/server.yaml")
+        app.state.config = Config.from_yaml(config_path)
 
     # Initialize auth manager
-    auth_manager = AuthManager(_config)
+    auth_manager = AuthManager(app.state.config)
     set_auth_manager(auth_manager)
+    app.state.auth_manager = auth_manager
 
     # Initialize dispatcher with methods
     dispatcher = get_dispatcher()
     register_methods(dispatcher)
+    app.state.dispatcher = dispatcher
 
     yield
 
@@ -83,10 +65,6 @@ def create_app(config: Config | None = None) -> FastAPI:
     Returns:
         Configured FastAPI application.
     """
-    global _config
-    if config:
-        _config = config
-
     app = FastAPI(
         title="CSTP Server",
         description="Cognition State Transfer Protocol - Decision Intelligence API",
@@ -94,8 +72,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Store config in app.state for lifespan to access
+    if config:
+        app.state.config = config
+
     # Configure CORS
-    cors_origins = _config.server.cors_origins if _config else ["*"]
+    cors_origins = config.server.cors_origins if config else ["*"]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
@@ -118,9 +100,10 @@ def _register_routes(app: FastAPI) -> None:
     """
 
     @app.get("/health")
-    async def health() -> JSONResponse:
+    async def health(request: Request) -> JSONResponse:
         """Health check endpoint."""
-        uptime = time.time() - _start_time if _start_time else 0.0
+        start_time = getattr(request.app.state, "start_time", 0.0)
+        uptime = time.monotonic() - start_time if start_time else 0.0
         response = HealthResponse(
             status="healthy",
             version="0.7.0",
@@ -130,9 +113,9 @@ def _register_routes(app: FastAPI) -> None:
         return JSONResponse(content=response.to_dict())
 
     @app.get("/.well-known/agent.json")
-    async def agent_card() -> JSONResponse:
+    async def agent_card(request: Request) -> JSONResponse:
         """Agent Card endpoint for A2A discovery."""
-        config = get_config()
+        config: Config = request.app.state.config
         card = AgentCard(
             name=config.agent.name,
             description=config.agent.description,
@@ -184,7 +167,7 @@ def _register_routes(app: FastAPI) -> None:
         )
 
         # Dispatch to handler
-        dispatcher = get_dispatcher()
+        dispatcher: CstpDispatcher = request.app.state.dispatcher
         response = await dispatcher.dispatch(rpc_request, agent_id)
 
         return JSONResponse(content=response.to_dict())
@@ -204,19 +187,17 @@ def run_server(
     """
     import uvicorn
 
-    global _config
-
     # Load configuration
     if config_path:
-        _config = Config.from_yaml(Path(config_path))
+        config = Config.from_yaml(Path(config_path))
     else:
-        _config = Config()
+        config = Config()
 
     # Override with arguments
-    _config.server.host = host
-    _config.server.port = port
+    config.server.host = host
+    config.server.port = port
 
-    app = create_app(_config)
+    app = create_app(config)
     uvicorn.run(app, host=host, port=port)
 
 
