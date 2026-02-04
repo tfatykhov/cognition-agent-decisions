@@ -5,6 +5,7 @@ Wraps the existing check.py guardrail evaluation logic.
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -13,6 +14,16 @@ from typing import Any
 
 # Configure audit logger
 _audit_logger = logging.getLogger("cstp.guardrails.audit")
+
+# Guardrail cache (cleared on process restart)
+_guardrails_cache: dict[str, tuple[list["Guardrail"], float]] = {}
+_CACHE_TTL_SECONDS = 300  # 5 minute cache
+
+# Configurable guardrails paths
+GUARDRAILS_PATHS = os.getenv(
+    "GUARDRAILS_PATHS",
+    "",
+).split(":") if os.getenv("GUARDRAILS_PATHS") else []
 
 
 @dataclass
@@ -163,54 +174,6 @@ def _parse_condition(field_name: str, value: Any) -> GuardrailCondition:
     return GuardrailCondition(field_name, "eq", value)
 
 
-def _parse_yaml_value(val: str) -> Any:
-    """Parse a YAML value without PyYAML."""
-    if val.lower() == "true":
-        return True
-    if val.lower() == "false":
-        return False
-    if val.startswith('"') and val.endswith('"'):
-        return val[1:-1]
-    if val.startswith("'") and val.endswith("'"):
-        return val[1:-1]
-    try:
-        return float(val)
-    except ValueError:
-        return val
-
-
-def _parse_yaml_basic(content: str) -> list[dict[str, Any]]:
-    """Basic YAML list parsing without PyYAML."""
-    items: list[dict[str, Any]] = []
-    current: dict[str, Any] | None = None
-
-    for line in content.split("\n"):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-
-        if line.startswith("- "):
-            if current:
-                items.append(current)
-            current = {}
-            rest = line[2:].strip()
-            if ":" in rest:
-                key, val = rest.split(":", 1)
-                val = val.strip()
-                if val:
-                    current[key.strip()] = _parse_yaml_value(val)
-        elif current is not None and line.startswith("  ") and ":" in stripped:
-            key, val = stripped.split(":", 1)
-            key = key.strip()
-            val = val.strip()
-            if val:
-                current[key] = _parse_yaml_value(val)
-
-    if current:
-        items.append(current)
-    return items
-
-
 def _parse_guardrail(data: dict[str, Any]) -> Guardrail:
     """Parse a guardrail from dict."""
     conditions = []
@@ -237,20 +200,32 @@ def _parse_guardrail(data: dict[str, Any]) -> Guardrail:
     )
 
 
-def _load_guardrails(guardrails_dir: Path | None = None) -> list[Guardrail]:
-    """Load guardrails from YAML files."""
-    guardrails = []
-    seen_ids: set[str] = set()
+def _get_guardrails_paths(guardrails_dir: Path | None = None) -> list[Path]:
+    """Get list of guardrail directories to search."""
+    paths: list[Path] = []
 
-    # Default paths to check
-    paths = []
+    # Custom directory takes priority
     if guardrails_dir:
         paths.append(guardrails_dir)
+
+    # Configurable paths from environment
+    for p in GUARDRAILS_PATHS:
+        if p.strip():
+            paths.append(Path(p.strip()).expanduser())
+
+    # Default paths (relative to package and cwd)
     paths.extend([
         Path(__file__).parent.parent.parent / "guardrails",
-        Path("/home/node/.openclaw/workspace/skills/cognition-engines/guardrails"),
         Path.cwd() / "guardrails",
     ])
+
+    return paths
+
+
+def _load_guardrails_from_paths(paths: list[Path]) -> list[Guardrail]:
+    """Load guardrails from YAML files in given paths."""
+    guardrails: list[Guardrail] = []
+    seen_ids: set[str] = set()
 
     for dir_path in paths:
         if not dir_path.exists():
@@ -258,13 +233,22 @@ def _load_guardrails(guardrails_dir: Path | None = None) -> list[Guardrail]:
         for yaml_path in dir_path.glob("*.yaml"):
             try:
                 content = yaml_path.read_text()
+
+                # Use PyYAML if available (preferred)
                 try:
                     import yaml
                     items = yaml.safe_load(content)
+                    if items is None:
+                        continue
                     if not isinstance(items, list):
                         items = [items]
                 except ImportError:
-                    items = _parse_yaml_basic(content)
+                    # Fallback: skip if no yaml and content is complex
+                    _audit_logger.warning(
+                        f"PyYAML not installed, skipping {yaml_path}. "
+                        "Install pyyaml for guardrail support."
+                    )
+                    continue
 
                 for item in items:
                     if isinstance(item, dict):
@@ -276,6 +260,37 @@ def _load_guardrails(guardrails_dir: Path | None = None) -> list[Guardrail]:
                 _audit_logger.warning(f"Failed to load {yaml_path}: {e}")
 
     return guardrails
+
+
+def _load_guardrails(guardrails_dir: Path | None = None) -> list[Guardrail]:
+    """Load guardrails with caching.
+
+    Guardrails are cached for 5 minutes to avoid repeated disk I/O.
+    """
+    import time
+
+    cache_key = str(guardrails_dir) if guardrails_dir else "__default__"
+    now = time.time()
+
+    # Check cache
+    if cache_key in _guardrails_cache:
+        cached_guardrails, cached_at = _guardrails_cache[cache_key]
+        if now - cached_at < _CACHE_TTL_SECONDS:
+            return cached_guardrails
+
+    # Load from disk
+    paths = _get_guardrails_paths(guardrails_dir)
+    guardrails = _load_guardrails_from_paths(paths)
+
+    # Update cache
+    _guardrails_cache[cache_key] = (guardrails, now)
+
+    return guardrails
+
+
+def clear_guardrails_cache() -> None:
+    """Clear the guardrails cache. Use after modifying guardrail files."""
+    _guardrails_cache.clear()
 
 
 @dataclass(slots=True)
@@ -311,6 +326,10 @@ async def evaluate_guardrails(
 
     Returns:
         EvaluationResult with violations, warnings, and allow/block decision.
+
+    Note:
+        Guardrails are cached for 5 minutes. Call clear_guardrails_cache()
+        after modifying guardrail files.
     """
     guardrails = _load_guardrails(guardrails_dir)
 

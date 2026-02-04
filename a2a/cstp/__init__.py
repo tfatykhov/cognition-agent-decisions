@@ -4,6 +4,7 @@ from .dispatcher import CstpDispatcher, get_dispatcher, register_methods
 from .guardrails_service import (
     EvaluationResult,
     GuardrailResult,
+    clear_guardrails_cache,
     evaluate_guardrails,
     log_guardrail_check,
 )
@@ -43,6 +44,7 @@ __all__ = [
     # Guardrails service
     "evaluate_guardrails",
     "log_guardrail_check",
+    "clear_guardrails_cache",
     "EvaluationResult",
     "GuardrailResult",
 ]
