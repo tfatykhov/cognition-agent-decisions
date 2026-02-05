@@ -161,6 +161,11 @@ async def query_decisions(
     max_confidence: float | None = None,
     stakes: list[str] | None = None,
     status_filter: list[str] | None = None,
+    # F010: Project context filters
+    project: str | None = None,
+    feature: str | None = None,
+    pr: int | None = None,
+    has_outcome: bool | None = None,
 ) -> QueryResponse:
     """Query similar decisions from ChromaDB.
 
@@ -172,6 +177,10 @@ async def query_decisions(
         max_confidence: Maximum confidence threshold.
         stakes: Filter by stakes levels.
         status_filter: Filter by status values.
+        project: Filter by project (owner/repo).
+        feature: Filter by feature name.
+        pr: Filter by PR number.
+        has_outcome: Filter to only reviewed decisions (True) or pending (False).
 
     Returns:
         QueryResponse with results or error.
@@ -209,6 +218,18 @@ async def query_decisions(
         where["stakes"] = {"$in": stakes}
     if status_filter:
         where["status"] = {"$in": status_filter}
+
+    # F010: Project context filters
+    if project:
+        where["project"] = project
+    if feature:
+        where["feature"] = feature
+    if pr is not None:
+        where["pr"] = pr
+    if has_outcome is True:
+        where["status"] = "reviewed"
+    elif has_outcome is False:
+        where["status"] = "pending"
 
     # Query ChromaDB
     base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
