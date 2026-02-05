@@ -399,3 +399,20 @@ class TestRecordDecision:
         assert data["confidence"] == 0.75
         assert data["category"] == "integration"
         assert len(data["reasons"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_graceful_degradation_without_chromadb(self, tmp_path: Path) -> None:
+        """Decision is saved even when ChromaDB indexing fails."""
+        req = RecordDecisionRequest(
+            decision="Test graceful degradation",
+            confidence=0.80,
+            category="process",
+        )
+
+        # With no ChromaDB/Gemini, indexing will fail but file should be saved
+        response = await record_decision(req, decisions_path=str(tmp_path))
+
+        assert response.success is True
+        assert Path(response.path).exists()
+        # indexed should be False since no ChromaDB available
+        assert response.indexed is False

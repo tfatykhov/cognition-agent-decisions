@@ -3,6 +3,7 @@
 Creates decision YAML files and indexes them to ChromaDB.
 """
 
+import logging
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -19,6 +20,8 @@ CHROMA_URL = os.getenv("CHROMA_URL", "http://localhost:8000")
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 EMBEDDING_MODEL = "text-embedding-004"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -297,7 +300,8 @@ async def generate_embedding(text: str) -> list[float] | None:
             response.raise_for_status()
             data = response.json()
             return data.get("embedding", {}).get("values", [])
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to generate embedding: %s", e)
             return None
 
 
@@ -350,7 +354,8 @@ async def index_to_chromadb(
             )
             response.raise_for_status()
             return True
-        except Exception:
+        except Exception as e:
+            logger.warning("ChromaDB upsert failed, trying add: %s", e)
             # Try alternative: add instead of upsert
             try:
                 add_url = f"{CHROMA_URL}/api/v1/collections/{CHROMA_COLLECTION}/add"
@@ -365,7 +370,8 @@ async def index_to_chromadb(
                 )
                 response.raise_for_status()
                 return True
-            except Exception:
+            except Exception as add_e:
+                logger.error("ChromaDB indexing failed: %s", add_e)
                 return False
 
 
