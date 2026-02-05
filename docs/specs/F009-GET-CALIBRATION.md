@@ -45,6 +45,7 @@ Add `cstp.getCalibration` JSON-RPC method to retrieve confidence calibration sta
   "method": "cstp.getCalibration",
   "params": {
     "filters": {
+      "agent": "emerson",
       "category": "architecture",
       "minDecisions": 5,
       "since": "2026-01-01"
@@ -60,12 +61,13 @@ Add `cstp.getCalibration` JSON-RPC method to retrieve confidence calibration sta
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `filters` | object | ❌ | Filter criteria |
+| `filters.agent` | string | ❌ | Filter by agent ID (from `recorded_by`) |
 | `filters.category` | string | ❌ | Filter by category |
 | `filters.stakes` | string | ❌ | Filter by stakes level |
 | `filters.since` | string | ❌ | ISO date, only decisions after |
 | `filters.until` | string | ❌ | ISO date, only decisions before |
 | `filters.minDecisions` | int | ❌ | Minimum decisions for stats (default: 5) |
-| `groupBy` | string | ❌ | Group by: `confidenceBucket`, `category`, `stakes` |
+| `groupBy` | string | ❌ | Group by: `confidenceBucket`, `category`, `stakes`, `agent` |
 
 ### Response (Success)
 
@@ -194,6 +196,7 @@ Group decisions by confidence level:
 ```python
 async def get_reviewed_decisions(
     decisions_path: str | None = None,
+    agent: str | None = None,
     category: str | None = None,
     stakes: str | None = None,
     since: str | None = None,
@@ -214,6 +217,8 @@ async def get_reviewed_decisions(
             continue
         
         # Apply filters
+        if agent and data.get("recorded_by") != agent:
+            continue
         if category and data.get("category") != category:
             continue
         if stakes and data.get("stakes") != stakes:
