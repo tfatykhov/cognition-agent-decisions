@@ -18,11 +18,13 @@ class CSTPClient:
     """Async client for CSTP server.
     
     Provides methods to interact with CSTP JSON-RPC API for decision
-    intelligence operations.
+    intelligence operations. Uses a shared httpx.AsyncClient for
+    connection pooling.
     
     Example:
         client = CSTPClient("http://localhost:9991", "token")
-        decisions, total = await client.list_decisions(limit=10)
+        async with client:
+            decisions, total = await client.list_decisions(limit=10)
     """
     
     def __init__(self, base_url: str, token: str) -> None:
@@ -38,6 +40,28 @@ class CSTPClient:
             "Content-Type": "application/json",
         }
         self._request_id = 0
+        self._http_client: httpx.AsyncClient | None = None
+    
+    async def __aenter__(self) -> "CSTPClient":
+        """Enter async context manager."""
+        self._http_client = httpx.AsyncClient(timeout=30.0, headers=self.headers)
+        return self
+    
+    async def __aexit__(self, *args: Any) -> None:
+        """Exit async context manager."""
+        if self._http_client:
+            await self._http_client.aclose()
+            self._http_client = None
+    
+    def _get_client(self) -> httpx.AsyncClient:
+        """Get or create HTTP client.
+        
+        Returns shared client if in context manager, otherwise creates new one.
+        """
+        if self._http_client:
+            return self._http_client
+        # Fallback for non-context-manager usage (creates new client per call)
+        return httpx.AsyncClient(timeout=30.0, headers=self.headers)
     
     def _next_id(self) -> int:
         """Generate next JSON-RPC request ID."""
@@ -58,10 +82,12 @@ class CSTPClient:
             CSTPError: If API returns an error
             httpx.HTTPError: If HTTP request fails
         """
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        client = self._get_client()
+        should_close = self._http_client is None
+        
+        try:
             response = await client.post(
                 f"{self.base_url}/cstp",
-                headers=self.headers,
                 json={
                     "jsonrpc": "2.0",
                     "method": method,
@@ -80,6 +106,9 @@ class CSTPClient:
                 )
             
             return data.get("result", {})
+        finally:
+            if should_close:
+                await client.aclose()
     
     async def list_decisions(
         self,

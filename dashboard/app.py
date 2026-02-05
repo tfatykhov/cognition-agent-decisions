@@ -3,6 +3,8 @@ import asyncio
 from typing import Any
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
+from flask_wtf import CSRFProtect
+from flask_wtf.csrf import CSRFError
 
 from .auth import requires_auth
 from .config import config
@@ -11,6 +13,9 @@ from .cstp_client import CSTPClient, CSTPError
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = config.secret_key
+
+# Enable CSRF protection
+csrf = CSRFProtect(app)
 
 # Initialize CSTP client
 cstp = CSTPClient(config.cstp_url, config.cstp_token)
@@ -22,6 +27,10 @@ auth = requires_auth(config)
 def run_async(coro: Any) -> Any:
     """Run async coroutine in sync Flask context.
     
+    Note: Flask 2.0+ supports async views natively, but gunicorn
+    with sync workers requires this wrapper. For production with
+    async support, use an ASGI server like uvicorn.
+    
     Args:
         coro: Async coroutine to run
         
@@ -31,7 +40,15 @@ def run_async(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e: CSRFError) -> tuple[str, int]:
+    """Handle CSRF validation errors."""
+    flash("Session expired. Please try again.", "error")
+    return redirect(url_for("decisions")), 400
+
+
 @app.route("/health")
+@csrf.exempt  # Health check doesn't need CSRF
 def health() -> Response:
     """Health check endpoint (no auth required).
     
@@ -122,7 +139,7 @@ def review(decision_id: str) -> str | Response:
     """Review decision outcome.
     
     GET: Show review form
-    POST: Submit review
+    POST: Submit review (CSRF protected)
     
     Args:
         decision_id: Decision ID to review
