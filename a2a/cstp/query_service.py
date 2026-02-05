@@ -16,7 +16,7 @@ CHROMA_URL = os.getenv("CHROMA_URL", "http://chromadb:8000")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TENANT = "default_tenant"
 DATABASE = "default_database"
-COLLECTION_NAME = "cognition_decisions"
+COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
 
 # Configurable secrets paths (can be overridden via env)
 SECRETS_PATHS = os.getenv(
