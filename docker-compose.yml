@@ -15,6 +15,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./guardrails:/app/guardrails:ro
+      - decisions_data:/app/decisions
     depends_on:
       chromadb:
         condition: service_healthy
@@ -50,6 +51,8 @@ services:
 
 volumes:
   chroma_data:
+    driver: local
+  decisions_data:
     driver: local
 
 networks:

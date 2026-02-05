@@ -15,6 +15,10 @@ from ..models.jsonrpc import (
     JsonRpcRequest,
     JsonRpcResponse,
 )
+from .decision_service import (
+    RecordDecisionRequest,
+    record_decision,
+)
 from .guardrails_service import evaluate_guardrails, log_guardrail_check
 from .models import (
     CheckGuardrailsRequest,
@@ -34,6 +38,7 @@ MethodHandler = Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]]
 QUERY_FAILED = -32003
 RATE_LIMITED = -32002
 GUARDRAIL_EVAL_FAILED = -32004
+RECORD_FAILED = -32005
 
 
 class CstpDispatcher:
@@ -260,3 +265,34 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     """
     dispatcher.register("cstp.queryDecisions", _handle_query_decisions)
     dispatcher.register("cstp.checkGuardrails", _handle_check_guardrails)
+    dispatcher.register("cstp.recordDecision", _handle_record_decision)
+
+
+async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.recordDecision method.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Record result as dict.
+
+    Raises:
+        ValueError: If validation fails.
+        RuntimeError: If recording fails.
+    """
+    # Parse and validate request
+    request = RecordDecisionRequest.from_dict(params, agent_id=agent_id)
+
+    errors = request.validate()
+    if errors:
+        raise ValueError(f"Validation failed: {'; '.join(errors)}")
+
+    # Record the decision
+    response = await record_decision(request)
+
+    if not response.success:
+        raise RuntimeError(response.error or "Failed to record decision")
+
+    return response.to_dict()

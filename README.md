@@ -291,6 +291,39 @@ export CHROMA_PORT="8000"
 }
 ```
 
+**Method: `cstp.recordDecision`** *(New in v0.7.1)*
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.recordDecision",
+  "params": {
+    "decision": "Use PostgreSQL for agent memory storage",
+    "confidence": 0.85,
+    "category": "architecture",
+    "stakes": "high",
+    "context": "Choosing database for long-term storage",
+    "reasons": [
+      {"type": "analysis", "text": "ACID compliance needed", "strength": 0.9}
+    ],
+    "reviewIn": "30d"
+  },
+  "id": 3
+}
+```
+
+Response:
+```json
+{
+  "result": {
+    "success": true,
+    "id": "abc12345",
+    "path": "decisions/2026/02/2026-02-05-decision-abc12345.yaml",
+    "indexed": true,
+    "timestamp": "2026-02-05T00:48:00Z"
+  }
+}
+```
+
 See [CSTP Design](docs/CSTP-v0.7.0-DESIGN.md) for full protocol details.
 
 ## Guardrail Example
