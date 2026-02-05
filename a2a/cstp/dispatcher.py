@@ -15,6 +15,10 @@ from ..models.jsonrpc import (
     JsonRpcRequest,
     JsonRpcResponse,
 )
+from .attribution_service import (
+    AttributeOutcomesRequest,
+    attribute_outcomes,
+)
 from .calibration_service import (
     GetCalibrationRequest,
     get_calibration,
@@ -45,6 +49,7 @@ QUERY_FAILED = -32003
 RATE_LIMITED = -32002
 GUARDRAIL_EVAL_FAILED = -32004
 RECORD_FAILED = -32005
+ATTRIBUTION_FAILED = -32008
 REVIEW_FAILED = -32006
 DECISION_NOT_FOUND = -32007
 
@@ -276,6 +281,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
     dispatcher.register("cstp.getCalibration", _handle_get_calibration)
+    dispatcher.register("cstp.attributeOutcomes", _handle_attribute_outcomes)
 
 
 async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -350,4 +356,22 @@ async def _handle_get_calibration(params: dict[str, Any], agent_id: str) -> dict
     """
     request = GetCalibrationRequest.from_dict(params)
     response = await get_calibration(request)
+    return response.to_dict()
+
+
+async def _handle_attribute_outcomes(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.attributeOutcomes method.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Attribution results as dict.
+
+    Raises:
+        ValueError: If validation fails.
+    """
+    request = AttributeOutcomesRequest.from_dict(params)
+    response = await attribute_outcomes(request)
     return response.to_dict()
