@@ -511,12 +511,18 @@ async def find_decision(
     Searches decisions directory for matching ID.
 
     Args:
-        decision_id: The decision ID to find.
+        decision_id: The decision ID to find (must be alphanumeric).
         decisions_path: Override for decisions directory.
 
     Returns:
         Tuple of (path, data) or None if not found.
+
+    Raises:
+        ValueError: If decision_id contains invalid characters.
     """
+    # Validate decision_id to prevent path traversal
+    if not decision_id or not decision_id.replace("-", "").replace("_", "").isalnum():
+        raise ValueError(f"Invalid decision ID format: {decision_id}")
     base = Path(decisions_path or DECISIONS_PATH)
 
     if not base.exists():
@@ -642,10 +648,22 @@ async def review_decision(
     if request.reviewer_id:
         data["reviewed_by"] = request.reviewer_id
 
-    # Write updated YAML
+    # Write updated YAML atomically (write to temp, then replace)
     try:
-        with open(path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        import tempfile
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix=".yaml",
+            dir=path.parent,
+        )
+        try:
+            with os.fdopen(temp_fd, "w") as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+            os.replace(temp_path, path)
+        except Exception:
+            # Clean up temp file on failure
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
     except Exception as e:
         return ReviewDecisionResponse(
             success=False,
