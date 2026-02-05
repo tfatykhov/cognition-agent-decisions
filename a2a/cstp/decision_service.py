@@ -429,3 +429,260 @@ async def record_decision(
         indexed=indexed,
         timestamp=now.isoformat(),
     )
+
+
+# =============================================================================
+# Review Decision
+# =============================================================================
+
+
+@dataclass
+class ReviewDecisionRequest:
+    """Request to review an existing decision with outcome data."""
+
+    id: str
+    outcome: str  # success, partial, failure, abandoned
+    actual_result: str | None = None
+    lessons: str | None = None
+    notes: str | None = None
+    affected_kpis: dict[str, float] | None = None
+    reviewer_id: str | None = None  # Set from auth
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any], reviewer_id: str | None = None) -> "ReviewDecisionRequest":
+        """Create from dictionary (JSON-RPC params)."""
+        return cls(
+            id=data.get("id", ""),
+            outcome=data.get("outcome", ""),
+            actual_result=data.get("actualResult", data.get("actual_result")),
+            lessons=data.get("lessons"),
+            notes=data.get("notes"),
+            affected_kpis=data.get("affectedKpis", data.get("affected_kpis")),
+            reviewer_id=reviewer_id,
+        )
+
+    def validate(self) -> list[str]:
+        """Validate the request. Returns list of errors."""
+        errors = []
+
+        if not self.id or not self.id.strip():
+            errors.append("id: required field")
+
+        valid_outcomes = {"success", "partial", "failure", "abandoned"}
+        if self.outcome not in valid_outcomes:
+            errors.append(f"outcome: must be one of {valid_outcomes}")
+
+        return errors
+
+
+@dataclass
+class ReviewDecisionResponse:
+    """Response from reviewing a decision."""
+
+    success: bool
+    id: str
+    path: str
+    status: str
+    reviewed_at: str
+    reindexed: bool
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON-RPC response."""
+        result: dict[str, Any] = {
+            "success": self.success,
+            "id": self.id,
+            "path": self.path,
+            "status": self.status,
+            "reviewedAt": self.reviewed_at,
+            "reindexed": self.reindexed,
+        }
+        if self.error:
+            result["error"] = self.error
+        return result
+
+
+async def find_decision(
+    decision_id: str,
+    decisions_path: str | None = None,
+) -> tuple[Path, dict[str, Any]] | None:
+    """Find a decision by ID.
+
+    Searches decisions directory for matching ID.
+
+    Args:
+        decision_id: The decision ID to find (must be alphanumeric).
+        decisions_path: Override for decisions directory.
+
+    Returns:
+        Tuple of (path, data) or None if not found.
+
+    Raises:
+        ValueError: If decision_id contains invalid characters.
+    """
+    # Validate decision_id to prevent path traversal
+    if not decision_id or not decision_id.replace("-", "").replace("_", "").isalnum():
+        raise ValueError(f"Invalid decision ID format: {decision_id}")
+    base = Path(decisions_path or DECISIONS_PATH)
+
+    if not base.exists():
+        return None
+
+    # Search pattern: decisions/YYYY/MM/*-decision-{id}.yaml
+    for yaml_file in base.rglob(f"*-decision-{decision_id}.yaml"):
+        try:
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+            return (yaml_file, data)
+        except Exception as e:
+            logger.warning("Failed to read decision file %s: %s", yaml_file, e)
+
+    return None
+
+
+async def reindex_decision(
+    decision_id: str,
+    data: dict[str, Any],
+    file_path: str,
+) -> bool:
+    """Re-index a decision with updated metadata.
+
+    Args:
+        decision_id: The decision ID.
+        data: The updated decision data.
+        file_path: Path to the decision file.
+
+    Returns:
+        True if indexing succeeded.
+    """
+    # Build embedding text from decision data
+    parts = [f"Decision: {data.get('summary', data.get('decision', ''))}"]
+
+    if data.get("context"):
+        parts.append(f"Context: {data['context']}")
+
+    parts.append(f"Category: {data.get('category', 'unknown')}")
+
+    if data.get("reasons"):
+        reasons_text = " | ".join(
+            r.get("text", "") for r in data["reasons"] if isinstance(r, dict)
+        )
+        if reasons_text:
+            parts.append(f"Reasons: {reasons_text}")
+
+    # Add outcome for reviewed decisions
+    if data.get("outcome"):
+        parts.append(f"Outcome: {data['outcome']}")
+
+    if data.get("lessons"):
+        parts.append(f"Lessons: {data['lessons']}")
+
+    embedding_text = "\n".join(parts)
+
+    # Build metadata
+    metadata: dict[str, Any] = {
+        "path": file_path,
+        "category": data.get("category", "unknown"),
+        "stakes": data.get("stakes", "medium"),
+        "confidence": data.get("confidence", 0.5),
+        "date": data.get("date", "")[:10] if data.get("date") else "",
+        "status": data.get("status", "pending"),
+    }
+
+    if data.get("outcome"):
+        metadata["outcome"] = data["outcome"]
+
+    if data.get("recorded_by"):
+        metadata["agent"] = data["recorded_by"]
+
+    return await index_to_chromadb(decision_id, embedding_text, metadata)
+
+
+async def review_decision(
+    request: ReviewDecisionRequest,
+    decisions_path: str | None = None,
+) -> ReviewDecisionResponse:
+    """Add outcome data to an existing decision.
+
+    Args:
+        request: The review data.
+        decisions_path: Override for decisions directory.
+
+    Returns:
+        Response with review status.
+    """
+    now = datetime.now(UTC)
+
+    # Find decision
+    result = await find_decision(request.id, decisions_path)
+    if not result:
+        return ReviewDecisionResponse(
+            success=False,
+            id=request.id,
+            path="",
+            status="not_found",
+            reviewed_at=now.isoformat(),
+            reindexed=False,
+            error=f"Decision not found: {request.id}",
+        )
+
+    path, data = result
+
+    # Update decision data
+    data["status"] = "reviewed"
+    data["outcome"] = request.outcome
+    data["reviewed_at"] = now.isoformat()
+
+    if request.actual_result:
+        data["actual_result"] = request.actual_result
+
+    if request.lessons:
+        data["lessons"] = request.lessons
+
+    if request.notes:
+        data["review_notes"] = request.notes
+
+    if request.affected_kpis:
+        data["affected_kpis"] = request.affected_kpis
+
+    if request.reviewer_id:
+        data["reviewed_by"] = request.reviewer_id
+
+    # Write updated YAML atomically (write to temp, then replace)
+    try:
+        import tempfile
+        temp_fd, temp_path = tempfile.mkstemp(
+            suffix=".yaml",
+            dir=path.parent,
+        )
+        try:
+            with os.fdopen(temp_fd, "w") as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+            os.replace(temp_path, path)
+        except Exception:
+            # Clean up temp file on failure
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+    except Exception as e:
+        return ReviewDecisionResponse(
+            success=False,
+            id=request.id,
+            path=str(path),
+            status="write_failed",
+            reviewed_at=now.isoformat(),
+            reindexed=False,
+            error=f"Failed to write updated decision: {e}",
+        )
+
+    # Re-index with outcome metadata
+    reindexed = await reindex_decision(request.id, data, str(path))
+
+    return ReviewDecisionResponse(
+        success=True,
+        id=request.id,
+        path=str(path),
+        status="reviewed",
+        reviewed_at=now.isoformat(),
+        reindexed=reindexed,
+    )

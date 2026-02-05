@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Feature ID | F008 |
-| Status | Draft |
+| Status | Implemented |
 | Priority | P1 |
 | Depends On | F007 (Record Decision) |
 | Blocks | F009 (Calibration) |
