@@ -125,6 +125,43 @@ class Config:
         return cls._from_dict(data)
 
     @classmethod
+    def from_env(cls) -> "Config":
+        """Load configuration from environment variables.
+
+        Environment variables:
+            CSTP_HOST: Server bind address
+            CSTP_PORT: Server bind port
+            CSTP_AUTH_TOKENS: Comma-separated agent:token pairs
+            CSTP_AGENT_NAME: Agent name
+            CSTP_AGENT_DESCRIPTION: Agent description
+            CSTP_AGENT_VERSION: Agent version
+            CSTP_AGENT_URL: Agent URL
+            CSTP_AGENT_CONTACT: Agent contact email
+
+        Returns:
+            Configuration from environment.
+        """
+        return cls(
+            server=ServerConfig(
+                host=os.getenv("CSTP_HOST", "0.0.0.0"),
+                port=int(os.getenv("CSTP_PORT", "8100")),
+            ),
+            agent=AgentConfig(
+                name=os.getenv("CSTP_AGENT_NAME", "cognition-engines"),
+                description=os.getenv(
+                    "CSTP_AGENT_DESCRIPTION", "Decision intelligence for AI agents"
+                ),
+                version=os.getenv("CSTP_AGENT_VERSION", "0.7.0"),
+                url=os.getenv("CSTP_AGENT_URL", "http://localhost:8100"),
+                contact=os.getenv("CSTP_AGENT_CONTACT"),
+            ),
+            auth=AuthConfig(
+                enabled=True,
+                tokens=_parse_auth_tokens(os.getenv("CSTP_AUTH_TOKENS", "")),
+            ),
+        )
+
+    @classmethod
     def _from_dict(cls, data: dict[str, Any]) -> "Config":
         """Create config from dictionary."""
         config = cls()
@@ -171,3 +208,28 @@ class Config:
             )
 
         return config
+
+
+def _parse_auth_tokens(tokens_str: str) -> list[AuthToken]:
+    """Parse CSTP_AUTH_TOKENS environment variable.
+
+    Format: agent1:token1,agent2:token2
+
+    Args:
+        tokens_str: Comma-separated agent:token pairs.
+
+    Returns:
+        List of AuthToken objects.
+    """
+    tokens: list[AuthToken] = []
+    if not tokens_str:
+        return tokens
+
+    for pair in tokens_str.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            agent, token = pair.split(":", 1)
+            if agent and token:
+                tokens.append(AuthToken(agent=agent.strip(), token=token.strip()))
+
+    return tokens
