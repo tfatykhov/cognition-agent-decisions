@@ -1,0 +1,38 @@
+[project]
+name = "cstp-dashboard"
+version = "0.1.0"
+description = "Web dashboard for CSTP decision intelligence"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "gunicorn>=21.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.isort]
+known-first-party = ["dashboard"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --cov=. --cov-report=term-missing"
