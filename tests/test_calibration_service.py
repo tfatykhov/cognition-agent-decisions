@@ -90,8 +90,8 @@ class TestCalculateCalibration:
     """Tests for calculate_calibration."""
 
     def test_insufficient_data(self) -> None:
-        """Returns None with fewer than 5 decisions."""
-        decisions = [{"confidence": 0.8, "outcome": "success"} for _ in range(4)]
+        """Returns None with fewer than 3 decisions."""
+        decisions = [{"confidence": 0.8, "outcome": "success"} for _ in range(2)]
         result = calculate_calibration(decisions)
         assert result is None
 
