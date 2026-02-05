@@ -87,6 +87,9 @@ class GetCalibrationRequest:
     until: str | None = None
     min_decisions: int = 5
     group_by: str | None = None
+    # F010: Project context filters
+    project: str | None = None
+    feature: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GetCalibrationRequest":
@@ -100,6 +103,9 @@ class GetCalibrationRequest:
             until=filters.get("until"),
             min_decisions=filters.get("minDecisions", 5),
             group_by=data.get("groupBy"),
+            # F010: Project context filters
+            project=filters.get("project"),
+            feature=filters.get("feature"),
         )
 
 
@@ -129,6 +135,9 @@ async def get_reviewed_decisions(
     stakes: str | None = None,
     since: str | None = None,
     until: str | None = None,
+    # F010: Project context filters
+    project: str | None = None,
+    feature: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get all reviewed decisions matching filters.
 
@@ -139,6 +148,8 @@ async def get_reviewed_decisions(
         stakes: Filter by stakes level.
         since: Only decisions after this ISO date.
         until: Only decisions before this ISO date.
+        project: Filter by project (owner/repo).
+        feature: Filter by feature name.
 
     Returns:
         List of decision data dictionaries.
@@ -169,6 +180,12 @@ async def get_reviewed_decisions(
             if category and data.get("category") != category:
                 continue
             if stakes and data.get("stakes") != stakes:
+                continue
+
+            # F010: Project context filters
+            if project and data.get("project") != project:
+                continue
+            if feature and data.get("feature") != feature:
                 continue
 
             # Date filters
@@ -447,6 +464,9 @@ async def get_calibration(
         stakes=request.stakes,
         since=request.since,
         until=request.until,
+        # F010: Project context filters
+        project=request.project,
+        feature=request.feature,
     )
 
     # Calculate overall calibration
