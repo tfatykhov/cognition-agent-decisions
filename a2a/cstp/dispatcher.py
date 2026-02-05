@@ -15,6 +15,10 @@ from ..models.jsonrpc import (
     JsonRpcRequest,
     JsonRpcResponse,
 )
+from .calibration_service import (
+    GetCalibrationRequest,
+    get_calibration,
+)
 from .decision_service import (
     RecordDecisionRequest,
     ReviewDecisionRequest,
@@ -271,6 +275,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.checkGuardrails", _handle_check_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
+    dispatcher.register("cstp.getCalibration", _handle_get_calibration)
 
 
 async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -330,4 +335,19 @@ async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict
     if not response.success:
         raise RuntimeError(response.error or "Failed to review decision")
 
+    return response.to_dict()
+
+
+async def _handle_get_calibration(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.getCalibration method.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Calibration statistics as dict.
+    """
+    request = GetCalibrationRequest.from_dict(params)
+    response = await get_calibration(request)
     return response.to_dict()
