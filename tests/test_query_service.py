@@ -211,3 +211,137 @@ class TestQueryResult:
             reason_types=["pattern", "analysis"],
         )
         assert result.reason_types == ["pattern", "analysis"]
+
+
+class TestQueryFiltersProjectContext:
+    """Tests for project context filters in QueryFilters."""
+
+    def test_parses_project_filters(self) -> None:
+        """Parses project context filters."""
+        from a2a.cstp.models import QueryFilters
+
+        data = {
+            "category": "architecture",
+            "project": "owner/repo",
+            "feature": "cstp-v2",
+            "pr": 42,
+            "hasOutcome": True,
+        }
+        filters = QueryFilters.from_dict(data)
+
+        assert filters.project == "owner/repo"
+        assert filters.feature == "cstp-v2"
+        assert filters.pr == 42
+        assert filters.has_outcome is True
+
+    def test_none_when_absent(self) -> None:
+        """Project filters are None when not provided."""
+        from a2a.cstp.models import QueryFilters
+
+        data = {"category": "architecture"}
+        filters = QueryFilters.from_dict(data)
+
+        assert filters.project is None
+        assert filters.feature is None
+        assert filters.pr is None
+        assert filters.has_outcome is None
+
+
+class TestQueryDecisionsWithProjectFilters:
+    """Tests for project context filters in query_decisions."""
+
+    @pytest.mark.asyncio
+    async def test_project_filter_in_where_clause(self) -> None:
+        """Project filter is included in ChromaDB where clause."""
+        with (
+            patch("a2a.cstp.query_service._get_collection_id", new_callable=AsyncMock) as mock_coll,
+            patch("a2a.cstp.query_service._generate_embedding", new_callable=AsyncMock) as mock_embed,
+            patch("a2a.cstp.query_service._async_request", new_callable=AsyncMock) as mock_req,
+        ):
+            mock_coll.return_value = "test-collection-id"
+            mock_embed.return_value = [0.1] * 768
+            mock_req.return_value = (200, {
+                "ids": [["id1"]],
+                "documents": [["doc1"]],
+                "metadatas": [[{
+                    "category": "architecture",
+                    "confidence": 0.8,
+                    "stakes": "high",
+                    "status": "reviewed",
+                    "date": "2026-02-05",
+                }]],
+                "distances": [[0.1]],
+            })
+
+            await query_decisions(
+                query="test query",
+                project="owner/repo",
+                feature="my-feature",
+                pr=10,
+            )
+
+            # Check the where clause in the request
+            call_args = mock_req.call_args
+            payload = call_args[0][2]  # Third positional arg is payload
+            where = payload.get("where", {})
+
+            assert where.get("project") == "owner/repo"
+            assert where.get("feature") == "my-feature"
+            assert where.get("pr") == 10
+
+    @pytest.mark.asyncio
+    async def test_has_outcome_true_filters_reviewed(self) -> None:
+        """has_outcome=True filters to reviewed status."""
+        with (
+            patch("a2a.cstp.query_service._get_collection_id", new_callable=AsyncMock) as mock_coll,
+            patch("a2a.cstp.query_service._generate_embedding", new_callable=AsyncMock) as mock_embed,
+            patch("a2a.cstp.query_service._async_request", new_callable=AsyncMock) as mock_req,
+        ):
+            mock_coll.return_value = "test-collection-id"
+            mock_embed.return_value = [0.1] * 768
+            mock_req.return_value = (200, {
+                "ids": [[]],
+                "documents": [[]],
+                "metadatas": [[]],
+                "distances": [[]],
+            })
+
+            await query_decisions(
+                query="test query",
+                has_outcome=True,
+            )
+
+            call_args = mock_req.call_args
+            payload = call_args[0][2]
+            where = payload.get("where", {})
+
+            assert where.get("status") == "reviewed"
+
+    @pytest.mark.asyncio
+    async def test_has_outcome_false_filters_pending(self) -> None:
+        """has_outcome=False filters to pending status."""
+        with (
+            patch("a2a.cstp.query_service._get_collection_id", new_callable=AsyncMock) as mock_coll,
+            patch("a2a.cstp.query_service._generate_embedding", new_callable=AsyncMock) as mock_embed,
+            patch("a2a.cstp.query_service._async_request", new_callable=AsyncMock) as mock_req,
+        ):
+            mock_coll.return_value = "test-collection-id"
+            mock_embed.return_value = [0.1] * 768
+            mock_req.return_value = (200, {
+                "ids": [[]],
+                "documents": [[]],
+                "metadatas": [[]],
+                "distances": [[]],
+            })
+
+            await query_decisions(
+                query="test query",
+                has_outcome=False,
+            )
+
+            call_args = mock_req.call_args
+            payload = call_args[0][2]
+            where = payload.get("where", {})
+
+            assert where.get("status") == "pending"
+

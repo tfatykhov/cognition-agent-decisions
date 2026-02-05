@@ -16,6 +16,11 @@ class QueryFilters:
     date_before: datetime | None = None
     stakes: list[str] | None = None
     status: list[str] | None = None
+    # F010: Project context filters
+    project: str | None = None
+    feature: str | None = None
+    pr: int | None = None
+    has_outcome: bool | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "QueryFilters":
@@ -30,6 +35,11 @@ class QueryFilters:
             date_before=_parse_datetime(data.get("dateBefore")),
             stakes=data.get("stakes"),
             status=data.get("status"),
+            # F010: Project context filters
+            project=data.get("project"),
+            feature=data.get("feature"),
+            pr=data.get("pr"),
+            has_outcome=data.get("hasOutcome"),
         )
 
 

@@ -161,6 +161,11 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         max_confidence=request.filters.max_confidence if request.filters.max_confidence < 1 else None,
         stakes=request.filters.stakes,
         status_filter=request.filters.status,
+        # F010: Project context filters
+        project=request.filters.project,
+        feature=request.filters.feature,
+        pr=request.filters.pr,
+        has_outcome=request.filters.has_outcome,
     )
 
     # Check for errors
