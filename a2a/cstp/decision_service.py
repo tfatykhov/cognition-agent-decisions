@@ -97,12 +97,16 @@ class ProjectContext:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ProjectContext":
         """Create from dictionary."""
+        # Cast pr and line to int to prevent type pollution from external inputs
+        pr_val = data.get("pr")
+        line_val = data.get("line")
+
         return cls(
             project=data.get("project"),
             feature=data.get("feature"),
-            pr=data.get("pr"),
+            pr=int(pr_val) if pr_val is not None else None,
             file=data.get("file"),
-            line=data.get("line"),
+            line=int(line_val) if line_val is not None else None,
             commit=data.get("commit"),
         )
 
@@ -406,6 +410,8 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
             parts.append(f"Feature: {pc.feature}")
         if pc.file:
             parts.append(f"File: {pc.file}")
+        if pc.pr is not None:
+            parts.append(f"PR #{pc.pr}")
 
     return "\n".join(parts)
 

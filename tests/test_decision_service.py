@@ -493,9 +493,28 @@ class TestRecordDecisionRequestWithProjectContext:
         assert req.project_context.project == "owner/repo"
         assert req.project_context.feature == "api-v2"
         assert req.project_context.pr == 42
+        assert isinstance(req.project_context.pr, int)
         assert req.project_context.file == "src/api.py"
         assert req.project_context.line == 100
+        assert isinstance(req.project_context.line, int)
         assert req.project_context.commit == "abc123d"
+
+    def test_from_dict_casts_string_pr_to_int(self) -> None:
+        """String PR number is cast to int."""
+        data = {
+            "decision": "Test",
+            "confidence": 0.8,
+            "category": "architecture",
+            "pr": "42",  # String, not int
+            "line": "100",  # String, not int
+        }
+        req = RecordDecisionRequest.from_dict(data)
+
+        assert req.project_context is not None
+        assert req.project_context.pr == 42
+        assert isinstance(req.project_context.pr, int)
+        assert req.project_context.line == 100
+        assert isinstance(req.project_context.line, int)
 
     def test_from_dict_without_project_context(self) -> None:
         """No project context when fields absent."""
@@ -563,6 +582,7 @@ class TestBuildEmbeddingTextWithProjectContext:
                 project="owner/repo",
                 feature="api-v2",
                 file="src/api.py",
+                pr=42,
             ),
         )
         text = build_embedding_text(req)
@@ -570,4 +590,4 @@ class TestBuildEmbeddingTextWithProjectContext:
         assert "Project: owner/repo" in text
         assert "Feature: api-v2" in text
         assert "File: src/api.py" in text
-
+        assert "PR #42" in text
