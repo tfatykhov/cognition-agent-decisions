@@ -17,7 +17,9 @@ from ..models.jsonrpc import (
 )
 from .decision_service import (
     RecordDecisionRequest,
+    ReviewDecisionRequest,
     record_decision,
+    review_decision,
 )
 from .guardrails_service import evaluate_guardrails, log_guardrail_check
 from .models import (
@@ -39,6 +41,8 @@ QUERY_FAILED = -32003
 RATE_LIMITED = -32002
 GUARDRAIL_EVAL_FAILED = -32004
 RECORD_FAILED = -32005
+REVIEW_FAILED = -32006
+DECISION_NOT_FOUND = -32007
 
 
 class CstpDispatcher:
@@ -266,6 +270,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.queryDecisions", _handle_query_decisions)
     dispatcher.register("cstp.checkGuardrails", _handle_check_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
+    dispatcher.register("cstp.reviewDecision", _handle_review_decision)
 
 
 async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -294,5 +299,35 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
 
     if not response.success:
         raise RuntimeError(response.error or "Failed to record decision")
+
+    return response.to_dict()
+
+
+async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.reviewDecision method.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID (reviewer).
+
+    Returns:
+        Review result as dict.
+
+    Raises:
+        ValueError: If validation fails.
+        RuntimeError: If review fails.
+    """
+    # Parse and validate request
+    request = ReviewDecisionRequest.from_dict(params, reviewer_id=agent_id)
+
+    errors = request.validate()
+    if errors:
+        raise ValueError(f"Validation failed: {'; '.join(errors)}")
+
+    # Review the decision
+    response = await review_decision(request)
+
+    if not response.success:
+        raise RuntimeError(response.error or "Failed to review decision")
 
     return response.to_dict()
