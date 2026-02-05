@@ -97,6 +97,29 @@ CHROMA_PORT=8000
 
 ## Quick Start
 
+### Option 1: Docker (Recommended)
+
+```bash
+# Clone the repo
+git clone https://github.com/tfatykhov/cognition-agent-decisions.git
+cd cognition-agent-decisions
+
+# Configure
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY and CSTP_AUTH_TOKENS
+
+# Start (includes ChromaDB)
+docker-compose up -d
+
+# Verify
+curl http://localhost:8100/health
+# {"status":"healthy"}
+```
+
+See [docs/DOCKER.md](docs/DOCKER.md) for full deployment guide.
+
+### Option 2: Local Installation
+
 ```bash
 # Install dependencies
 pip install -e .

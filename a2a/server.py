@@ -186,13 +186,14 @@ def run_server(
     """
     import uvicorn
 
-    # Load configuration
+    # Load configuration (env takes precedence, then yaml, then defaults)
     if config_path:
         config = Config.from_yaml(Path(config_path))
     else:
-        config = Config()
+        # Try to load from environment variables
+        config = Config.from_env()
 
-    # Override with arguments
+    # Override with CLI arguments if provided
     config.server.host = host
     config.server.port = port
 
@@ -202,11 +203,24 @@ def run_server(
 
 if __name__ == "__main__":
     import argparse
+    import os
 
     parser = argparse.ArgumentParser(description="CSTP Server")
-    parser.add_argument("--host", default="0.0.0.0", help="Bind address")
-    parser.add_argument("--port", type=int, default=8100, help="Bind port")
-    parser.add_argument("--config", help="Path to config file")
+    parser.add_argument(
+        "--host",
+        default=os.getenv("CSTP_HOST", "0.0.0.0"),
+        help="Bind address (default: $CSTP_HOST or 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("CSTP_PORT", "8100")),
+        help="Bind port (default: $CSTP_PORT or 8100)",
+    )
+    parser.add_argument(
+        "--config",
+        help="Path to YAML config file (overrides env vars)",
+    )
 
     args = parser.parse_args()
     run_server(host=args.host, port=args.port, config_path=args.config)

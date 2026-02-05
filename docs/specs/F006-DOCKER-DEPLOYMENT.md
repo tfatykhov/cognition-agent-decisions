@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | Feature ID | F006 |
-| Status | Draft |
+| Status | Implemented |
 | Priority | P2 |
 | Depends On | F001 (Server Infrastructure) |
 | Blocks | None |

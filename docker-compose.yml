@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  cstp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cstp-server
+    ports:
+      - "${CSTP_PORT:-8100}:8100"
+    env_file:
+      - .env
+    environment:
+      - CHROMA_URL=http://chromadb:8000
+    volumes:
+      - ./config:/app/config:ro
+      - ./guardrails:/app/guardrails:ro
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - cstp-network
+
+  chromadb:
+    image: chromadb/chroma:0.4.22
+    container_name: chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+      - ALLOW_RESET=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - cstp-network
+
+volumes:
+  chroma_data:
+    driver: local
+
+networks:
+  cstp-network:
+    driver: bridge
