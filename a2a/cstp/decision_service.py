@@ -18,6 +18,8 @@ import yaml
 DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
 CHROMA_URL = os.getenv("CHROMA_URL", "http://localhost:8000")
 CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
+CHROMA_TENANT = os.getenv("CHROMA_TENANT", "default_tenant")
+CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "default_database")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 EMBEDDING_MODEL = "text-embedding-004"
 
@@ -416,6 +418,40 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
     return "\n".join(parts)
 
 
+async def ensure_collection_exists() -> str | None:
+    """Ensure ChromaDB collection exists, create if needed. Returns collection ID."""
+    # v2 API path
+    base = f"{CHROMA_URL}/api/v2/tenants/{CHROMA_TENANT}/databases/{CHROMA_DATABASE}"
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Check if collection exists
+        try:
+            response = await client.get(f"{base}/collections/{CHROMA_COLLECTION}")
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("id")
+        except Exception:
+            pass
+
+        # Create collection
+        try:
+            response = await client.post(
+                f"{base}/collections",
+                json={
+                    "name": CHROMA_COLLECTION,
+                    "metadata": {"hnsw:space": "cosine"},
+                },
+            )
+            if response.status_code in (200, 201):
+                data = response.json()
+                logger.info("Created ChromaDB collection: %s", CHROMA_COLLECTION)
+                return data.get("id")
+        except Exception as e:
+            logger.error("Failed to create collection: %s", e)
+
+        return None
+
+
 async def index_to_chromadb(
     decision_id: str,
     embedding_text: str,
@@ -430,8 +466,15 @@ async def index_to_chromadb(
     if embedding is None:
         return False
 
-    # Upsert to ChromaDB via HTTP API
-    url = f"{CHROMA_URL}/api/v1/collections/{CHROMA_COLLECTION}/upsert"
+    # Ensure collection exists and get ID
+    collection_id = await ensure_collection_exists()
+    if not collection_id:
+        logger.error("Could not get or create ChromaDB collection")
+        return False
+
+    # v2 API: upsert to collection by ID
+    base = f"{CHROMA_URL}/api/v2/tenants/{CHROMA_TENANT}/databases/{CHROMA_DATABASE}"
+    url = f"{base}/collections/{collection_id}/upsert"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
@@ -450,7 +493,7 @@ async def index_to_chromadb(
             logger.warning("ChromaDB upsert failed, trying add: %s", e)
             # Try alternative: add instead of upsert
             try:
-                add_url = f"{CHROMA_URL}/api/v1/collections/{CHROMA_COLLECTION}/add"
+                add_url = f"{base}/collections/{collection_id}/add"
                 response = await client.post(
                     add_url,
                     json={
