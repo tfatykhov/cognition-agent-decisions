@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Calibration • CSTP Dashboard{% endblock %}
+
+{% block content %}
+<hgroup>
+    <h1>Calibration Dashboard</h1>
+    <p>How well-calibrated are your confidence estimates?</p>
+</hgroup>
+
+{% if stats %}
+<h2>Overall Stats</h2>
+<div class="grid">
+    <article>
+        <header>Total</header>
+        <p class="stat-number">{{ stats.total_decisions }}</p>
+    </article>
+    <article>
+        <header>Reviewed</header>
+        <p class="stat-number">{{ stats.reviewed_decisions }}</p>
+    </article>
+    <article>
+        <header>Pending</header>
+        <p class="stat-number">{{ stats.pending_decisions }}</p>
+    </article>
+</div>
+
+<div class="grid">
+    <article>
+        <header>Accuracy</header>
+        <p class="stat-number">{{ stats.accuracy_pct }}%</p>
+    </article>
+    <article>
+        <header>Brier Score</header>
+        <p class="stat-number">{{ "%.2f"|format(stats.brier_score) }}</p>
+    </article>
+    <article>
+        <header>Calibration</header>
+        <p class="stat-number">{{ stats.calibration_icon }} {{ stats.interpretation|replace('_', ' ')|title }}</p>
+    </article>
+</div>
+
+{% if stats.by_category %}
+<h2>By Category</h2>
+<figure>
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Category</th>
+                <th scope="col">Total</th>
+                <th scope="col">Reviewed</th>
+                <th scope="col">Accuracy</th>
+                <th scope="col">Brier</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cat in stats.by_category %}
+            <tr>
+                <td><kbd>{{ cat.category }}</kbd></td>
+                <td>{{ cat.total }}</td>
+                <td>{{ cat.reviewed }}</td>
+                <td>{% if cat.reviewed > 0 %}{{ cat.accuracy_pct }}%{% else %}--{% endif %}</td>
+                <td>{% if cat.reviewed > 0 %}{{ "%.2f"|format(cat.brier_score) }}{% else %}--{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+{% endif %}
+
+{% if stats.recommendations %}
+<h2>Recommendations</h2>
+<article>
+    <ul>
+        {% for rec in stats.recommendations %}
+        <li>💡 {{ rec }}</li>
+        {% endfor %}
+    </ul>
+</article>
+{% endif %}
+
+{% else %}
+<article>
+    <p>Unable to load calibration data.</p>
+</article>
+{% endif %}
+{% endblock %}

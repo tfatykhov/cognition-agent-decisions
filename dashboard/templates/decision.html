@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ decision.id[:8] }} • CSTP Dashboard{% endblock %}
+
+{% block content %}
+<p><a href="{{ url_for('decisions') }}">◀ Back to list</a></p>
+
+<hgroup>
+    <h1>Decision: <code>{{ decision.id[:8] }}</code></h1>
+    <p>{{ decision.outcome_icon }} {% if decision.outcome %}{{ decision.outcome|title }}{% else %}Pending Review{% endif %}</p>
+</hgroup>
+
+<article>
+    <p>{{ decision.summary }}</p>
+</article>
+
+<h2>Details</h2>
+<table>
+    <tbody>
+        <tr>
+            <th scope="row">Category</th>
+            <td><kbd>{{ decision.category }}</kbd></td>
+        </tr>
+        <tr>
+            <th scope="row">Stakes</th>
+            <td>{{ decision.stakes }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Confidence</th>
+            <td>{{ decision.confidence_pct }}%</td>
+        </tr>
+        <tr>
+            <th scope="row">Created</th>
+            <td>{{ decision.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+        </tr>
+        {% if decision.agent_id %}
+        <tr>
+            <th scope="row">Agent</th>
+            <td>{{ decision.agent_id }}</td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{% if decision.context %}
+<h2>Context</h2>
+<article>
+    <p>{{ decision.context }}</p>
+</article>
+{% endif %}
+
+{% if decision.reasons %}
+<h2>Reasons</h2>
+<ul>
+    {% for reason in decision.reasons %}
+    <li><strong>[{{ reason.type }}]</strong> {{ reason.text }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+{% if decision.project_context %}
+<h2>Project Context</h2>
+<ul>
+    {% if decision.project_context.project %}
+    <li><strong>Project:</strong> {{ decision.project_context.project }}</li>
+    {% endif %}
+    {% if decision.project_context.feature %}
+    <li><strong>Feature:</strong> {{ decision.project_context.feature }}</li>
+    {% endif %}
+    {% if decision.project_context.pr %}
+    <li><strong>PR:</strong> #{{ decision.project_context.pr }}</li>
+    {% endif %}
+    {% if decision.project_context.file %}
+    <li><strong>File:</strong> {{ decision.project_context.file }}{% if decision.project_context.line %}:{{ decision.project_context.line }}{% endif %}</li>
+    {% endif %}
+    {% if decision.project_context.commit %}
+    <li><strong>Commit:</strong> <code>{{ decision.project_context.commit[:8] }}</code></li>
+    {% endif %}
+</ul>
+{% endif %}
+
+{% if decision.outcome %}
+<h2>Outcome</h2>
+<table>
+    <tbody>
+        <tr>
+            <th scope="row">Result</th>
+            <td>{{ decision.outcome_icon }} {{ decision.outcome|title }}</td>
+        </tr>
+        {% if decision.actual_result %}
+        <tr>
+            <th scope="row">What happened</th>
+            <td>{{ decision.actual_result }}</td>
+        </tr>
+        {% endif %}
+        {% if decision.lessons %}
+        <tr>
+            <th scope="row">Lessons</th>
+            <td>{{ decision.lessons }}</td>
+        </tr>
+        {% endif %}
+        {% if decision.reviewed_at %}
+        <tr>
+            <th scope="row">Reviewed</th>
+            <td>{{ decision.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
+{% else %}
+<p>
+    <a href="{{ url_for('review', decision_id=decision.id[:8]) }}" role="button">Review Outcome</a>
+</p>
+{% endif %}
+{% endblock %}

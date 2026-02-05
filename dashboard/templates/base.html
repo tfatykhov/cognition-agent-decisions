@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CSTP Decision Intelligence Dashboard">
+    <title>{% block title %}CSTP Dashboard{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="container">
+        <nav>
+            <ul>
+                <li><strong>🧠 CSTP Dashboard</strong></li>
+            </ul>
+            <ul>
+                <li><a href="{{ url_for('decisions') }}" {% if request.endpoint == 'decisions' or request.endpoint == 'decision_detail' or request.endpoint == 'review' %}aria-current="page"{% endif %}>Decisions</a></li>
+                <li><a href="{{ url_for('calibration') }}" {% if request.endpoint == 'calibration' %}aria-current="page"{% endif %}>Calibration</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <article class="flash flash-{{ category }}">
+                        {{ message }}
+                    </article>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="container">
+        <small>CSTP v0.8.0 • Decision Intelligence for AI Agents</small>
+    </footer>
+</body>
+</html>
