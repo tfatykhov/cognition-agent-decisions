@@ -96,7 +96,10 @@ Check decision-making accuracy:
 {
   "method": "cstp.getCalibration",
   "params": {
-    "filters": { "category": "architecture" }
+    "filters": { 
+      "category": "architecture",
+      "project": "owner/repo"
+    }
   }
 }
 ```
@@ -194,7 +197,12 @@ Each significant finding becomes a tracked decision:
 
 ### Step 3: Track Outcomes
 
-When the reviewed code reaches production:
+When the reviewed code reaches production, outcomes can be tracked automatically or manually.
+
+**Automatic (Recommended):**
+Run `cstp.attributeOutcomes` weekly. It assumes success if the PR is stable for 14 days without linked bugs.
+
+**Manual (Specific Feedback):**
 
 **If bug found (review was correct):**
 ```json
@@ -266,6 +274,25 @@ Response:
   ]
 }
 ```
+
+### Step 5: Automatic Outcome Attribution
+
+Instead of manually reviewing every finding, run the attribution job periodically:
+
+```json
+{
+  "method": "cstp.attributeOutcomes",
+  "params": {
+    "project": "owner/repo",
+    "stabilityDays": 14
+  }
+}
+```
+
+This automatically:
+1. Checks if PRs merged >14 days ago caused any regressions
+2. If stable, marks all associated review findings as `success`
+3. If bugs reported (linked via file/line), marks findings as `failure` (missed bug) or `success` (caught bug)
 
 ### The Meta-Learning Loop
 

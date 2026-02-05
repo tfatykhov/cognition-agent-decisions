@@ -264,7 +264,11 @@ export CHROMA_PORT="8000"
   "method": "cstp.queryDecisions",
   "params": {
     "query": "database migration",
-    "filters": { "category": "architecture", "minConfidence": 0.8 }
+    "filters": { 
+      "category": "architecture", 
+      "minConfidence": 0.8,
+      "project": "owner/repo"
+    }
   },
   "id": 1
 }
@@ -302,6 +306,9 @@ export CHROMA_PORT="8000"
     "category": "architecture",
     "stakes": "high",
     "context": "Choosing database for long-term storage",
+    "project": "owner/repo",
+    "feature": "memory-persistence",
+    "pr": 42,
     "reasons": [
       {"type": "analysis", "text": "ACID compliance needed", "strength": 0.9}
     ],
@@ -321,6 +328,19 @@ Response:
     "indexed": true,
     "timestamp": "2026-02-05T00:48:00Z"
   }
+}
+```
+
+**Method: `cstp.attributeOutcomes`** *(New in v0.7.2)*
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.attributeOutcomes",
+  "params": {
+    "project": "owner/repo",
+    "stabilityDays": 14
+  },
+  "id": 4
 }
 ```
 
@@ -351,6 +371,7 @@ message: "High-stakes decisions require ≥50% confidence"
 | v0.6.0 | Pattern Detection Engine | ✅ Shipped |
 | v0.6.0 | Enhanced Guardrails + Audit Trail | ✅ Shipped |
 | v0.7.0 | Cross-Agent Federation (CSTP) | ⚠️ Beta |
+| v0.7.2 | Project Context & Attribution | ✅ Shipped |
 | v0.8.0 | Shared Intent Protocol | Planned |
 | v0.9.0 | Context Graphs | Planned |
 | v1.0.0 | Multi-Agent Cognition Network | Planned |
