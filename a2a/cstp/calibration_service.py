@@ -4,13 +4,39 @@ Calculates confidence calibration statistics from reviewed decisions.
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .decision_service import DECISIONS_PATH
+
+
+def window_to_dates(window: str | None) -> tuple[str | None, str | None]:
+    """Convert window shorthand to since/until dates.
+
+    Args:
+        window: "30d", "60d", "90d", or None/"all"
+
+    Returns:
+        (since_date, until_date) as ISO date strings (YYYY-MM-DD)
+    """
+    if not window or window == "all":
+        return None, None
+
+    now = datetime.now(UTC)
+    until_date = now.strftime("%Y-%m-%d")
+
+    days_map = {"30d": 30, "60d": 60, "90d": 90}
+    days = days_map.get(window)
+
+    if days is None:
+        return None, None
+
+    since = now - timedelta(days=days)
+    since_date = since.strftime("%Y-%m-%d")
+    return since_date, until_date
 
 
 @dataclass
@@ -46,16 +72,29 @@ class CalibrationResult:
     reviewed_decisions: int
     calibration_gap: float
     interpretation: str
+    # F014: Rolling window metadata
+    window: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
-        return {
+        result = {
             "brierScore": self.brier_score,
             "accuracy": self.accuracy,
             "totalDecisions": self.total_decisions,
             "reviewedDecisions": self.reviewed_decisions,
             "calibrationGap": self.calibration_gap,
             "interpretation": self.interpretation,
+        }
+        # F014: Add window metadata if present
+        if self.window:
+            result["window"] = self.window
+        if self.period_start:
+            result["periodStart"] = self.period_start
+        if self.period_end:
+            result["periodEnd"] = self.period_end
+        return result
         }
 
 
@@ -90,6 +129,8 @@ class GetCalibrationRequest:
     # F010: Project context filters
     project: str | None = None
     feature: str | None = None
+    # F014: Rolling window
+    window: str | None = None  # "30d", "60d", "90d", or "all"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GetCalibrationRequest":
@@ -98,6 +139,17 @@ class GetCalibrationRequest:
         return cls(
             agent=filters.get("agent"),
             category=filters.get("category"),
+            stakes=filters.get("stakes"),
+            since=filters.get("since"),
+            until=filters.get("until"),
+            min_decisions=filters.get("minDecisions", 5),
+            group_by=data.get("groupBy"),
+            # F010: Project context filters
+            project=filters.get("project"),
+            feature=filters.get("feature"),
+            # F014: Rolling window (top-level param)
+            window=data.get("window"),
+        )
             stakes=filters.get("stakes"),
             since=filters.get("since"),
             until=filters.get("until"),
@@ -456,14 +508,21 @@ async def get_calibration(
     """
     now = datetime.now(UTC)
 
+    # F014: Convert window to date filters
+    window_since, window_until = window_to_dates(request.window)
+
+    # Window overrides explicit since/until if set
+    effective_since = window_since or request.since
+    effective_until = window_until or request.until
+
     # Get reviewed decisions
     decisions = await get_reviewed_decisions(
         decisions_path=decisions_path,
         agent=request.agent,
         category=request.category,
         stakes=request.stakes,
-        since=request.since,
-        until=request.until,
+        since=effective_since,
+        until=effective_until,
         # F010: Project context filters
         project=request.project,
         feature=request.feature,
@@ -475,6 +534,12 @@ async def get_calibration(
         if len(decisions) >= request.min_decisions
         else None
     )
+
+    # F014: Add window metadata to result
+    if overall and request.window:
+        overall.window = request.window
+        overall.period_start = effective_since
+        overall.period_end = effective_until
 
     # Calculate bucket calibration
     buckets = calculate_buckets(decisions)

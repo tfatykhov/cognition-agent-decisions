@@ -201,12 +201,14 @@ class CSTPClient:
         self,
         project: str | None = None,
         category: str | None = None,
+        window: str | None = None,
     ) -> CalibrationStats:
         """Get calibration statistics.
         
         Args:
             project: Optional project filter
             category: Optional category filter
+            window: Time window ("30d", "60d", "90d", or None for all-time)
             
         Returns:
             CalibrationStats with overall and per-category metrics
@@ -216,6 +218,8 @@ class CSTPClient:
             params["project"] = project
         if category:
             params["category"] = category
+        if window:
+            params["window"] = window
         
         result = await self._call("cstp.getCalibration", params)
         return CalibrationStats.from_dict(result)

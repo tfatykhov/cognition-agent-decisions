@@ -8,7 +8,21 @@
     <p>How well-calibrated are your confidence estimates?</p>
 </hgroup>
 
+<form method="get" class="grid">
+    <select name="window" aria-label="Time window">
+        <option value="">All Time</option>
+        <option value="30d" {% if window == '30d' %}selected{% endif %}>Last 30 Days</option>
+        <option value="60d" {% if window == '60d' %}selected{% endif %}>Last 60 Days</option>
+        <option value="90d" {% if window == '90d' %}selected{% endif %}>Last 90 Days</option>
+    </select>
+    <button type="submit">Apply</button>
+</form>
+
 {% if stats %}
+{% if stats.period_start and stats.period_end %}
+<p><small>Period: {{ stats.period_start }} to {{ stats.period_end }}</small></p>
+{% endif %}
+
 <h2>Overall Stats</h2>
 <div class="grid">
     <article>
