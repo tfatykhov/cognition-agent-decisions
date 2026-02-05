@@ -1,0 +1,62 @@
+/* CSTP Dashboard Custom Styles */
+
+/* Large stat numbers */
+.stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    margin: 0;
+}
+
+/* Flash messages */
+.flash {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: var(--pico-border-radius);
+}
+
+.flash-error {
+    background-color: var(--pico-del-color);
+    color: white;
+}
+
+.flash-success {
+    background-color: var(--pico-ins-color);
+    color: white;
+}
+
+/* Code/kbd styling */
+code, kbd {
+    font-size: 0.9em;
+}
+
+/* Decision table */
+figure table {
+    margin-bottom: 0;
+}
+
+/* Pagination nav */
+nav[aria-label="Pagination"] ul {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    list-style: none;
+    padding: 0;
+}
+
+/* Form grid alignment */
+form.grid {
+    align-items: end;
+}
+
+/* Radio button labels */
+fieldset label {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 2rem 0;
+    opacity: 0.7;
+}

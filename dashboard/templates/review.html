@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Review {{ decision.id[:8] }} • CSTP Dashboard{% endblock %}
+
+{% block content %}
+<p><a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}">◀ Back to decision</a></p>
+
+<hgroup>
+    <h1>Review Outcome</h1>
+    <p>Decision: <code>{{ decision.id[:8] }}</code></p>
+</hgroup>
+
+<article>
+    <p><strong>{{ decision.summary }}</strong></p>
+    <p>Original confidence: {{ decision.confidence_pct }}%</p>
+</article>
+
+<form method="post">
+    <fieldset>
+        <legend>Outcome *</legend>
+        <label>
+            <input type="radio" name="outcome" value="success" required>
+            ✅ Success — Decision worked as expected
+        </label>
+        <label>
+            <input type="radio" name="outcome" value="partial">
+            ⚠️ Partial — Partially worked, some adjustments needed
+        </label>
+        <label>
+            <input type="radio" name="outcome" value="failure">
+            ❌ Failure — Did not work, had to change approach
+        </label>
+        <label>
+            <input type="radio" name="outcome" value="abandoned">
+            🚫 Abandoned — Never implemented or tested
+        </label>
+    </fieldset>
+
+    <label for="actual_result">
+        What actually happened? *
+        <textarea id="actual_result" name="actual_result" required placeholder="Describe the actual outcome..."></textarea>
+    </label>
+
+    <label for="lessons">
+        Lessons learned (optional)
+        <textarea id="lessons" name="lessons" placeholder="What did you learn from this decision?"></textarea>
+    </label>
+
+    <div class="grid">
+        <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}" role="button" class="secondary">Cancel</a>
+        <button type="submit">Submit Review</button>
+    </div>
+</form>
+{% endblock %}

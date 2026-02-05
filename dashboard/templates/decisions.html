@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Decisions • CSTP Dashboard{% endblock %}
+
+{% block content %}
+<hgroup>
+    <h1>Decisions</h1>
+    <p>{{ total }} total decisions</p>
+</hgroup>
+
+<form method="get" class="grid">
+    <select name="category" aria-label="Category filter">
+        <option value="">All Categories</option>
+        <option value="architecture" {% if category == 'architecture' %}selected{% endif %}>Architecture</option>
+        <option value="process" {% if category == 'process' %}selected{% endif %}>Process</option>
+        <option value="integration" {% if category == 'integration' %}selected{% endif %}>Integration</option>
+        <option value="tooling" {% if category == 'tooling' %}selected{% endif %}>Tooling</option>
+        <option value="security" {% if category == 'security' %}selected{% endif %}>Security</option>
+    </select>
+    <select name="status" aria-label="Status filter">
+        <option value="">All Status</option>
+        <option value="pending" {% if status == 'pending' %}selected{% endif %}>⏳ Pending</option>
+        <option value="reviewed" {% if status == 'reviewed' %}selected{% endif %}>✅ Reviewed</option>
+    </select>
+    <button type="submit">🔍 Filter</button>
+</form>
+
+<figure>
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Decision</th>
+                <th scope="col">Category</th>
+                <th scope="col">Conf</th>
+                <th scope="col">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for decision in decisions %}
+            <tr>
+                <td><a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}"><code>{{ decision.id[:8] }}</code></a></td>
+                <td>{{ decision.summary[:60] }}{% if decision.summary|length > 60 %}...{% endif %}</td>
+                <td><kbd>{{ decision.category }}</kbd></td>
+                <td>{{ decision.confidence_pct }}%</td>
+                <td>{{ decision.outcome_icon }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5">No decisions found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+
+{% if total_pages > 1 %}
+<nav aria-label="Pagination">
+    <ul>
+        {% if page > 1 %}
+        <li><a href="{{ url_for('decisions', page=page-1, category=category, status=status) }}">◀ Previous</a></li>
+        {% endif %}
+        <li>Page {{ page }} of {{ total_pages }}</li>
+        {% if page < total_pages %}
+        <li><a href="{{ url_for('decisions', page=page+1, category=category, status=status) }}">Next ▶</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
