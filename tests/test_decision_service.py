@@ -7,6 +7,7 @@ import yaml
 
 from a2a.cstp.decision_service import (
     PreDecisionProtocol,
+    ProjectContext,
     Reason,
     RecordDecisionRequest,
     build_decision_yaml,
@@ -416,3 +417,177 @@ class TestRecordDecision:
         assert Path(response.path).exists()
         # indexed should be False since no ChromaDB available
         assert response.indexed is False
+
+
+class TestProjectContext:
+    """Tests for ProjectContext dataclass."""
+
+    def test_from_dict_full(self) -> None:
+        """Parses all project context fields."""
+        data = {
+            "project": "owner/repo",
+            "feature": "cstp-feedback",
+            "pr": 8,
+            "file": "api.py",
+            "line": 42,
+            "commit": "abc123d",
+        }
+        ctx = ProjectContext.from_dict(data)
+
+        assert ctx.project == "owner/repo"
+        assert ctx.feature == "cstp-feedback"
+        assert ctx.pr == 8
+        assert ctx.file == "api.py"
+        assert ctx.line == 42
+        assert ctx.commit == "abc123d"
+
+    def test_from_dict_partial(self) -> None:
+        """Parses partial project context."""
+        data = {"project": "owner/repo", "pr": 5}
+        ctx = ProjectContext.from_dict(data)
+
+        assert ctx.project == "owner/repo"
+        assert ctx.pr == 5
+        assert ctx.feature is None
+        assert ctx.file is None
+
+    def test_to_dict_excludes_none(self) -> None:
+        """to_dict excludes None values."""
+        ctx = ProjectContext(project="owner/repo", pr=8)
+        result = ctx.to_dict()
+
+        assert result == {"project": "owner/repo", "pr": 8}
+        assert "feature" not in result
+        assert "file" not in result
+
+    def test_has_any_true(self) -> None:
+        """has_any returns True when any field set."""
+        ctx = ProjectContext(project="owner/repo")
+        assert ctx.has_any() is True
+
+    def test_has_any_false(self) -> None:
+        """has_any returns False when empty."""
+        ctx = ProjectContext()
+        assert ctx.has_any() is False
+
+
+class TestRecordDecisionRequestWithProjectContext:
+    """Tests for project context in RecordDecisionRequest."""
+
+    def test_from_dict_with_project_context(self) -> None:
+        """Parses project context from flat params."""
+        data = {
+            "decision": "Use async",
+            "confidence": 0.85,
+            "category": "architecture",
+            "project": "owner/repo",
+            "feature": "api-v2",
+            "pr": 42,
+            "file": "src/api.py",
+            "line": 100,
+            "commit": "abc123d",
+        }
+        req = RecordDecisionRequest.from_dict(data)
+
+        assert req.project_context is not None
+        assert req.project_context.project == "owner/repo"
+        assert req.project_context.feature == "api-v2"
+        assert req.project_context.pr == 42
+        assert isinstance(req.project_context.pr, int)
+        assert req.project_context.file == "src/api.py"
+        assert req.project_context.line == 100
+        assert isinstance(req.project_context.line, int)
+        assert req.project_context.commit == "abc123d"
+
+    def test_from_dict_casts_string_pr_to_int(self) -> None:
+        """String PR number is cast to int."""
+        data = {
+            "decision": "Test",
+            "confidence": 0.8,
+            "category": "architecture",
+            "pr": "42",  # String, not int
+            "line": "100",  # String, not int
+        }
+        req = RecordDecisionRequest.from_dict(data)
+
+        assert req.project_context is not None
+        assert req.project_context.pr == 42
+        assert isinstance(req.project_context.pr, int)
+        assert req.project_context.line == 100
+        assert isinstance(req.project_context.line, int)
+
+    def test_from_dict_without_project_context(self) -> None:
+        """No project context when fields absent."""
+        data = {
+            "decision": "Use async",
+            "confidence": 0.85,
+            "category": "architecture",
+        }
+        req = RecordDecisionRequest.from_dict(data)
+        assert req.project_context is None
+
+
+class TestBuildDecisionYamlWithProjectContext:
+    """Tests for project context in build_decision_yaml."""
+
+    def test_includes_project_fields(self) -> None:
+        """YAML includes project context fields."""
+        req = RecordDecisionRequest(
+            decision="Test decision",
+            confidence=0.8,
+            category="architecture",
+            project_context=ProjectContext(
+                project="owner/repo",
+                feature="my-feature",
+                pr=10,
+                file="src/main.py",
+                line=50,
+                commit="def456",
+            ),
+        )
+        data = build_decision_yaml(req, "test123")
+
+        assert data["project"] == "owner/repo"
+        assert data["feature"] == "my-feature"
+        assert data["pr"] == 10
+        assert data["file"] == "src/main.py"
+        assert data["line"] == 50
+        assert data["commit"] == "def456"
+
+    def test_excludes_none_project_fields(self) -> None:
+        """YAML excludes None project fields."""
+        req = RecordDecisionRequest(
+            decision="Test decision",
+            confidence=0.8,
+            category="architecture",
+            project_context=ProjectContext(project="owner/repo"),
+        )
+        data = build_decision_yaml(req, "test123")
+
+        assert data["project"] == "owner/repo"
+        assert "feature" not in data
+        assert "pr" not in data
+
+
+class TestBuildEmbeddingTextWithProjectContext:
+    """Tests for project context in embedding text."""
+
+    def test_includes_project_in_embedding(self) -> None:
+        """Embedding text includes project context."""
+        req = RecordDecisionRequest(
+            decision="Test decision",
+            confidence=0.8,
+            category="architecture",
+            project_context=ProjectContext(
+                project="owner/repo",
+                feature="api-v2",
+                file="src/api.py",
+                pr=42,
+            ),
+        )
+        text = build_embedding_text(req)
+
+        assert "Project: owner/repo" in text
+        assert "Feature: api-v2" in text
+        assert "File: src/api.py" in text
+        assert "PR #42" in text

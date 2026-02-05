@@ -84,6 +84,62 @@ class PreDecisionProtocol:
 
 
 @dataclass
+class ProjectContext:
+    """Project context for a decision."""
+
+    project: str | None = None  # owner/repo format
+    feature: str | None = None  # Feature or epic name
+    pr: int | None = None  # PR number
+    file: str | None = None  # File path relative to repo root
+    line: int | None = None  # Line number in file
+    commit: str | None = None  # Commit SHA (7+ chars)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ProjectContext":
+        """Create from dictionary."""
+        # Cast pr and line to int to prevent type pollution from external inputs
+        pr_val = data.get("pr")
+        line_val = data.get("line")
+
+        return cls(
+            project=data.get("project"),
+            feature=data.get("feature"),
+            pr=int(pr_val) if pr_val is not None else None,
+            file=data.get("file"),
+            line=int(line_val) if line_val is not None else None,
+            commit=data.get("commit"),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary, excluding None values."""
+        result: dict[str, Any] = {}
+        if self.project:
+            result["project"] = self.project
+        if self.feature:
+            result["feature"] = self.feature
+        if self.pr is not None:
+            result["pr"] = self.pr
+        if self.file:
+            result["file"] = self.file
+        if self.line is not None:
+            result["line"] = self.line
+        if self.commit:
+            result["commit"] = self.commit
+        return result
+
+    def has_any(self) -> bool:
+        """Check if any project context is set."""
+        return any([
+            self.project,
+            self.feature,
+            self.pr is not None,
+            self.file,
+            self.line is not None,
+            self.commit,
+        ])
+
+
+@dataclass
 class RecordDecisionRequest:
     """Request to record a new decision."""
 
@@ -98,6 +154,7 @@ class RecordDecisionRequest:
     review_in: str | None = None
     tags: list[str] = field(default_factory=list)
     pre_decision: PreDecisionProtocol | None = None
+    project_context: ProjectContext | None = None  # F010: Project context
     agent_id: str | None = None  # Set from auth
 
     @classmethod
@@ -113,6 +170,12 @@ class RecordDecisionRequest:
             pd_data = data.get("preDecision", data.get("pre_decision", {}))
             pre_decision = PreDecisionProtocol.from_dict(pd_data)
 
+        # F010: Parse project context fields
+        project_context = None
+        project_fields = ["project", "feature", "pr", "file", "line", "commit"]
+        if any(data.get(f) is not None for f in project_fields):
+            project_context = ProjectContext.from_dict(data)
+
         return cls(
             decision=data.get("decision", ""),
             confidence=float(data.get("confidence", 0.5)),
@@ -125,6 +188,7 @@ class RecordDecisionRequest:
             review_in=data.get("reviewIn", data.get("review_in")),
             tags=data.get("tags", []),
             pre_decision=pre_decision,
+            project_context=project_context,
             agent_id=agent_id,
         )
 
@@ -254,6 +318,22 @@ def build_decision_yaml(request: RecordDecisionRequest, decision_id: str) -> dic
     if request.agent_id:
         decision_data["recorded_by"] = request.agent_id
 
+    # F010: Add project context fields
+    if request.project_context and request.project_context.has_any():
+        pc = request.project_context
+        if pc.project:
+            decision_data["project"] = pc.project
+        if pc.feature:
+            decision_data["feature"] = pc.feature
+        if pc.pr is not None:
+            decision_data["pr"] = pc.pr
+        if pc.file:
+            decision_data["file"] = pc.file
+        if pc.line is not None:
+            decision_data["line"] = pc.line
+        if pc.commit:
+            decision_data["commit"] = pc.commit
+
     return decision_data
 
 
@@ -320,6 +400,18 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
 
     if request.tags:
         parts.append(f"Tags: {', '.join(request.tags)}")
+
+    # F010: Include project context in embedding text
+    if request.project_context:
+        pc = request.project_context
+        if pc.project:
+            parts.append(f"Project: {pc.project}")
+        if pc.feature:
+            parts.append(f"Feature: {pc.feature}")
+        if pc.file:
+            parts.append(f"File: {pc.file}")
+        if pc.pr is not None:
+            parts.append(f"PR #{pc.pr}")
 
     return "\n".join(parts)
 
@@ -419,6 +511,18 @@ async def record_decision(
     }
     if request.agent_id:
         metadata["agent"] = request.agent_id
+
+    # F010: Add project context to ChromaDB metadata
+    if request.project_context:
+        pc = request.project_context
+        if pc.project:
+            metadata["project"] = pc.project
+        if pc.feature:
+            metadata["feature"] = pc.feature
+        if pc.pr is not None:
+            metadata["pr"] = pc.pr
+        if pc.file:
+            metadata["file"] = pc.file
 
     indexed = await index_to_chromadb(decision_id, embedding_text, metadata)
 
