@@ -90,8 +90,8 @@ class TestCalculateCalibration:
     """Tests for calculate_calibration."""
 
     def test_insufficient_data(self) -> None:
-        """Returns None with fewer than 5 decisions."""
-        decisions = [{"confidence": 0.8, "outcome": "success"} for _ in range(4)]
+        """Returns None with fewer than 3 decisions."""
+        decisions = [{"confidence": 0.8, "outcome": "success"} for _ in range(2)]
         result = calculate_calibration(decisions)
         assert result is None
 
@@ -284,3 +284,112 @@ class TestGetCalibration:
 
         assert response.overall is None
         assert any(r.type == "insufficient_data" for r in response.recommendations)
+
+
+class TestCalibrationProjectFilters:
+    """Tests for F010 project context filters in calibration."""
+
+    @pytest.mark.asyncio
+    async def test_filter_by_project(self, tmp_path: Path) -> None:
+        """Filters calibration by project."""
+        # Create decisions with project context
+        for i in range(5):
+            create_decision_with_project(
+                tmp_path, f"p1-{i}", 0.8, "success", project="owner/repo-a"
+            )
+        for i in range(5):
+            create_decision_with_project(
+                tmp_path, f"p2-{i}", 0.8, "failure", project="owner/repo-b"
+            )
+
+        request = GetCalibrationRequest(project="owner/repo-a")
+        response = await get_calibration(request, decisions_path=str(tmp_path))
+
+        assert response.overall is not None
+        assert response.overall.total_decisions == 5
+        assert response.overall.accuracy == 1.0
+
+    @pytest.mark.asyncio
+    async def test_filter_by_feature(self, tmp_path: Path) -> None:
+        """Filters calibration by feature."""
+        for i in range(5):
+            create_decision_with_project(
+                tmp_path, f"f1-{i}", 0.8, "success", feature="feature-a"
+            )
+        for i in range(5):
+            create_decision_with_project(
+                tmp_path, f"f2-{i}", 0.8, "failure", feature="feature-b"
+            )
+
+        request = GetCalibrationRequest(feature="feature-a")
+        response = await get_calibration(request, decisions_path=str(tmp_path))
+
+        assert response.overall is not None
+        assert response.overall.total_decisions == 5
+        assert response.overall.accuracy == 1.0
+
+    @pytest.mark.asyncio
+    async def test_combined_project_filters(self, tmp_path: Path) -> None:
+        """Filters by both project and feature."""
+        # Project A, Feature X
+        for i in range(3):
+            create_decision_with_project(
+                tmp_path, f"ax-{i}", 0.8, "success",
+                project="owner/repo-a", feature="feature-x"
+            )
+        # Project A, Feature Y
+        for i in range(3):
+            create_decision_with_project(
+                tmp_path, f"ay-{i}", 0.8, "failure",
+                project="owner/repo-a", feature="feature-y"
+            )
+
+        request = GetCalibrationRequest(project="owner/repo-a", feature="feature-x")
+        response = await get_calibration(request, decisions_path=str(tmp_path))
+
+        # Only 3 decisions match, below default min_decisions=5
+        # But we can set min_decisions=3
+        request = GetCalibrationRequest(
+            project="owner/repo-a",
+            feature="feature-x",
+            min_decisions=3,
+        )
+        response = await get_calibration(request, decisions_path=str(tmp_path))
+
+        assert response.overall is not None
+        assert response.overall.total_decisions == 3
+
+
+def create_decision_with_project(
+    tmp_path: Path,
+    decision_id: str,
+    confidence: float,
+    outcome: str,
+    project: str | None = None,
+    feature: str | None = None,
+    category: str = "architecture",
+    agent: str = "test-agent",
+) -> None:
+    """Helper to create a reviewed decision file with project context."""
+    year_dir = tmp_path / "2026" / "02"
+    year_dir.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "id": decision_id,
+        "summary": f"Test decision {decision_id}",
+        "category": category,
+        "confidence": confidence,
+        "status": "reviewed",
+        "outcome": outcome,
+        "date": "2026-02-05T00:00:00Z",
+        "recorded_by": agent,
+    }
+
+    if project:
+        data["project"] = project
+    if feature:
+        data["feature"] = feature
+
+    file_path = year_dir / f"2026-02-05-decision-{decision_id}.yaml"
+    with open(file_path, "w") as f:
+        yaml.dump(data, f)
