@@ -1,10 +1,8 @@
 """Tests for config.py environment variable support."""
 
-import os
-
 import pytest
 
-from a2a.config import AuthToken, Config, _parse_auth_tokens
+from a2a.config import Config, _parse_auth_tokens
 
 
 class TestParseAuthTokens:
