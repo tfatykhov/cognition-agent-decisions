@@ -218,7 +218,7 @@ def calculate_calibration(decisions: list[dict[str, Any]]) -> CalibrationResult 
     Returns:
         CalibrationResult or None if insufficient data.
     """
-    if len(decisions) < 5:
+    if len(decisions) < 3:
         return None
 
     outcomes: list[float] = []
