@@ -225,8 +225,8 @@ def calculate_calibration(decisions: list[dict[str, Any]]) -> CalibrationResult 
     # Brier score: mean squared error between confidence and outcome
     brier = sum((c - o) ** 2 for c, o in zip(confidences, outcomes, strict=True)) / len(decisions)
 
-    # Accuracy: proportion of successful outcomes
-    accuracy = sum(1 for o in outcomes if o >= 0.5) / len(decisions)
+    # Accuracy: mean outcome value (partial = 0.5, success = 1.0, failure = 0.0)
+    accuracy = sum(outcomes) / len(decisions)
 
     # Calibration gap: actual success rate - average confidence
     avg_confidence = sum(confidences) / len(confidences)

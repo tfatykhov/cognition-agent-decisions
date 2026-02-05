@@ -151,10 +151,10 @@ class TestCalculateCalibration:
         assert result is not None
         # Brier score: (0.5 - 0.5)^2 = 0 for all
         assert result.brier_score == 0.0
-        # Accuracy counts outcomes >= 0.5 as success, so all 5 partial = 100%
-        assert result.accuracy == 1.0
-        # Gap: 1.0 accuracy - 0.5 avg confidence = 0.5 (underconfident by this metric)
-        # This is expected behavior - the accuracy metric treats partial as "success"
+        # Accuracy: mean of outcomes = 0.5 (all partial)
+        assert result.accuracy == 0.5
+        # Gap: 0.5 accuracy - 0.5 avg confidence = 0 (well calibrated)
+        assert abs(result.calibration_gap) < 0.01
 
 
 class TestCalculateBuckets:
