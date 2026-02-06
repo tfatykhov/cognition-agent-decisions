@@ -32,7 +32,9 @@ def test_decisions_requires_auth(client: FlaskClient) -> None:
     assert response.status_code == 401
 
 
-def test_decisions_list(client: FlaskClient, auth_headers: dict[str, str], mock_cstp: AsyncMock) -> None:
+def test_decisions_list(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: AsyncMock
+) -> None:
     """Test decisions list renders."""
     mock_cstp.list_decisions = AsyncMock(return_value=([], 0))
     response = client.get("/decisions", headers=auth_headers)
@@ -40,7 +42,9 @@ def test_decisions_list(client: FlaskClient, auth_headers: dict[str, str], mock_
     assert b"Decisions" in response.data
 
 
-def test_calibration_page(client: FlaskClient, auth_headers: dict[str, str], mock_cstp: AsyncMock) -> None:
+def test_calibration_page(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: AsyncMock
+) -> None:
     """Test calibration page renders with stats."""
     response = client.get("/calibration", headers=auth_headers)
     assert response.status_code == 200

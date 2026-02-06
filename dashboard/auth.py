@@ -5,7 +5,7 @@ from typing import Any
 
 from flask import Response, request
 
-from .config import Config
+from config import Config
 
 
 def check_auth(username: str, password: str, config: Config) -> bool:

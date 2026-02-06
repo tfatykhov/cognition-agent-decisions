@@ -1,14 +1,15 @@
 """CSTP Dashboard Flask application."""
 import asyncio
+import contextlib
 from typing import Any
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
 
-from .auth import requires_auth
-from .config import config
-from .cstp_client import CSTPClient, CSTPError
+from auth import requires_auth
+from config import config
+from cstp_client import CSTPClient, CSTPError
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -203,10 +204,8 @@ def calibration() -> str:
     
     # Check for drift (only if not filtering by window)
     if not window:
-        try:
+        with contextlib.suppress(CSTPError):
             drift = run_async(cstp.check_drift(project=project))
-        except CSTPError:
-            pass  # Drift check is optional, don't show error
     
     return render_template(
         "calibration.html",
