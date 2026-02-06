@@ -129,7 +129,7 @@ async def _generate_embedding(text: str) -> list[float]:
     if len(text) > 8000:
         text = text[:8000]
 
-    url = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": api_key,
