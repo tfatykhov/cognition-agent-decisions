@@ -193,19 +193,28 @@ def calibration() -> str:
     project = request.args.get("project") or None
     window = request.args.get("window") or None
     
+    stats = None
+    drift = None
+    
     try:
         stats = run_async(cstp.get_calibration(project=project, window=window))
     except CSTPError as e:
         flash(f"Error loading calibration: {e}", "error")
-        stats = None
+    
+    # Check for drift (only if not filtering by window)
+    if not window:
+        try:
+            drift = run_async(cstp.check_drift(project=project))
+        except CSTPError:
+            pass  # Drift check is optional, don't show error
     
     return render_template(
         "calibration.html",
         stats=stats,
         project=project,
         window=window,
+        drift=drift,
     )
-    return render_template("calibration.html", stats=stats, project=project)
 
 
 def main() -> None:

@@ -93,6 +93,67 @@
 </article>
 {% endif %}
 
+{% if drift %}
+<h2>Drift Analysis</h2>
+{% if drift.driftDetected %}
+<article class="drift-warning">
+    <header>⚠️ Calibration Drift Detected</header>
+    <p>Recent performance (30d) differs from historical baseline (90d+).</p>
+    
+    {% if drift.alerts %}
+    <ul>
+        {% for alert in drift.alerts %}
+        <li class="drift-alert-{{ alert.severity }}">
+            <strong>{{ alert.type | replace('_', ' ') | title }}:</strong> {{ alert.message }}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    
+    {% if drift.recent and drift.historical %}
+    <details>
+        <summary>Details</summary>
+        <table>
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>Decisions</th>
+                    <th>Accuracy</th>
+                    <th>Brier</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Recent ({{ drift.recent.window }})</td>
+                    <td>{{ drift.recent.decisions }}</td>
+                    <td>{{ (drift.recent.accuracy * 100) | round | int }}%</td>
+                    <td>{{ "%.2f" | format(drift.recent.brierScore) }}</td>
+                </tr>
+                <tr>
+                    <td>Historical ({{ drift.historical.window }})</td>
+                    <td>{{ drift.historical.decisions }}</td>
+                    <td>{{ (drift.historical.accuracy * 100) | round | int }}%</td>
+                    <td>{{ "%.2f" | format(drift.historical.brierScore) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </details>
+    {% endif %}
+</article>
+{% else %}
+<article>
+    <p>✅ No drift detected. Recent calibration is consistent with historical baseline.</p>
+    {% if drift.recommendations %}
+    <ul>
+        {% for rec in drift.recommendations %}
+        <li>ℹ️ {{ rec.message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</article>
+{% endif %}
+{% endif %}
+
 {% else %}
 <article>
     <p>Unable to load calibration data.</p>
