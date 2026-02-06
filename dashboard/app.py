@@ -188,15 +188,23 @@ def calibration() -> str:
     
     Query params:
         project: Optional project filter
+        window: Time window (30d, 60d, 90d)
     """
     project = request.args.get("project") or None
+    window = request.args.get("window") or None
     
     try:
-        stats = run_async(cstp.get_calibration(project=project))
+        stats = run_async(cstp.get_calibration(project=project, window=window))
     except CSTPError as e:
         flash(f"Error loading calibration: {e}", "error")
         stats = None
     
+    return render_template(
+        "calibration.html",
+        stats=stats,
+        project=project,
+        window=window,
+    )
     return render_template("calibration.html", stats=stats, project=project)
 
 

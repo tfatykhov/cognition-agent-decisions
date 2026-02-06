@@ -149,6 +149,10 @@ class CalibrationStats:
     interpretation: str
     by_category: list[CategoryStats] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
+    # F014: Rolling window metadata
+    window: str | None = None
+    period_start: str | None = None
+    period_end: str | None = None
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CalibrationStats":
@@ -177,13 +181,17 @@ class CalibrationStats:
         recommendations = [r["message"] for r in data.get("recommendations", [])]
         
         return cls(
-            total_decisions=overall.get("total_decisions", 0),
-            reviewed_decisions=overall.get("reviewed_decisions", 0),
-            brier_score=float(overall.get("brier_score", 0.0)),
+            total_decisions=overall.get("total_decisions", overall.get("totalDecisions", 0)),
+            reviewed_decisions=overall.get("reviewed_decisions", overall.get("reviewedDecisions", 0)),
+            brier_score=float(overall.get("brier_score", overall.get("brierScore", 0.0))),
             accuracy=float(overall.get("accuracy", 0.0)),
             interpretation=overall.get("interpretation", "unknown"),
             by_category=by_category,
             recommendations=recommendations,
+            # F014: Rolling window metadata
+            window=overall.get("window"),
+            period_start=overall.get("period_start", overall.get("periodStart")),
+            period_end=overall.get("period_end", overall.get("periodEnd")),
         )
     
     @property
