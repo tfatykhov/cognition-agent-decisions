@@ -59,8 +59,7 @@ class QueryDecisionsRequest:
     def from_params(cls, params: dict[str, Any]) -> "QueryDecisionsRequest":
         """Create request from JSON-RPC params."""
         query = params.get("query", "")
-        if not query:
-            raise ValueError("Missing required parameter: query")
+        # Allow empty query for listing all decisions
 
         limit = params.get("limit", 10)
         if not 1 <= limit <= 50:
