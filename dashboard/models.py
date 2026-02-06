@@ -1,6 +1,6 @@
 """Data models for CSTP dashboard."""
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -76,10 +76,19 @@ class Decision:
                 commit=pc.get("commit"),
             )
         
-        # Parse timestamps
-        created_at = datetime.fromisoformat(
-            data["created_at"].replace("Z", "+00:00")
-        )
+        # Parse timestamps - handle both 'created_at' and 'date' field names
+        created_str = data.get("created_at") or data.get("date") or ""
+        if created_str:
+            # Handle date-only format (YYYY-MM-DD) vs full ISO format
+            if len(created_str) == 10:
+                created_at = datetime.fromisoformat(created_str + "T00:00:00+00:00")
+            else:
+                created_at = datetime.fromisoformat(
+                    created_str.replace("Z", "+00:00")
+                )
+        else:
+            created_at = datetime.now(UTC)
+        
         reviewed_at: datetime | None = None
         if data.get("reviewed_at"):
             reviewed_at = datetime.fromisoformat(
