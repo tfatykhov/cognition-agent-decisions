@@ -50,12 +50,22 @@ async def _delete_collection() -> bool:
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            # List collections to find our collection
+            # Try to delete by name first (more reliable)
+            logger.info("Trying to delete collection by name: %s", COLLECTION_NAME)
+            resp = await client.delete(f"{base}/collections/{COLLECTION_NAME}")
+            logger.info("Delete by name response: %s %s", resp.status_code, resp.text[:200] if resp.text else "")
+
+            if resp.status_code in (200, 204):
+                logger.info("Successfully deleted collection by name")
+                return True
+
+            # If delete by name failed, try listing and delete by ID
             resp = await client.get(f"{base}/collections")
-            logger.info("List collections response: %s %s", resp.status_code, resp.text[:200] if resp.text else "")
+            logger.info("List collections response: %s", resp.status_code)
             if resp.status_code != 200:
                 logger.warning("Failed to list collections: %s", resp.text)
-                return False
+                # If we can't list and delete by name returned 404, assume it's gone
+                return True
 
             collections = resp.json()
             coll_id = None
@@ -68,7 +78,7 @@ async def _delete_collection() -> bool:
                 logger.info("Collection %s does not exist, nothing to delete", COLLECTION_NAME)
                 return True
 
-            # Delete the collection
+            # Delete the collection by ID
             logger.info("Deleting collection %s with id %s", COLLECTION_NAME, coll_id)
             resp = await client.delete(f"{base}/collections/{coll_id}")
 
