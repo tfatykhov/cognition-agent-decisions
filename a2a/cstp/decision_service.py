@@ -21,7 +21,7 @@ CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
 CHROMA_TENANT = os.getenv("CHROMA_TENANT", "default_tenant")
 CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "default_database")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-EMBEDDING_MODEL = "text-embedding-004"
+EMBEDDING_MODEL = "gemini-embedding-001"
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +367,7 @@ async def generate_embedding(text: str) -> list[float] | None:
     if not GEMINI_API_KEY:
         return None
 
-    url = f"https://generativelanguage.googleapis.com/v1/models/{EMBEDDING_MODEL}:embedContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
