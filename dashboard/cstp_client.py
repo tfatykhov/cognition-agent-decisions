@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from .models import CalibrationStats, Decision
+from models import CalibrationStats, Decision
 
 
 class CSTPError(Exception):

@@ -217,9 +217,15 @@ class CalibrationStats:
             conf_stats = ConfidenceDistribution.from_dict(cs_data)
         
         return cls(
-            total_decisions=overall.get("total_decisions", overall.get("totalDecisions", 0)),
-            reviewed_decisions=overall.get("reviewed_decisions", overall.get("reviewedDecisions", 0)),
-            brier_score=float(overall.get("brier_score", overall.get("brierScore", 0.0))),
+            total_decisions=overall.get(
+                "total_decisions", overall.get("totalDecisions", 0)
+            ),
+            reviewed_decisions=overall.get(
+                "reviewed_decisions", overall.get("reviewedDecisions", 0)
+            ),
+            brier_score=float(
+                overall.get("brier_score", overall.get("brierScore", 0.0))
+            ),
             accuracy=float(overall.get("accuracy", 0.0)),
             interpretation=overall.get("interpretation", "unknown"),
             by_category=by_category,

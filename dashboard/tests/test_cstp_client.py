@@ -1,7 +1,7 @@
 """Tests for CSTP client."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from dashboard.models import CalibrationStats, CategoryStats, Decision, Reason
+from dashboard.models import CalibrationStats, Decision
 
 
 def test_decision_from_dict() -> None:
@@ -38,7 +38,7 @@ def test_decision_outcome_icons() -> None:
         category="test",
         stakes="low",
         confidence=0.5,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     
     assert decision.outcome_icon == "⏳"
