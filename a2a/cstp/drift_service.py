@@ -122,10 +122,15 @@ def detect_drift_alerts(
         List of drift alerts.
     """
     alerts: list[DriftAlert] = []
+    
+    # Minimum absolute difference to avoid false positives on small values
+    MIN_BRIER_DIFF = 0.03  # At least 0.03 absolute difference required
+    MIN_ACCURACY_DIFF = 0.05  # At least 5% absolute accuracy drop required
 
     # Check Brier score degradation (higher is worse)
-    if historical.brier_score > 0.001:  # Avoid division by near-zero
-        brier_change = (recent.brier_score - historical.brier_score) / historical.brier_score
+    brier_diff = recent.brier_score - historical.brier_score
+    if historical.brier_score > 0.001 and brier_diff >= MIN_BRIER_DIFF:
+        brier_change = brier_diff / historical.brier_score
         if brier_change > threshold_brier:
             severity = "error" if brier_change > 0.5 else "warning"
             cat_prefix = f"{category.title()} decisions: " if category else ""
@@ -140,8 +145,9 @@ def detect_drift_alerts(
             ))
 
     # Check accuracy drop (lower is worse)
-    if historical.accuracy > 0.001:  # Avoid division by near-zero
-        accuracy_change = (historical.accuracy - recent.accuracy) / historical.accuracy
+    accuracy_diff = historical.accuracy - recent.accuracy
+    if historical.accuracy > 0.001 and accuracy_diff >= MIN_ACCURACY_DIFF:
+        accuracy_change = accuracy_diff / historical.accuracy
         if accuracy_change > threshold_accuracy:
             severity = "error" if accuracy_change > 0.25 else "warning"
             cat_prefix = f"{category.title()} decisions: " if category else ""
@@ -216,12 +222,14 @@ async def check_drift(
         until=recent_until,
     )
 
-    # Get historical decisions (older than 30 days)
+    # Get historical decisions (30-120 days ago, bounded for performance)
+    historical_since, _ = window_to_dates("120d")  # 120 days ago
     historical_decisions = await get_reviewed_decisions(
         decisions_path=decisions_path,
         category=request.category,
         project=request.project,
-        until=recent_since,  # Before recent window starts
+        since=historical_since,  # Start from 120 days ago
+        until=recent_since,  # Up to where recent window starts
     )
 
     # Need minimum decisions for meaningful comparison
