@@ -367,7 +367,7 @@ async def generate_embedding(text: str) -> list[float] | None:
     if not GEMINI_API_KEY:
         return None
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent"
+    url = f"https://generativelanguage.googleapis.com/v1/models/{EMBEDDING_MODEL}:embedContent"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
