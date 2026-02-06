@@ -46,33 +46,54 @@ class ReindexResult:
 async def _delete_collection() -> bool:
     """Delete the existing collection if it exists."""
     base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
+    logger.info("Attempting to delete collection at %s", base)
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # List collections to find our collection
-        resp = await client.get(f"{base}/collections")
-        if resp.status_code != 200:
-            logger.warning("Failed to list collections: %s", resp.text)
-            return False
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # List collections to find our collection
+            resp = await client.get(f"{base}/collections")
+            logger.info("List collections response: %s %s", resp.status_code, resp.text[:200] if resp.text else "")
+            if resp.status_code != 200:
+                logger.warning("Failed to list collections: %s", resp.text)
+                return False
 
-        collections = resp.json()
-        coll_id = None
-        for c in collections:
-            if c.get("name") == COLLECTION_NAME:
-                coll_id = c["id"]
-                break
+            collections = resp.json()
+            coll_id = None
+            for c in collections:
+                if c.get("name") == COLLECTION_NAME:
+                    coll_id = c["id"]
+                    break
 
-        if not coll_id:
-            logger.info("Collection %s does not exist, nothing to delete", COLLECTION_NAME)
+            if not coll_id:
+                logger.info("Collection %s does not exist, nothing to delete", COLLECTION_NAME)
+                return True
+
+            # Delete the collection
+            logger.info("Deleting collection %s with id %s", COLLECTION_NAME, coll_id)
+            resp = await client.delete(f"{base}/collections/{coll_id}")
+
+            # Treat 404/NotFound as success (already deleted)
+            if resp.status_code == 404:
+                logger.info("Collection already deleted (404)")
+                return True
+
+            # Check response body for NotFoundError
+            if resp.status_code not in (200, 204):
+                try:
+                    err_data = resp.json()
+                    if err_data.get("error") == "NotFoundError":
+                        logger.info("Collection already deleted (NotFoundError)")
+                        return True
+                except Exception:
+                    pass
+                logger.error("Failed to delete collection: %s", resp.text)
+                return False
+
+            logger.info("Deleted collection %s", COLLECTION_NAME)
             return True
-
-        # Delete the collection
-        resp = await client.delete(f"{base}/collections/{coll_id}")
-        if resp.status_code not in (200, 204):
-            logger.error("Failed to delete collection: %s", resp.text)
-            return False
-
-        logger.info("Deleted collection %s", COLLECTION_NAME)
-        return True
+    except Exception as e:
+        logger.exception("Exception during collection delete: %s", e)
+        return False
 
 
 async def _create_collection() -> str | None:
