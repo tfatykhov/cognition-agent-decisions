@@ -99,24 +99,78 @@ async def _delete_collection() -> bool:
 async def _create_collection() -> str | None:
     """Create a new collection and return its ID."""
     base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
+    logger.info("Creating collection at %s", base)
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Create collection with cosine distance
-        payload = {
-            "name": COLLECTION_NAME,
-            "metadata": {
-                "hnsw:space": "cosine",
-            },
-        }
-        resp = await client.post(f"{base}/collections", json=payload)
-        if resp.status_code not in (200, 201):
-            logger.error("Failed to create collection: %s", resp.text)
-            return None
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Create collection with cosine distance
+            payload = {
+                "name": COLLECTION_NAME,
+                "metadata": {
+                    "hnsw:space": "cosine",
+                },
+            }
+            logger.info("Create collection payload: %s", payload)
+            resp = await client.post(f"{base}/collections", json=payload)
+            logger.info("Create collection response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
+
+            # If collection already exists, get its ID
+            if resp.status_code not in (200, 201):
+                try:
+                    err_data = resp.json()
+                    if "already exists" in err_data.get("message", ""):
+                        logger.info("Collection already exists, fetching existing ID")
+                        # Get existing collection ID
+                        list_resp = await client.get(f"{base}/collections")
+                        if list_resp.status_code == 200:
+                            for c in list_resp.json():
+                                if c.get("name") == COLLECTION_NAME:
+                                    coll_id = c["id"]
+                                    logger.info("Found existing collection with id %s", coll_id)
+                                    # Clear all documents from existing collection
+                                    await _clear_collection(client, base, coll_id)
+                                    return coll_id
+                except Exception:
+                    pass
+                logger.error("Failed to create collection: %s", resp.text)
+                return None
+
+            data = resp.json()
+            coll_id = data.get("id")
+            logger.info("Created collection %s with id %s", COLLECTION_NAME, coll_id)
+            return coll_id
+    except Exception as e:
+        logger.exception("Exception during collection create: %s", e)
+        return None
+
+
+async def _clear_collection(client: httpx.AsyncClient, base: str, coll_id: str) -> bool:
+    """Clear all documents from a collection."""
+    try:
+        # Get all document IDs
+        resp = await client.post(f"{base}/collections/{coll_id}/get", json={"limit": 10000})
+        if resp.status_code != 200:
+            logger.warning("Failed to get documents for clearing: %s", resp.text)
+            return False
 
         data = resp.json()
-        coll_id = data.get("id")
-        logger.info("Created collection %s with id %s", COLLECTION_NAME, coll_id)
-        return coll_id
+        ids = data.get("ids", [])
+        if not ids:
+            logger.info("Collection is already empty")
+            return True
+
+        logger.info("Clearing %d documents from collection", len(ids))
+        # Delete all documents
+        resp = await client.post(f"{base}/collections/{coll_id}/delete", json={"ids": ids})
+        if resp.status_code not in (200, 204):
+            logger.warning("Failed to delete documents: %s", resp.text)
+            return False
+
+        logger.info("Cleared %d documents", len(ids))
+        return True
+    except Exception as e:
+        logger.exception("Exception clearing collection: %s", e)
+        return False
 
 
 async def _add_to_collection(
