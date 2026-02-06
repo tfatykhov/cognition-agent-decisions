@@ -54,6 +54,46 @@
     </article>
 </div>
 
+{% if stats.confidence_stats %}
+<h2>Confidence Distribution</h2>
+<div class="grid">
+    <article>
+        <header>Mean</header>
+        <p class="stat-number">{{ stats.confidence_stats.mean_pct }}%</p>
+    </article>
+    <article>
+        <header>Std Dev</header>
+        <p class="stat-number">{{ "%.2f"|format(stats.confidence_stats.std_dev) }}</p>
+    </article>
+    <article>
+        <header>Range</header>
+        <p class="stat-number">{{ (stats.confidence_stats.min_conf * 100)|int }}-{{ (stats.confidence_stats.max_conf * 100)|int }}%</p>
+    </article>
+</div>
+
+<details>
+    <summary>Distribution by Bucket</summary>
+    <table>
+        <thead>
+            <tr>
+                <th>Confidence Range</th>
+                <th>Count</th>
+                <th>Percentage</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bucket, count in stats.confidence_stats.bucket_counts.items() %}
+            <tr>
+                <td>{{ bucket }}</td>
+                <td>{{ count }}</td>
+                <td>{% if stats.confidence_stats.count > 0 %}{{ (count / stats.confidence_stats.count * 100)|round|int }}%{% else %}--{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</details>
+{% endif %}
+
 {% if stats.by_category %}
 <h2>By Category</h2>
 <figure>

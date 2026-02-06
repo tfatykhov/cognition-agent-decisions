@@ -40,6 +40,29 @@ def window_to_dates(window: str | None) -> tuple[str | None, str | None]:
 
 
 @dataclass
+class ConfidenceStats:
+    """Statistics about confidence distribution for habituation detection."""
+
+    mean: float
+    std_dev: float
+    min_conf: float
+    max_conf: float
+    count: int
+    bucket_counts: dict[str, int]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        return {
+            "mean": round(self.mean, 3),
+            "stdDev": round(self.std_dev, 3),
+            "min": round(self.min_conf, 2),
+            "max": round(self.max_conf, 2),
+            "count": self.count,
+            "bucketCounts": self.bucket_counts,
+        }
+
+
+@dataclass
 class ConfidenceBucket:
     """Calibration statistics for a confidence range."""
 
@@ -158,16 +181,20 @@ class GetCalibrationResponse:
     overall: CalibrationResult | None
     by_confidence_bucket: list[ConfidenceBucket] = field(default_factory=list)
     recommendations: list[CalibrationRecommendation] = field(default_factory=list)
+    confidence_stats: ConfidenceStats | None = None
     query_time: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
-        return {
+        result = {
             "overall": self.overall.to_dict() if self.overall else None,
             "byConfidenceBucket": [b.to_dict() for b in self.by_confidence_bucket],
             "recommendations": [r.to_dict() for r in self.recommendations],
             "queryTime": self.query_time,
         }
+        if self.confidence_stats:
+            result["confidenceStats"] = self.confidence_stats.to_dict()
+        return result
 
 
 async def get_reviewed_decisions(
@@ -376,6 +403,110 @@ def calculate_buckets(decisions: list[dict[str, Any]]) -> list[ConfidenceBucket]
     return results
 
 
+def calculate_confidence_stats(decisions: list[dict[str, Any]]) -> ConfidenceStats | None:
+    """Calculate confidence distribution statistics for habituation detection.
+
+    Args:
+        decisions: List of decision data with 'confidence' field.
+
+    Returns:
+        ConfidenceStats or None if no decisions.
+    """
+    confidences = [float(d.get("confidence", 0.5)) for d in decisions if "confidence" in d]
+
+    if not confidences:
+        return None
+
+    n = len(confidences)
+    mean = sum(confidences) / n
+    variance = sum((c - mean) ** 2 for c in confidences) / n
+    std_dev = variance ** 0.5
+
+    # Bucket counts (finer granularity for variance analysis)
+    buckets = {
+        "0.5-0.6": 0,
+        "0.6-0.7": 0,
+        "0.7-0.8": 0,
+        "0.8-0.9": 0,
+        "0.9-1.0": 0,
+    }
+    for c in confidences:
+        if c < 0.6:
+            buckets["0.5-0.6"] += 1
+        elif c < 0.7:
+            buckets["0.6-0.7"] += 1
+        elif c < 0.8:
+            buckets["0.7-0.8"] += 1
+        elif c < 0.9:
+            buckets["0.8-0.9"] += 1
+        else:
+            buckets["0.9-1.0"] += 1
+
+    return ConfidenceStats(
+        mean=mean,
+        std_dev=std_dev,
+        min_conf=min(confidences),
+        max_conf=max(confidences),
+        count=n,
+        bucket_counts=buckets,
+    )
+
+
+def generate_variance_recommendations(
+    stats: ConfidenceStats,
+) -> list[CalibrationRecommendation]:
+    """Generate recommendations based on confidence variance (habituation detection).
+
+    Args:
+        stats: Confidence distribution statistics.
+
+    Returns:
+        List of recommendations for low variance or habituation patterns.
+    """
+    recs: list[CalibrationRecommendation] = []
+
+    # Need enough decisions to detect patterns
+    if stats.count < 10:
+        return recs
+
+    # Low variance warning - most decisions in one bucket
+    if stats.std_dev < 0.05:
+        max_bucket = max(stats.bucket_counts, key=lambda k: stats.bucket_counts[k])
+        max_count = stats.bucket_counts[max_bucket]
+        max_pct = max_count / stats.count * 100
+
+        if max_pct > 70:
+            recs.append(
+                CalibrationRecommendation(
+                    type="low_variance",
+                    message=f"{max_pct:.0f}% of decisions use {max_bucket} confidence. Consider varying based on actual uncertainty.",
+                    severity="info",
+                )
+            )
+
+    # Always high confidence pattern
+    if stats.mean > 0.85 and stats.min_conf > 0.75:
+        recs.append(
+            CalibrationRecommendation(
+                type="overconfident_habit",
+                message="All decisions have high confidence (>75%). Are you calibrating to actual uncertainty?",
+                severity="warning",
+            )
+        )
+
+    # Always low confidence pattern
+    if stats.mean < 0.65 and stats.max_conf < 0.75:
+        recs.append(
+            CalibrationRecommendation(
+                type="underconfident_habit",
+                message="All decisions have low confidence (<75%). Trust yourself more when evidence is strong.",
+                severity="info",
+            )
+        )
+
+    return recs
+
+
 def generate_recommendations(
     overall: CalibrationResult | None,
     buckets: list[ConfidenceBucket],
@@ -542,9 +673,18 @@ async def get_calibration(
         total_found=len(decisions),
     )
 
+    # F016: Calculate confidence variance stats
+    confidence_stats = calculate_confidence_stats(decisions)
+
+    # F016: Add variance recommendations
+    if confidence_stats:
+        variance_recs = generate_variance_recommendations(confidence_stats)
+        recommendations.extend(variance_recs)
+
     return GetCalibrationResponse(
         overall=overall,
         by_confidence_bucket=buckets,
         recommendations=recommendations,
+        confidence_stats=confidence_stats,
         query_time=now.isoformat(),
     )
