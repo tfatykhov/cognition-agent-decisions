@@ -269,7 +269,20 @@ async def reindex_decisions() -> ReindexResult:
             continue
 
         # Build metadata
+        # Extract title from title, decision, or summary fields (fallback chain)
+        title = (
+            decision.get("title")
+            or decision.get("decision")
+            or decision.get("summary")
+            or ""
+        )
+        # Extract date from date or timestamp fields (YYYY-MM-DD format)
+        date_raw = decision.get("date") or decision.get("timestamp") or ""
+        date_str = str(date_raw)[:10] if date_raw else ""
+
         metadata = {
+            "title": title[:500] if title else "",
+            "date": date_str,
             "category": decision.get("category", ""),
             "stakes": decision.get("stakes", ""),
             "confidence": float(decision.get("confidence", 0.5)),
