@@ -19,7 +19,7 @@ from .attribution_service import (
     AttributeOutcomesRequest,
     attribute_outcomes,
 )
-from .bm25_index import BM25Index, merge_results
+from .bm25_index import get_cached_index, merge_results
 from .calibration_service import (
     GetCalibrationRequest,
     get_calibration,
@@ -174,7 +174,9 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             category=request.filters.category,
             project=request.filters.project,
         )
-        bm25_index = BM25Index.from_decisions(all_decisions)
+        # Use cached index for performance
+        cache_key = f"kw:{request.filters.category}:{request.filters.project}"
+        bm25_index = get_cached_index(all_decisions, cache_key)
         keyword_results = bm25_index.search(request.query, request.limit)
 
         # Build decision map for quick lookup
@@ -236,7 +238,9 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             category=request.filters.category,
             project=request.filters.project,
         )
-        bm25_index = BM25Index.from_decisions(all_decisions)
+        # Use cached index for performance
+        cache_key = f"hybrid:{request.filters.category}:{request.filters.project}"
+        bm25_index = get_cached_index(all_decisions, cache_key)
         keyword_results = bm25_index.search(request.query, request.limit * 2)
 
         # Merge results
