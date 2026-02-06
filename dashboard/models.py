@@ -139,6 +139,35 @@ class CategoryStats:
 
 
 @dataclass
+class ConfidenceDistribution:
+    """Confidence distribution stats for habituation detection."""
+    
+    mean: float
+    std_dev: float
+    min_conf: float
+    max_conf: float
+    count: int
+    bucket_counts: dict[str, int]
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ConfidenceDistribution":
+        """Create from API response."""
+        return cls(
+            mean=float(data.get("mean", 0.0)),
+            std_dev=float(data.get("stdDev", 0.0)),
+            min_conf=float(data.get("min", 0.0)),
+            max_conf=float(data.get("max", 0.0)),
+            count=int(data.get("count", 0)),
+            bucket_counts=data.get("bucketCounts", {}),
+        )
+    
+    @property
+    def mean_pct(self) -> int:
+        """Return mean as percentage."""
+        return int(self.mean * 100)
+
+
+@dataclass
 class CalibrationStats:
     """Overall calibration statistics from CSTP."""
     
@@ -153,6 +182,8 @@ class CalibrationStats:
     window: str | None = None
     period_start: str | None = None
     period_end: str | None = None
+    # F016: Confidence variance
+    confidence_stats: ConfidenceDistribution | None = None
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CalibrationStats":
@@ -180,6 +211,11 @@ class CalibrationStats:
         # Parse recommendations
         recommendations = [r["message"] for r in data.get("recommendations", [])]
         
+        # F016: Parse confidence stats
+        conf_stats = None
+        if cs_data := data.get("confidenceStats"):
+            conf_stats = ConfidenceDistribution.from_dict(cs_data)
+        
         return cls(
             total_decisions=overall.get("total_decisions", overall.get("totalDecisions", 0)),
             reviewed_decisions=overall.get("reviewed_decisions", overall.get("reviewedDecisions", 0)),
@@ -192,6 +228,8 @@ class CalibrationStats:
             window=overall.get("window"),
             period_start=overall.get("period_start", overall.get("periodStart")),
             period_end=overall.get("period_end", overall.get("periodEnd")),
+            # F016: Confidence stats
+            confidence_stats=conf_stats,
         )
     
     @property
