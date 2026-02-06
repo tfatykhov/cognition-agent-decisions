@@ -83,17 +83,20 @@ class Decision:
             if len(created_str) == 10:
                 created_at = datetime.fromisoformat(created_str + "T00:00:00+00:00")
             else:
-                created_at = datetime.fromisoformat(
-                    created_str.replace("Z", "+00:00")
-                )
+                # Ensure timezone-aware: replace Z with +00:00, add +00:00 if missing
+                ts = created_str.replace("Z", "+00:00")
+                if "+" not in ts and ts.count("-") <= 2:
+                    ts = ts + "+00:00"
+                created_at = datetime.fromisoformat(ts)
         else:
             created_at = datetime.now(UTC)
         
         reviewed_at: datetime | None = None
         if data.get("reviewed_at"):
-            reviewed_at = datetime.fromisoformat(
-                data["reviewed_at"].replace("Z", "+00:00")
-            )
+            ts = data["reviewed_at"].replace("Z", "+00:00")
+            if "+" not in ts and ts.count("-") <= 2:
+                ts = ts + "+00:00"
+            reviewed_at = datetime.fromisoformat(ts)
         
         return cls(
             id=data["id"],
