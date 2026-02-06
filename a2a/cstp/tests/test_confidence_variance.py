@@ -9,7 +9,6 @@ from a2a.cstp.calibration_service import (
     ConfidenceStats,
     calculate_confidence_stats,
     generate_variance_recommendations,
-    CalibrationRecommendation,
 )
 
 
@@ -24,7 +23,7 @@ class TestCalculateConfidenceStats:
             {"confidence": 0.90},
         ]
         stats = calculate_confidence_stats(decisions)
-        
+
         assert stats is not None
         assert stats.count == 3
         assert stats.mean == pytest.approx(0.85, abs=0.01)
@@ -42,7 +41,7 @@ class TestCalculateConfidenceStats:
             {"confidence": 0.95},  # 0.9-1.0
         ]
         stats = calculate_confidence_stats(decisions)
-        
+
         assert stats is not None
         assert stats.bucket_counts["0.5-0.6"] == 1
         assert stats.bucket_counts["0.6-0.7"] == 1
@@ -55,7 +54,7 @@ class TestCalculateConfidenceStats:
         # All same value - std_dev should be 0
         decisions = [{"confidence": 0.85} for _ in range(10)]
         stats = calculate_confidence_stats(decisions)
-        
+
         assert stats is not None
         assert stats.std_dev == 0.0
 
@@ -67,7 +66,7 @@ class TestCalculateConfidenceStats:
             {"confidence": 1.00},
         ]
         stats = calculate_confidence_stats(decisions)
-        
+
         assert stats is not None
         assert stats.std_dev > 0.15  # Should have significant variance
 
@@ -103,7 +102,7 @@ class TestGenerateVarianceRecommendations:
             },
         )
         recs = generate_variance_recommendations(stats)
-        
+
         assert len(recs) >= 1
         assert any(r.type == "low_variance" for r in recs)
 
@@ -124,7 +123,7 @@ class TestGenerateVarianceRecommendations:
             },
         )
         recs = generate_variance_recommendations(stats)
-        
+
         assert any(r.type == "overconfident_habit" for r in recs)
 
     def test_no_recommendation_good_variance(self) -> None:
@@ -144,7 +143,7 @@ class TestGenerateVarianceRecommendations:
             },
         )
         recs = generate_variance_recommendations(stats)
-        
+
         # Should have no variance warnings
         assert not any(r.type in ("low_variance", "overconfident_habit") for r in recs)
 
@@ -159,7 +158,7 @@ class TestGenerateVarianceRecommendations:
             bucket_counts={"0.8-0.9": 5},
         )
         recs = generate_variance_recommendations(stats)
-        
+
         assert len(recs) == 0  # Not enough data
 
     def test_underconfident_habit(self) -> None:
@@ -179,5 +178,5 @@ class TestGenerateVarianceRecommendations:
             },
         )
         recs = generate_variance_recommendations(stats)
-        
+
         assert any(r.type == "underconfident_habit" for r in recs)

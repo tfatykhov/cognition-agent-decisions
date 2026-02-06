@@ -1,7 +1,6 @@
 """Tests for calibration service."""
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, UTC
 
-import pytest
 
 # Import from parent package
 import sys
@@ -19,11 +18,11 @@ class TestWindowToDates:
         since, until = window_to_dates("30d")
         assert since is not None
         assert until is not None
-        
+
         # Verify format
         datetime.strptime(since, "%Y-%m-%d")
         datetime.strptime(until, "%Y-%m-%d")
-        
+
         # Verify range is approximately 30 days
         since_dt = datetime.strptime(since, "%Y-%m-%d")
         until_dt = datetime.strptime(until, "%Y-%m-%d")
@@ -35,7 +34,7 @@ class TestWindowToDates:
         since, until = window_to_dates("60d")
         assert since is not None
         assert until is not None
-        
+
         since_dt = datetime.strptime(since, "%Y-%m-%d")
         until_dt = datetime.strptime(until, "%Y-%m-%d")
         delta = until_dt - since_dt
@@ -46,7 +45,7 @@ class TestWindowToDates:
         since, until = window_to_dates("90d")
         assert since is not None
         assert until is not None
-        
+
         since_dt = datetime.strptime(since, "%Y-%m-%d")
         until_dt = datetime.strptime(until, "%Y-%m-%d")
         delta = until_dt - since_dt

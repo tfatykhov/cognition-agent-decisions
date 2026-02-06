@@ -1,5 +1,4 @@
 """Tests for drift detection service."""
-import pytest
 
 import sys
 from pathlib import Path
@@ -15,7 +14,7 @@ from a2a.cstp.drift_service import (
 
 class MockCalibrationResult:
     """Mock CalibrationResult for testing."""
-    
+
     def __init__(self, brier_score: float, accuracy: float) -> None:
         self.brier_score = brier_score
         self.accuracy = accuracy
@@ -28,7 +27,7 @@ class TestDetectDriftAlerts:
         """Test Brier score degradation is detected."""
         recent = MockCalibrationResult(brier_score=0.15, accuracy=0.85)
         historical = MockCalibrationResult(brier_score=0.08, accuracy=0.88)
-        
+
         alerts = detect_drift_alerts(
             recent=recent,  # type: ignore
             historical=historical,  # type: ignore
@@ -36,7 +35,7 @@ class TestDetectDriftAlerts:
             threshold_accuracy=0.15,
             category=None,
         )
-        
+
         assert len(alerts) >= 1
         brier_alert = next((a for a in alerts if a.type == "brier_degradation"), None)
         assert brier_alert is not None
@@ -48,7 +47,7 @@ class TestDetectDriftAlerts:
         """Test accuracy drop is detected."""
         recent = MockCalibrationResult(brier_score=0.10, accuracy=0.70)
         historical = MockCalibrationResult(brier_score=0.10, accuracy=0.90)
-        
+
         alerts = detect_drift_alerts(
             recent=recent,  # type: ignore
             historical=historical,  # type: ignore
@@ -56,7 +55,7 @@ class TestDetectDriftAlerts:
             threshold_accuracy=0.15,
             category="architecture",
         )
-        
+
         assert len(alerts) >= 1
         accuracy_alert = next((a for a in alerts if a.type == "accuracy_drop"), None)
         assert accuracy_alert is not None
@@ -68,7 +67,7 @@ class TestDetectDriftAlerts:
         """Test no alerts when metrics are stable."""
         recent = MockCalibrationResult(brier_score=0.10, accuracy=0.85)
         historical = MockCalibrationResult(brier_score=0.09, accuracy=0.87)
-        
+
         alerts = detect_drift_alerts(
             recent=recent,  # type: ignore
             historical=historical,  # type: ignore
@@ -76,14 +75,14 @@ class TestDetectDriftAlerts:
             threshold_accuracy=0.15,
             category=None,
         )
-        
+
         assert len(alerts) == 0
 
     def test_no_alerts_when_improving(self) -> None:
         """Test no alerts when calibration is improving."""
         recent = MockCalibrationResult(brier_score=0.05, accuracy=0.95)
         historical = MockCalibrationResult(brier_score=0.10, accuracy=0.85)
-        
+
         alerts = detect_drift_alerts(
             recent=recent,  # type: ignore
             historical=historical,  # type: ignore
@@ -91,14 +90,14 @@ class TestDetectDriftAlerts:
             threshold_accuracy=0.15,
             category=None,
         )
-        
+
         assert len(alerts) == 0
 
     def test_severity_warning_for_moderate_drift(self) -> None:
         """Test warning severity for moderate drift."""
         recent = MockCalibrationResult(brier_score=0.12, accuracy=0.80)
         historical = MockCalibrationResult(brier_score=0.08, accuracy=0.88)
-        
+
         alerts = detect_drift_alerts(
             recent=recent,  # type: ignore
             historical=historical,  # type: ignore
@@ -106,7 +105,7 @@ class TestDetectDriftAlerts:
             threshold_accuracy=0.05,
             category=None,
         )
-        
+
         for alert in alerts:
             assert alert.severity in ("warning", "error")
 
@@ -114,7 +113,7 @@ class TestDetectDriftAlerts:
         """Test no division by zero with zero historical values."""
         recent = MockCalibrationResult(brier_score=0.10, accuracy=0.80)
         historical = MockCalibrationResult(brier_score=0.0, accuracy=0.0)
-        
+
         # Should not raise
         alerts = detect_drift_alerts(
             recent=recent,  # type: ignore
@@ -123,7 +122,7 @@ class TestDetectDriftAlerts:
             threshold_accuracy=0.15,
             category=None,
         )
-        
+
         assert isinstance(alerts, list)
 
 
@@ -143,9 +142,9 @@ class TestGenerateDriftRecommendations:
                 message="Test",
             )
         ]
-        
+
         recs = generate_drift_recommendations(alerts)
-        
+
         assert len(recs) == 1
         assert recs[0]["type"] == "recalibrate"
         assert "confidence" in recs[0]["message"].lower()
@@ -163,9 +162,9 @@ class TestGenerateDriftRecommendations:
                 message="Test",
             )
         ]
-        
+
         recs = generate_drift_recommendations(alerts)
-        
+
         assert len(recs) == 1
         assert recs[0]["type"] == "review_process"
 
@@ -177,9 +176,9 @@ class TestGenerateDriftRecommendations:
             DriftAlert(type="brier_degradation", category="b", recent_value=0.2,
                       historical_value=0.1, change_pct=100, severity="warning", message="2"),
         ]
-        
+
         recs = generate_drift_recommendations(alerts)
-        
+
         # Should only have one recalibrate recommendation
         recalibrate_recs = [r for r in recs if r["type"] == "recalibrate"]
         assert len(recalibrate_recs) == 1
@@ -191,7 +190,7 @@ class TestCheckDriftRequest:
     def test_from_dict_defaults(self) -> None:
         """Test default values."""
         request = CheckDriftRequest.from_dict({})
-        
+
         assert request.threshold_brier == 0.20
         assert request.threshold_accuracy == 0.15
         assert request.category is None
@@ -205,7 +204,7 @@ class TestCheckDriftRequest:
             "category": "architecture",
             "minDecisions": 10,
         })
-        
+
         assert request.threshold_brier == 0.30
         assert request.threshold_accuracy == 0.10
         assert request.category == "architecture"
