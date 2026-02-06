@@ -210,8 +210,8 @@ class TestQueryDecisionsResponse:
 class TestQueryDecisionsEndpoint:
     """Integration tests for cstp.queryDecisions endpoint."""
 
-    def test_query_missing_query_param(self, client: TestClient) -> None:
-        """Missing query param should return error."""
+    def test_query_empty_param_lists_decisions(self, client: TestClient) -> None:
+        """Empty query param should list all decisions."""
         response = client.post(
             "/cstp",
             json={
@@ -223,8 +223,8 @@ class TestQueryDecisionsEndpoint:
             headers={"Authorization": "Bearer test-token"},
         )
         data = response.json()
-        assert "error" in data
-        assert data["error"]["code"] == -32602  # Invalid params
+        assert "result" in data
+        assert data["result"]["retrievalMode"] == "list"
 
     @patch("a2a.cstp.dispatcher.query_decisions")
     def test_query_returns_results(
