@@ -44,6 +44,7 @@ from .models import (
     QueryDecisionsResponse,
 )
 from .query_service import query_decisions, load_all_decisions
+from .reindex_service import reindex_decisions
 
 
 # Type alias for method handlers
@@ -473,6 +474,24 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.getCalibration", _handle_get_calibration)
     dispatcher.register("cstp.attributeOutcomes", _handle_attribute_outcomes)
     dispatcher.register("cstp.checkDrift", _handle_check_drift)
+    dispatcher.register("cstp.reindex", _handle_reindex)
+
+
+async def _handle_reindex(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.reindex method.
+
+    Reindexes all decisions with fresh embeddings.
+    This will delete and recreate the ChromaDB collection.
+
+    Args:
+        params: JSON-RPC params (unused).
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Reindex result as dict.
+    """
+    result = await reindex_decisions()
+    return result.to_dict()
 
 
 async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
