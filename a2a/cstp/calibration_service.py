@@ -95,7 +95,6 @@ class CalibrationResult:
         if self.period_end:
             result["periodEnd"] = self.period_end
         return result
-        }
 
 
 @dataclass
@@ -149,15 +148,6 @@ class GetCalibrationRequest:
             feature=filters.get("feature"),
             # F014: Rolling window (top-level param)
             window=data.get("window"),
-        )
-            stakes=filters.get("stakes"),
-            since=filters.get("since"),
-            until=filters.get("until"),
-            min_decisions=filters.get("minDecisions", 5),
-            group_by=data.get("groupBy"),
-            # F010: Project context filters
-            project=filters.get("project"),
-            feature=filters.get("feature"),
         )
 
 
