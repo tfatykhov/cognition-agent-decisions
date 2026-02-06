@@ -86,10 +86,10 @@ class TestQueryDecisionsRequest:
         assert req.limit == 25
         assert req.include_reasons is True
 
-    def test_from_params_missing_query(self) -> None:
-        """Missing query should raise ValueError."""
-        with pytest.raises(ValueError, match="Missing required parameter: query"):
-            QueryDecisionsRequest.from_params({})
+    def test_from_params_empty_query_allowed(self) -> None:
+        """Empty query should be allowed for listing all decisions."""
+        req = QueryDecisionsRequest.from_params({})
+        assert req.query == ""
 
     def test_limit_clamped(self) -> None:
         """Limit should be clamped to 1-50."""
@@ -210,8 +210,8 @@ class TestQueryDecisionsResponse:
 class TestQueryDecisionsEndpoint:
     """Integration tests for cstp.queryDecisions endpoint."""
 
-    def test_query_missing_query_param(self, client: TestClient) -> None:
-        """Missing query param should return error."""
+    def test_query_empty_param_lists_decisions(self, client: TestClient) -> None:
+        """Empty query param should list all decisions."""
         response = client.post(
             "/cstp",
             json={
@@ -223,8 +223,8 @@ class TestQueryDecisionsEndpoint:
             headers={"Authorization": "Bearer test-token"},
         )
         data = response.json()
-        assert "error" in data
-        assert data["error"]["code"] == -32602  # Invalid params
+        assert "result" in data
+        assert data["result"]["retrievalMode"] == "list"
 
     @patch("a2a.cstp.dispatcher.query_decisions")
     def test_query_returns_results(

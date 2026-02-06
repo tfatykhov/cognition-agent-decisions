@@ -168,6 +168,50 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
     # F017: Handle different retrieval modes
     scores: dict[str, dict[str, float]] = {}
 
+    # Handle empty query - list all decisions (for dashboard)
+    if not request.query.strip():
+        all_decisions = await load_all_decisions(
+            category=request.filters.category,
+            project=request.filters.project,
+        )
+        # Sort by date descending, limit results
+        all_decisions.sort(
+            key=lambda d: d.get("created_at", ""),
+            reverse=True,
+        )
+        all_decisions = all_decisions[:request.limit]
+
+        decisions = []
+        for d in all_decisions:
+            doc_id = d.get("id", "")
+            decisions.append(
+                DecisionSummary(
+                    id=doc_id[:8] if len(doc_id) > 8 else doc_id,
+                    title=d.get("summary", d.get("decision", "Untitled"))[:50],
+                    category=d.get("category", ""),
+                    confidence=d.get("confidence"),
+                    stakes=d.get("stakes"),
+                    status=d.get("status", ""),
+                    outcome=d.get("outcome"),
+                    date=d.get("created_at", "")[:10],
+                    distance=0.0,
+                    reasons=None,
+                )
+            )
+
+        query_time_ms = int((time.time() - start_time) * 1000)
+
+        result = QueryDecisionsResponse(
+            decisions=decisions,
+            total=len(decisions),
+            query=request.query,
+            query_time_ms=query_time_ms,
+            agent="cognition-engines",
+            retrieval_mode="list",
+            scores={},
+        )
+        return result.to_dict()
+
     if request.retrieval_mode == "keyword":
         # Keyword-only search via BM25
         all_decisions = await load_all_decisions(
