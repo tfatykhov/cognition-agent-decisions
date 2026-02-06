@@ -11,12 +11,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 # Configuration
 CHROMA_URL = os.getenv("CHROMA_URL", "http://chromadb:8000")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 TENANT = "default_tenant"
 DATABASE = "default_database"
 COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
+DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
 
 # Configurable secrets paths (can be overridden via env)
 SECRETS_PATHS = os.getenv(
@@ -287,3 +290,54 @@ async def query_decisions(
         query=query,
         query_time_ms=int((time.time() - start_time) * 1000),
     )
+
+
+async def load_all_decisions(
+    decisions_path: str | None = None,
+    category: str | None = None,
+    project: str | None = None,
+) -> list[dict[str, Any]]:
+    """Load all decision files from disk.
+
+    Args:
+        decisions_path: Override for decisions directory.
+        category: Optional category filter.
+        project: Optional project filter.
+
+    Returns:
+        List of decision dictionaries with id and content.
+    """
+    base = Path(decisions_path or DECISIONS_PATH)
+    decisions: list[dict[str, Any]] = []
+
+    if not base.exists():
+        return decisions
+
+    for yaml_file in base.rglob("*-decision-*.yaml"):
+        try:
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+
+            if not data:
+                continue
+
+            # Extract ID from filename
+            filename = yaml_file.stem
+            parts = filename.rsplit("-decision-", 1)
+            if len(parts) == 2:
+                data["id"] = parts[1]
+            else:
+                data["id"] = filename
+
+            # Apply filters
+            if category and data.get("category") != category:
+                continue
+            if project and data.get("project") != project:
+                continue
+
+            decisions.append(data)
+
+        except Exception:
+            continue
+
+    return decisions
