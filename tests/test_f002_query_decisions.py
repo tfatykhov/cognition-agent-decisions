@@ -86,10 +86,10 @@ class TestQueryDecisionsRequest:
         assert req.limit == 25
         assert req.include_reasons is True
 
-    def test_from_params_missing_query(self) -> None:
-        """Missing query should raise ValueError."""
-        with pytest.raises(ValueError, match="Missing required parameter: query"):
-            QueryDecisionsRequest.from_params({})
+    def test_from_params_empty_query_allowed(self) -> None:
+        """Empty query should be allowed for listing all decisions."""
+        req = QueryDecisionsRequest.from_params({})
+        assert req.query == ""
 
     def test_limit_clamped(self) -> None:
         """Limit should be clamped to 1-50."""
