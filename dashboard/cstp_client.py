@@ -224,6 +224,35 @@ class CSTPClient:
         result = await self._call("cstp.getCalibration", params)
         return CalibrationStats.from_dict(result)
     
+    async def check_drift(
+        self,
+        threshold_brier: float = 0.20,
+        threshold_accuracy: float = 0.15,
+        category: str | None = None,
+        project: str | None = None,
+    ) -> dict[str, Any]:
+        """Check for calibration drift between recent and historical periods.
+        
+        Args:
+            threshold_brier: Brier degradation threshold (default 20%)
+            threshold_accuracy: Accuracy drop threshold (default 15%)
+            category: Optional category filter
+            project: Optional project filter
+            
+        Returns:
+            Drift check results with alerts and recommendations
+        """
+        params: dict[str, Any] = {
+            "thresholdBrier": threshold_brier,
+            "thresholdAccuracy": threshold_accuracy,
+        }
+        if category:
+            params["category"] = category
+        if project:
+            params["project"] = project
+        
+        return await self._call("cstp.checkDrift", params)
+    
     async def health_check(self) -> bool:
         """Check if CSTP server is reachable.
         

@@ -29,6 +29,10 @@ from .decision_service import (
     record_decision,
     review_decision,
 )
+from .drift_service import (
+    CheckDriftRequest,
+    check_drift,
+)
 from .guardrails_service import evaluate_guardrails, log_guardrail_check
 from .models import (
     CheckGuardrailsRequest,
@@ -287,6 +291,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
     dispatcher.register("cstp.getCalibration", _handle_get_calibration)
     dispatcher.register("cstp.attributeOutcomes", _handle_attribute_outcomes)
+    dispatcher.register("cstp.checkDrift", _handle_check_drift)
 
 
 async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -379,4 +384,21 @@ async def _handle_attribute_outcomes(params: dict[str, Any], agent_id: str) -> d
     """
     request = AttributeOutcomesRequest.from_dict(params)
     response = await attribute_outcomes(request)
+    return response.to_dict()
+
+
+async def _handle_check_drift(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.checkDrift method.
+
+    Compares recent (30d) vs historical (90d+) calibration to detect drift.
+
+    Args:
+        params: JSON-RPC params with thresholds and filters.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Drift check results as dict.
+    """
+    request = CheckDriftRequest.from_dict(params)
+    response = await check_drift(request)
     return response.to_dict()
