@@ -26,5 +26,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
-# Run with gunicorn
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "2", "--access-logfile", "-", "dashboard.app:app"]
+# Run with gunicorn (app:app since we're in /app directory)
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "2", "--access-logfile", "-", "app:app"]
