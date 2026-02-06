@@ -19,6 +19,7 @@ from .attribution_service import (
     AttributeOutcomesRequest,
     attribute_outcomes,
 )
+from .bm25_index import get_cached_index, merge_results
 from .calibration_service import (
     GetCalibrationRequest,
     get_calibration,
@@ -42,7 +43,7 @@ from .models import (
     QueryDecisionsRequest,
     QueryDecisionsResponse,
 )
-from .query_service import query_decisions
+from .query_service import query_decisions, load_all_decisions
 
 
 # Type alias for method handlers
@@ -158,52 +159,188 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
     Returns:
         Query results as dict.
     """
+    import time
+    start_time = time.time()
+
     # Parse request
     request = QueryDecisionsRequest.from_params(params)
 
-    # Execute query
-    response = await query_decisions(
-        query=request.query,
-        n_results=request.limit,
-        category=request.filters.category,
-        min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,
-        max_confidence=request.filters.max_confidence if request.filters.max_confidence < 1 else None,
-        stakes=request.filters.stakes,
-        status_filter=request.filters.status,
-        # F010: Project context filters
-        project=request.filters.project,
-        feature=request.filters.feature,
-        pr=request.filters.pr,
-        has_outcome=request.filters.has_outcome,
-    )
+    # F017: Handle different retrieval modes
+    scores: dict[str, dict[str, float]] = {}
 
-    # Check for errors
-    if response.error:
-        raise RuntimeError(response.error)
-
-    # Map results to response format
-    decisions = [
-        DecisionSummary(
-            id=r.id,
-            title=r.title,
-            category=r.category,
-            confidence=r.confidence,
-            stakes=r.stakes,
-            status=r.status,
-            outcome=r.outcome,
-            date=r.date,
-            distance=r.distance,
-            reasons=r.reason_types if request.include_reasons else None,
+    if request.retrieval_mode == "keyword":
+        # Keyword-only search via BM25
+        all_decisions = await load_all_decisions(
+            category=request.filters.category,
+            project=request.filters.project,
         )
-        for r in response.results
-    ]
+        # Use cached index for performance
+        cache_key = f"kw:{request.filters.category}:{request.filters.project}"
+        bm25_index = get_cached_index(all_decisions, cache_key)
+        keyword_results = bm25_index.search(request.query, request.limit)
+
+        # Build decision map for quick lookup
+        decision_map = {d["id"]: d for d in all_decisions}
+
+        decisions = []
+        for doc_id, score in keyword_results:
+            d = decision_map.get(doc_id, {})
+            decisions.append(
+                DecisionSummary(
+                    id=doc_id[:8] if len(doc_id) > 8 else doc_id,
+                    title=d.get("summary", d.get("decision", "Untitled"))[:50],
+                    category=d.get("category", ""),
+                    confidence=d.get("confidence"),
+                    stakes=d.get("stakes"),
+                    status=d.get("status", ""),
+                    outcome=d.get("outcome"),
+                    date=d.get("created_at", "")[:10],
+                    distance=round(1.0 - score / 10.0, 4),  # Approximate distance
+                    reasons=None,
+                )
+            )
+            scores[doc_id[:8] if len(doc_id) > 8 else doc_id] = {
+                "semantic": 0.0,
+                "keyword": round(score, 4),
+                "combined": round(score, 4),
+            }
+
+        query_time_ms = int((time.time() - start_time) * 1000)
+
+    elif request.retrieval_mode == "hybrid":
+        # Hybrid: combine semantic + keyword
+        # First, get semantic results
+        response = await query_decisions(
+            query=request.query,
+            n_results=request.limit * 2,  # Get more for merging
+            category=request.filters.category,
+            min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,
+            max_confidence=request.filters.max_confidence if request.filters.max_confidence < 1 else None,
+            stakes=request.filters.stakes,
+            status_filter=request.filters.status,
+            project=request.filters.project,
+            feature=request.filters.feature,
+            pr=request.filters.pr,
+            has_outcome=request.filters.has_outcome,
+        )
+
+        if response.error:
+            raise RuntimeError(response.error)
+
+        # Convert semantic results to (id, score) format
+        # Distance is inverse of similarity, so convert
+        semantic_results = [
+            (r.id, 1.0 - r.distance) for r in response.results
+        ]
+
+        # Get keyword results
+        all_decisions = await load_all_decisions(
+            category=request.filters.category,
+            project=request.filters.project,
+        )
+        # Use cached index for performance
+        cache_key = f"hybrid:{request.filters.category}:{request.filters.project}"
+        bm25_index = get_cached_index(all_decisions, cache_key)
+        keyword_results = bm25_index.search(request.query, request.limit * 2)
+
+        # Merge results
+        merged = merge_results(
+            semantic_results,
+            keyword_results,
+            semantic_weight=request.hybrid_weight,
+            top_k=request.limit,
+        )
+
+        # Build response from merged results
+        decision_map = {d["id"][:8]: d for d in all_decisions}
+        decision_map.update({d["id"]: d for d in all_decisions})
+
+        # Also map from semantic results
+        semantic_map = {r.id: r for r in response.results}
+
+        decisions = []
+        for doc_id, score_dict in merged:
+            # Try semantic result first
+            if doc_id in semantic_map:
+                r = semantic_map[doc_id]
+                decisions.append(
+                    DecisionSummary(
+                        id=r.id,
+                        title=r.title,
+                        category=r.category,
+                        confidence=r.confidence,
+                        stakes=r.stakes,
+                        status=r.status,
+                        outcome=r.outcome,
+                        date=r.date,
+                        distance=round(1.0 - score_dict["combined"], 4),
+                        reasons=r.reason_types if request.include_reasons else None,
+                    )
+                )
+            elif doc_id in decision_map:
+                d = decision_map[doc_id]
+                decisions.append(
+                    DecisionSummary(
+                        id=doc_id[:8] if len(doc_id) > 8 else doc_id,
+                        title=d.get("summary", d.get("decision", "Untitled"))[:50],
+                        category=d.get("category", ""),
+                        confidence=d.get("confidence"),
+                        stakes=d.get("stakes"),
+                        status=d.get("status", ""),
+                        outcome=d.get("outcome"),
+                        date=d.get("created_at", "")[:10],
+                        distance=round(1.0 - score_dict["combined"], 4),
+                        reasons=None,
+                    )
+                )
+            scores[doc_id] = score_dict
+
+        query_time_ms = int((time.time() - start_time) * 1000)
+
+    else:
+        # Default: semantic-only search
+        response = await query_decisions(
+            query=request.query,
+            n_results=request.limit,
+            category=request.filters.category,
+            min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,
+            max_confidence=request.filters.max_confidence if request.filters.max_confidence < 1 else None,
+            stakes=request.filters.stakes,
+            status_filter=request.filters.status,
+            project=request.filters.project,
+            feature=request.filters.feature,
+            pr=request.filters.pr,
+            has_outcome=request.filters.has_outcome,
+        )
+
+        if response.error:
+            raise RuntimeError(response.error)
+
+        decisions = [
+            DecisionSummary(
+                id=r.id,
+                title=r.title,
+                category=r.category,
+                confidence=r.confidence,
+                stakes=r.stakes,
+                status=r.status,
+                outcome=r.outcome,
+                date=r.date,
+                distance=r.distance,
+                reasons=r.reason_types if request.include_reasons else None,
+            )
+            for r in response.results
+        ]
+        query_time_ms = response.query_time_ms
 
     result = QueryDecisionsResponse(
         decisions=decisions,
         total=len(decisions),
         query=request.query,
-        query_time_ms=response.query_time_ms,
+        query_time_ms=query_time_ms,
         agent="cognition-engines",
+        retrieval_mode=request.retrieval_mode,
+        scores=scores if scores else {},
     )
 
     return result.to_dict()

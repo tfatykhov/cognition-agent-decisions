@@ -51,6 +51,9 @@ class QueryDecisionsRequest:
     filters: QueryFilters = field(default_factory=QueryFilters)
     limit: int = 10
     include_reasons: bool = False
+    # F017: Hybrid retrieval
+    retrieval_mode: str = "semantic"  # semantic | keyword | hybrid
+    hybrid_weight: float = 0.7  # semantic weight (keyword = 1 - this)
 
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> "QueryDecisionsRequest":
@@ -63,11 +66,21 @@ class QueryDecisionsRequest:
         if not 1 <= limit <= 50:
             limit = max(1, min(50, limit))
 
+        # F017: Parse retrieval mode
+        retrieval_mode = params.get("retrievalMode", params.get("retrieval_mode", "semantic"))
+        if retrieval_mode not in ("semantic", "keyword", "hybrid"):
+            retrieval_mode = "semantic"
+
+        hybrid_weight = float(params.get("hybridWeight", params.get("hybrid_weight", 0.7)))
+        hybrid_weight = max(0.0, min(1.0, hybrid_weight))
+
         return cls(
             query=query,
             filters=QueryFilters.from_dict(params.get("filters")),
             limit=limit,
             include_reasons=params.get("includeReasons", False),
+            retrieval_mode=retrieval_mode,
+            hybrid_weight=hybrid_weight,
         )
 
 
@@ -114,16 +127,23 @@ class QueryDecisionsResponse:
     query: str
     query_time_ms: int
     agent: str
+    # F017: Hybrid retrieval metadata
+    retrieval_mode: str = "semantic"
+    scores: dict[str, dict[str, float]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON response."""
-        return {
+        result = {
             "decisions": [d.to_dict() for d in self.decisions],
             "total": self.total,
             "query": self.query,
             "queryTimeMs": self.query_time_ms,
             "agent": self.agent,
+            "retrievalMode": self.retrieval_mode,
         }
+        if self.scores:
+            result["scores"] = self.scores
+        return result
 
 
 # ============================================================================
