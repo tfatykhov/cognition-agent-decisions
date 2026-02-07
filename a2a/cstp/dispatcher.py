@@ -473,7 +473,7 @@ async def _handle_list_guardrails(params: dict[str, Any], _agent_id: str) -> dic
     """
     scope = params.get("scope")
     guardrails = list_guardrails(scope=scope)
-    
+
     return {
         "guardrails": guardrails,
         "count": len(guardrails),
