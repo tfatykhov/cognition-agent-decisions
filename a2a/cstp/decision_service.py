@@ -605,9 +605,11 @@ async def record_decision(
     embedding_text = build_embedding_text(request)
     metadata = {
         "path": file_path,
+        "title": request.decision,
         "category": request.category,
         "stakes": request.stakes,
         "confidence": request.confidence,
+        "status": "pending",
         "date": now.strftime("%Y-%m-%d"),
     }
     if request.agent_id:
@@ -784,9 +786,16 @@ async def reindex_decision(
 
     embedding_text = "\n".join(parts)
 
-    # Build metadata
+    # Build metadata — use fallback chain for title (decision > summary)
+    title = (
+        data.get("title")
+        or data.get("decision")
+        or data.get("summary")
+        or ""
+    )
     metadata: dict[str, Any] = {
         "path": file_path,
+        "title": title[:500] if title else "",
         "category": data.get("category", "unknown"),
         "stakes": data.get("stakes", "medium"),
         "confidence": data.get("confidence", 0.5),
