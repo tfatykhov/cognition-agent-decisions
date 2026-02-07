@@ -142,6 +142,42 @@ class ProjectContext:
 
 
 @dataclass
+class ReasoningStep:
+    """A single step in the reasoning trace."""
+
+    step: int
+    thought: str
+    output: str | None = None
+    confidence: float | None = None
+    tags: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {
+            "step": self.step,
+            "thought": self.thought,
+        }
+        if self.output:
+            result["output"] = self.output
+        if self.confidence is not None:
+            result["confidence"] = self.confidence
+        if self.tags:
+            result["tags"] = self.tags
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ReasoningStep":
+        """Create from dictionary."""
+        return cls(
+            step=int(data.get("step", 0)),
+            thought=data.get("thought", ""),
+            output=data.get("output"),
+            confidence=float(data.get("confidence")) if data.get("confidence") is not None else None,
+            tags=data.get("tags", []),
+        )
+
+
+@dataclass
 class RecordDecisionRequest:
     """Request to record a new decision."""
 
@@ -151,6 +187,7 @@ class RecordDecisionRequest:
     stakes: str = "medium"
     context: str | None = None
     reasons: list[Reason] = field(default_factory=list)
+    trace: list[ReasoningStep] = field(default_factory=list)  # F020: Reasoning trace
     kpi_indicators: list[str] = field(default_factory=list)
     mental_state: str | None = None
     review_in: str | None = None
@@ -165,6 +202,11 @@ class RecordDecisionRequest:
         reasons = [
             Reason.from_dict(r) if isinstance(r, dict) else r
             for r in data.get("reasons", [])
+        ]
+
+        trace = [
+            ReasoningStep.from_dict(t) if isinstance(t, dict) else t
+            for t in data.get("trace", [])
         ]
 
         pre_decision = None
@@ -185,6 +227,7 @@ class RecordDecisionRequest:
             stakes=data.get("stakes", "medium"),
             context=data.get("context"),
             reasons=reasons,
+            trace=trace,
             kpi_indicators=data.get("kpiIndicators", data.get("kpi_indicators", [])),
             mental_state=data.get("mentalState", data.get("mental_state")),
             review_in=data.get("reviewIn", data.get("review_in")),
@@ -300,6 +343,10 @@ def build_decision_yaml(request: RecordDecisionRequest, decision_id: str) -> dic
     if request.reasons:
         decision_data["reasons"] = [r.to_dict() for r in request.reasons]
 
+    # F020: Add reasoning trace
+    if request.trace:
+        decision_data["trace"] = [t.to_dict() for t in request.trace]
+
     if request.kpi_indicators:
         decision_data["kpi_indicators"] = request.kpi_indicators
 
@@ -399,6 +446,14 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
     if request.reasons:
         reasons_text = " | ".join(r.text for r in request.reasons)
         parts.append(f"Reasons: {reasons_text}")
+
+    # F020: Include reasoning trace in embedding
+    if request.trace:
+        trace_text = "\n".join(
+            f"Step {t.step}: {t.thought} -> {t.output or ''}"
+            for t in request.trace
+        )
+        parts.append(f"Reasoning Trace:\n{trace_text}")
 
     if request.tags:
         parts.append(f"Tags: {', '.join(request.tags)}")
