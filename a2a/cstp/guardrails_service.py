@@ -318,6 +318,46 @@ class EvaluationResult:
     evaluated: int
 
 
+def list_guardrails(scope: str | None = None) -> list[dict[str, Any]]:
+    """List active guardrails, optionally filtered by scope.
+
+    Args:
+        scope: Optional project/scope filter. If provided, returns only
+               guardrails that would apply to this scope (or are global).
+
+    Returns:
+        List of guardrail definitions as dicts.
+    """
+    guardrails = _load_guardrails()
+    result = []
+
+    for g in guardrails:
+        # Filter by scope if requested
+        if scope:
+            # If guardrail has specific scopes, and requested scope isn't in them
+            if g.scope and scope not in g.scope:
+                continue
+
+        # Convert to dict
+        g_dict = {
+            "id": g.id,
+            "description": g.description,
+            "action": g.action,
+            "scope": g.scope,
+            "conditions": [
+                {"field": c.field, "operator": c.operator, "value": c.value}
+                for c in g.conditions
+            ],
+            "requirements": [
+                {"field": r.field, "expected": r.expected}
+                for r in g.requirements
+            ],
+        }
+        result.append(g_dict)
+
+    return result
+
+
 async def evaluate_guardrails(
     context: dict[str, Any],
     guardrails_dir: Path | None = None,
