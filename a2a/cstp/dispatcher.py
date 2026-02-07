@@ -34,7 +34,7 @@ from .drift_service import (
     CheckDriftRequest,
     check_drift,
 )
-from .guardrails_service import evaluate_guardrails, log_guardrail_check
+from .guardrails_service import evaluate_guardrails, log_guardrail_check, list_guardrails
 from .models import (
     CheckGuardrailsRequest,
     CheckGuardrailsResponse,
@@ -461,6 +461,26 @@ async def _handle_check_guardrails(params: dict[str, Any], agent_id: str) -> dic
     return result.to_dict()
 
 
+async def _handle_list_guardrails(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.listGuardrails method.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        List of active guardrails.
+    """
+    scope = params.get("scope")
+    guardrails = list_guardrails(scope=scope)
+    
+    return {
+        "guardrails": guardrails,
+        "count": len(guardrails),
+        "agent": "cognition-engines"
+    }
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -469,7 +489,9 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     """
     dispatcher.register("cstp.queryDecisions", _handle_query_decisions)
     dispatcher.register("cstp.checkGuardrails", _handle_check_guardrails)
+    dispatcher.register("cstp.listGuardrails", _handle_list_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
+
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
     dispatcher.register("cstp.getCalibration", _handle_get_calibration)
     dispatcher.register("cstp.attributeOutcomes", _handle_attribute_outcomes)
