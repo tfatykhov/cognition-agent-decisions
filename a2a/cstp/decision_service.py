@@ -46,9 +46,9 @@ class Reason:
     def from_dict(cls, data: dict[str, Any]) -> "Reason":
         """Create from dictionary."""
         return cls(
-            type=data.get("type", "analysis"),
-            text=data.get("text", ""),
-            strength=float(data.get("strength", 0.8)),
+            type=data.get("type") or "analysis",
+            text=data.get("text") or "",
+            strength=float(data.get("strength") or 0.8),
         )
 
 
@@ -74,13 +74,13 @@ class PreDecisionProtocol:
     def from_dict(cls, data: dict[str, Any]) -> "PreDecisionProtocol":
         """Create from dictionary."""
         return cls(
-            query_run=bool(data.get("query_run", data.get("queryRun", False))),
-            similar_found=int(data.get("similar_found", data.get("similarFound", 0))),
+            query_run=bool(data.get("query_run") or data.get("queryRun") or False),
+            similar_found=int(data.get("similar_found") or data.get("similarFound") or 0),
             guardrails_checked=bool(
-                data.get("guardrails_checked", data.get("guardrailsChecked", False))
+                data.get("guardrails_checked") or data.get("guardrailsChecked") or False
             ),
             guardrails_passed=bool(
-                data.get("guardrails_passed", data.get("guardrailsPassed", False))
+                data.get("guardrails_passed") or data.get("guardrailsPassed") or False
             ),
         )
 
@@ -169,11 +169,11 @@ class ReasoningStep:
     def from_dict(cls, data: dict[str, Any]) -> "ReasoningStep":
         """Create from dictionary."""
         return cls(
-            step=int(data.get("step", 0)),
-            thought=data.get("thought", ""),
+            step=int(data.get("step") or 0),
+            thought=data.get("thought") or "",
             output=data.get("output"),
             confidence=float(data.get("confidence")) if data.get("confidence") is not None else None,
-            tags=data.get("tags", []),
+            tags=data.get("tags") or [],
         )
 
 
@@ -199,20 +199,23 @@ class RecordDecisionRequest:
     @classmethod
     def from_dict(cls, data: dict[str, Any], agent_id: str | None = None) -> "RecordDecisionRequest":
         """Create from dictionary (JSON-RPC params)."""
+        reasons_data = data.get("reasons") or []
         reasons = [
             Reason.from_dict(r) if isinstance(r, dict) else r
-            for r in data.get("reasons", [])
+            for r in reasons_data
         ]
 
+        trace_data = data.get("trace") or []
         trace = [
             ReasoningStep.from_dict(t) if isinstance(t, dict) else t
-            for t in data.get("trace", [])
+            for t in trace_data
         ]
 
         pre_decision = None
         if "preDecision" in data or "pre_decision" in data:
-            pd_data = data.get("preDecision", data.get("pre_decision", {}))
-            pre_decision = PreDecisionProtocol.from_dict(pd_data)
+            pd_data = data.get("preDecision") or data.get("pre_decision") or {}
+            if pd_data:
+                pre_decision = PreDecisionProtocol.from_dict(pd_data)
 
         # F010: Parse project context fields
         project_context = None
@@ -221,17 +224,17 @@ class RecordDecisionRequest:
             project_context = ProjectContext.from_dict(data)
 
         return cls(
-            decision=data.get("decision", ""),
-            confidence=float(data.get("confidence", 0.5)),
-            category=data.get("category", "process"),
-            stakes=data.get("stakes", "medium"),
+            decision=data.get("decision") or "",
+            confidence=float(data.get("confidence") or 0.5),
+            category=data.get("category") or "process",
+            stakes=data.get("stakes") or "medium",
             context=data.get("context"),
             reasons=reasons,
             trace=trace,
-            kpi_indicators=data.get("kpiIndicators", data.get("kpi_indicators", [])),
-            mental_state=data.get("mentalState", data.get("mental_state")),
-            review_in=data.get("reviewIn", data.get("review_in")),
-            tags=data.get("tags", []),
+            kpi_indicators=data.get("kpiIndicators") or data.get("kpi_indicators") or [],
+            mental_state=data.get("mentalState") or data.get("mental_state"),
+            review_in=data.get("reviewIn") or data.get("review_in"),
+            tags=data.get("tags") or [],
             pre_decision=pre_decision,
             project_context=project_context,
             agent_id=agent_id,
