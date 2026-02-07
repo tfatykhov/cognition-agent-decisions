@@ -461,12 +461,12 @@ async def _handle_check_guardrails(params: dict[str, Any], agent_id: str) -> dic
     return result.to_dict()
 
 
-async def _handle_list_guardrails(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+async def _handle_list_guardrails(params: dict[str, Any], _agent_id: str) -> dict[str, Any]:
     """Handle cstp.listGuardrails method.
 
     Args:
         params: JSON-RPC params.
-        agent_id: Authenticated agent ID.
+        _agent_id: Authenticated agent ID (unused).
 
     Returns:
         List of active guardrails.
