@@ -1,245 +1,157 @@
 # CLI Reference
 
-The `cognition` CLI provides direct access to all core engine capabilities without requiring the HTTP server.
+Cognition Engines provides two CLI tools:
+1. **`bin/cognition`** — Local/offline tool for direct database access (server-side)
+2. **`scripts/cstp.py`** — Remote client for connecting to the CSTP server (client-side)
+
+---
+
+## 1. Local CLI (`bin/cognition`)
 
 **Location:** `bin/cognition`
+**Use case:** Server maintenance, offline indexing, direct guardrail checks.
 
----
-
-## Prerequisites
-
-The CLI requires:
+### Prerequisites
 
 - Python 3.11+
-- `cognition-engines` package installed (see [Installation Guide](06-Installation-Guide.md))
-- `GEMINI_API_KEY` environment variable set (for embedding operations)
-- ChromaDB accessible at `CHROMA_URL` (default: `http://localhost:8000`)
+- `cognition-engines` package installed
+- `GEMINI_API_KEY` environment variable
+- ChromaDB accessible
 
----
+### Commands
 
-## Commands
-
-### `cognition index <directory>`
+#### `cognition index <directory>`
 
 Index all YAML decision files from a directory into ChromaDB.
 
 ```bash
 # Index decisions from the default directory
 python bin/cognition index decisions/
-
-# Index from a custom directory
-python bin/cognition index /path/to/my/decisions/
 ```
 
-**Behavior:**
-
-1. Recursively finds all `.yaml` and `.yml` files
-2. Parses each file, looking for `decision` or `title` keys
-3. Generates embeddings via Gemini API
-4. Upserts into the ChromaDB `cognition_decisions` collection
-5. Reports count of files found, parsed, and indexed
-
----
-
-### `cognition query <context>`
+#### `cognition query <context>`
 
 Search for semantically similar decisions.
 
 ```bash
 # Basic query
-python bin/cognition query "database selection for state storage"
-
-# Filter by category
-python bin/cognition query "auth approach" --category security
-
-# Filter by minimum confidence
-python bin/cognition query "deployment strategy" --min-confidence 0.7
+python bin/cognition query "database selection"
 ```
 
 **Options:**
 
-| Flag | Type | Description |
-|------|------|-------------|
-| `--category CAT` | string | Filter by decision category |
-| `--min-confidence N` | float | Minimum confidence threshold |
+| Flag | Description |
+|------|-------------|
+| `--category CAT` | Filter by decision category |
+| `--min-confidence N` | Minimum confidence threshold |
 
-**Output:**
-
-```
-============================================================
-Query: database selection for state storage
-============================================================
-
-[1] Use ChromaDB for semantic memory
-    Category: architecture
-    Confidence: 0.85
-    Distance: 0.2340
-    Status: reviewed
-
-[2] Switch to PostgreSQL for persistence
-    Category: infrastructure
-    Confidence: 0.72
-    Distance: 0.4120
-    Status: pending
-```
-
----
-
-### `cognition check`
+#### `cognition check`
 
 Evaluate guardrails against a decision context.
 
 ```bash
-# Check a high-stakes architecture decision
 python bin/cognition check --category architecture --stakes high --confidence 0.8
-
-# Check production deployment
-python bin/cognition check --affects-production true --code-review-completed false
-
-# Trading decision
-python bin/cognition check --category trading --decision-type strategy_change --backtest-completed true
 ```
 
-**Options:** Any `--key value` pair becomes a context field. Underscores in keys are replaced from hyphens.
-
-**Output:**
-
-```
-Loaded 3 guardrails
-
-============================================================
-Context: {
-  "category": "architecture",
-  "stakes": "high",
-  "confidence": 0.8
-}
-============================================================
-
-✅ ALLOWED - All guardrails passed
-
-  ✅ no-production-without-review: Not applicable
-  ✅ no-high-stakes-low-confidence: Confidence 0.8 meets minimum
-  ✅ no-trading-strategy-without-backtest: Not applicable
-```
-
-**Exit codes:** `0` = allowed, `1` = blocked
-
----
-
-### `cognition guardrails`
+#### `cognition guardrails`
 
 List all loaded guardrail definitions.
 
-```bash
-python bin/cognition guardrails
-```
+#### `cognition count`
 
-**Output:**
+Count indexed decisions.
 
-```
-Loaded 3 guardrails:
+#### `cognition patterns <subcommand>`
 
-🚫 no-production-without-review
-   Production changes require code review
-
-🚫 no-high-stakes-low-confidence
-   High-stakes decisions need minimum confidence
-
-🚫 no-trading-strategy-without-backtest
-   Trading strategy changes need backtesting
-   Scope: CryptoTrader
-```
+Run pattern analysis: `calibration`, `categories`, `antipatterns`, `full`.
 
 ---
 
-### `cognition count`
+## 2. CSTP Client (`scripts/cstp.py`)
 
-Count the number of indexed decisions in ChromaDB.
+**Location:** `scripts/cstp.py`
+**Use case:** Agent interaction, recording decisions, querying the server.
 
-```bash
-python bin/cognition count
-```
+### Setup
 
-**Output:**
+Requires `.secrets/cstp.env` with `CSTP_URL` and `CSTP_TOKEN`.
 
-```
-Indexed decisions: 47
-```
+### `cstp.py query`
 
----
-
-### `cognition patterns <subcommand>`
-
-Run pattern analysis on decision history.
-
-#### `cognition patterns calibration`
-
-Confidence calibration report with Brier scores.
+Query similar decisions from the server.
 
 ```bash
-# Text output
-python bin/cognition patterns calibration --dir decisions/
-
-# JSON output
-python bin/cognition patterns calibration --dir decisions/ --format json
+python scripts/cstp.py query "how to persist state" --top 5 --mode hybrid
 ```
 
-**Output:**
+**Options:**
 
-```
-============================================================
-Confidence Calibration Report
-============================================================
+| Flag | Description |
+|------|-------------|
+| `--top N` | Number of results (default: 5) |
+| `--category CAT` | Filter by category |
+| `--project PROJ` | Filter by project |
+| `--mode MODE` | Retrieval mode: `semantic`, `keyword`, `hybrid` |
+| `--bridge-side SIDE` | Search by bridge side: `structure`, `function` |
 
-Total decisions: 47
-With outcomes: 32
-Overall Brier: 0.1423
-Interpretation: Good calibration
+### `cstp.py check`
 
-Bucket       Count    Predicted  Actual     Brier
---------------------------------------------------
-0.0-0.2      2        0.15       0.00       0.0225
-0.2-0.4      5        0.32       0.40       0.0512
-0.4-0.6      8        0.52       0.50       0.0984
-0.6-0.8      10       0.72       0.70       0.0892
-0.8-1.0      7        0.88       0.86       0.0210
-```
-
-#### `cognition patterns categories`
-
-Category success analysis.
+Check guardrails before acting.
 
 ```bash
-python bin/cognition patterns categories --dir decisions/
+python scripts/cstp.py check -d "deploy to prod" -s high -f 0.9
 ```
 
-#### `cognition patterns antipatterns`
+### `cstp.py record`
 
-Detect decision anti-patterns.
+Record a decision.
 
 ```bash
-python bin/cognition patterns antipatterns --dir decisions/
+python scripts/cstp.py record \
+  -d "Use PostgreSQL" \
+  -c architecture \
+  -s high \
+  -f 0.85 \
+  --structure "PostgreSQL" \
+  --function "Relational persistence"
 ```
 
-**Detected anti-patterns:**
+**Options:**
 
-- **Overcalibration** — Confidence always in a narrow band
-- **Flip-flopping** — Contradictory decisions in short timeframes
-- **Anchoring** — Over-reliance on first option considered
-- **Blind spots** — Categories with zero reviewed outcomes
-- **Hot-hand fallacy** — Overconfidence after a success streak
+| Flag | Description |
+|------|-------------|
+| `-d`, `--decision` | Decision text (required) |
+| `-c`, `--category` | Category (required) |
+| `-s`, `--stakes` | Stakes: low, medium, high, critical |
+| `-f`, `--confidence` | Confidence (0.0-1.0) |
+| `--context` | Context description |
+| `-r`, `--reason` | Add reason (type:text) |
+| `--structure` | Bridge: structure/pattern |
+| `--function` | Bridge: function/purpose |
+| `--tolerance` | Bridge: features that don't matter |
+| `--enforcement` | Bridge: features that must be present |
+| `--prevention` | Bridge: features that must be absent |
 
-#### `cognition patterns full`
+### `cstp.py review`
 
-Complete pattern report (best used with `--format json`).
+Review a decision outcome.
 
 ```bash
-python bin/cognition patterns full --dir decisions/ --format json > report.json
+python scripts/cstp.py review --id <ID> --outcome success
 ```
 
-**Common options:**
+### `cstp.py calibration`
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--dir DIR` | `-d` | `decisions/` | Path to decisions directory |
-| `--format FMT` | `-f` | `text` | Output format: `text` or `json` |
+Get calibration stats.
+
+```bash
+python scripts/cstp.py calibration
+```
+
+### `cstp.py reason-stats`
+
+Get reason-type statistics.
+
+```bash
+python scripts/cstp.py reason-stats --min-reviewed 5
+```

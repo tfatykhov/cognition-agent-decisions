@@ -7,6 +7,8 @@
 | Pillar | Purpose |
 |--------|---------|
 | **Accelerators** | Cross-agent learning through semantic decision querying, hybrid retrieval, and pattern detection |
+| **Bridge Definitions** | Dual-indexing of decisions by structure (form) and function (purpose) |
+| **Deliberation** | Full chain-of-thought capture with step-by-step reasoning traces |
 | **Guardrails** | Policy enforcement that prevents violations before they occur |
 | **MCP Transport** | Native integration with any MCP-compliant agent via Model Context Protocol |
 
@@ -75,6 +77,8 @@ The MCP layer is a **zero-duplication bridge** — each MCP tool maps 1:1 to an 
 | Confidence Variance Detection | ✅ Shipped | v0.9.0 |
 | Hybrid Retrieval (BM25 + Semantic) | ✅ Shipped | v0.9.0 |
 | MCP Server (5 tools, stdio + Streamable HTTP) | ✅ Shipped | v0.9.0 |
+| Bridge-Definitions (F024) | ✅ Shipped | v0.9.1 |
+| Deliberation Traces (F023) | ✅ Shipped | v0.9.1 |
 | Shared Intent Protocol | 📋 Future | — |
 | Context Graphs | 📋 Future | — |
 | Multi-Agent Cognition Network | 📋 Future | — |
