@@ -96,17 +96,18 @@ graph TB
         AUDIT["Audit Trail<br/>audit/*.json"]
     end
 
-    Agents -->|"JSON-RPC 2.0 / Bearer Token"| CSTP_EP
-    Agents -->|"MCP / Streamable HTTP"| MCP_EP
-    Agents -->|"MCP / stdio"| STDIO
-    CLI_LAYER -->|"direct import"| CORE
-    DASHBOARD -->|"HTTP client"| CSTP_EP
+    Agents -->|JSON-RPC 2.0 / Bearer Token| CSTP_EP
+    Agents -->|MCP / Streamable HTTP| MCP_EP
+    Agents -->|MCP / stdio| STDIO
+    CLI_LAYER -->|direct import| CORE
+    DASHBOARD -->|HTTP client| CSTP_EP
+
     CSTP_EP --> DISP
-    MCP_SRV -->|"direct function calls"| SERVICES
+    MCP_SRV -->|direct function calls| SERVICES
     DISP --> SERVICES
     SERVICES --> CORE
     CORE --> STORAGE
-end
+
 ```
 
 ---
