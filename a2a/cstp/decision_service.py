@@ -412,7 +412,10 @@ class RecordDecisionRequest:
         if self.stakes not in valid_stakes:
             errors.append(f"stakes: must be one of {valid_stakes}")
 
-        valid_reason_types = {"authority", "analogy", "analysis", "pattern", "intuition"}
+        valid_reason_types = {
+            "authority", "analogy", "analysis", "pattern",
+            "intuition", "empirical", "elimination", "constraint",
+        }
         for i, reason in enumerate(self.reasons):
             if reason.type not in valid_reason_types:
                 errors.append(f"reasons[{i}].type: must be one of {valid_reason_types}")
