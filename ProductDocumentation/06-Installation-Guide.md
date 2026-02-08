@@ -143,15 +143,19 @@ source .venv/bin/activate
 # Install with pip (including A2A server dependencies)
 python -m pip install -e ".[a2a,dev]"
 
+# Install with MCP support
+python -m pip install -e ".[a2a,mcp,dev]"
+
 # Or with uv (faster)
 pip install uv
-uv pip install -e ".[a2a,dev]"
+uv pip install -e ".[a2a,mcp,dev]"
 ```
 
 **Dependency groups:**
 
 - **Core:** `pyyaml`, `chromadb`, `rank-bm25`
 - **`[a2a]`:** `fastapi`, `uvicorn`, `httpx`, `python-multipart`
+- **`[mcp]`:** `mcp` (Model Context Protocol SDK)
 - **`[dev]`:** `pytest`, `pytest-asyncio`, `pytest-cov`, `mypy`, `ruff`
 
 ### Step 3: Start ChromaDB
@@ -287,6 +291,55 @@ cp -r skills/openclaw/cognition_skill.py /path/to/openclaw/skills/
 ```
 
 The skill provides `query_decisions` and `check_guardrails` tools to any OpenClaw agent.
+
+---
+
+## Method 5: MCP Quick Start
+
+Connect any MCP-compliant agent to CSTP decision intelligence. The MCP server exposes 5 tools (`query_decisions`, `check_action`, `log_decision`, `review_outcome`, `get_stats`) via two transports.
+
+### Streamable HTTP (Remote)
+
+The CSTP server exposes MCP at `/mcp` on the same port (8100):
+
+```bash
+# Claude Code
+claude mcp add --transport http cstp-decisions http://your-server:8100/mcp
+
+# Any MCP client — point to:
+http://your-server:8100/mcp
+```
+
+### stdio (Local / Docker)
+
+```bash
+# Via Docker (recommended — container has all deps)
+docker exec -i cstp python -m a2a.mcp_server
+
+# Local development
+pip install -e ".[mcp]"
+export CHROMA_URL=http://localhost:8000
+export GEMINI_API_KEY=your-key
+python -m a2a.mcp_server
+```
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "cstp": {
+      "command": "docker",
+      "args": ["exec", "-i", "cstp", "python", "-m", "a2a.mcp_server"],
+      "env": {}
+    }
+  }
+}
+```
+
+> See [MCP Integration Guide](10-MCP-Integration.md) for full details, schemas, and examples.
 
 ---
 

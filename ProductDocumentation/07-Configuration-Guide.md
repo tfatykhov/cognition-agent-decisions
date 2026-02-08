@@ -47,7 +47,7 @@ Cognition Engines supports configuration through three sources (in order of prec
 |----------|---------|-------------|
 | `CSTP_AGENT_NAME` | `cognition-engines` | Agent name in discovery card |
 | `CSTP_AGENT_DESCRIPTION` | `Decision Intelligence Service` | Agent description |
-| `CSTP_AGENT_VERSION` | `0.7.0` | Reported version |
+| `CSTP_AGENT_VERSION` | `0.9.0` | Reported version |
 | `CSTP_AGENT_URL` | — | Public URL for agent card |
 | `CSTP_AGENT_CONTACT` | — | Contact email |
 
@@ -70,7 +70,7 @@ cors_origins:
 agent:
   name: cognition-engines
   description: Decision Intelligence Service - Semantic search and guardrail evaluation
-  version: 0.7.0
+  version: 0.9.0
   url: https://your-domain.com
   contact: admin@your-domain.com
 
@@ -139,6 +139,12 @@ auth:
 ```
 
 > **Warning:** Never disable auth in production.
+
+### MCP Authentication
+
+The MCP Streamable HTTP transport at `/mcp` inherits authentication from the FastAPI bearer token middleware. The same `CSTP_AUTH_TOKENS` configuration applies to both the JSON-RPC `/cstp` endpoint and the MCP `/mcp` endpoint.
+
+The stdio transport (`python -m a2a.mcp_server`) does not use bearer tokens — it relies on the process-level security of the hosting environment (e.g., Docker container isolation).
 
 ---
 

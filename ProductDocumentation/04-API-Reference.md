@@ -80,7 +80,7 @@ Health check with uptime tracking.
 ```json
 {
   "status": "ok",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "agent": "cognition-engines",
   "uptime_seconds": 3600,
   "timestamp": "2026-02-07T12:00:00Z"
@@ -97,11 +97,11 @@ A2A agent discovery card.
 {
   "name": "cognition-engines",
   "description": "Decision Intelligence Service",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "url": "http://localhost:8100",
   "capabilities": ["queryDecisions", "checkGuardrails", "recordDecision", "reviewDecision", "getCalibration"],
   "protocol": "cstp",
-  "protocolVersion": "0.7.0"
+  "protocolVersion": "0.9.0"
 }
 ```
 
@@ -533,6 +533,147 @@ Delete and rebuild the ChromaDB collection from YAML files.
   "id": "ri-001"
 }
 ```
+
+---
+
+## MCP Interface (Model Context Protocol)
+
+Since v0.9.0, CSTP exposes decision intelligence capabilities as **MCP tools** for native integration with any MCP-compliant agent. The MCP layer is a thin bridge — each tool maps 1:1 to an existing CSTP service method with zero code duplication.
+
+### Transports
+
+| Transport | Endpoint | Use Case |
+|-----------|----------|----------|
+| **Streamable HTTP** | `POST`/`GET` `http://host:8100/mcp` | Remote access from any network-reachable MCP client |
+| **stdio** | `python -m a2a.mcp_server` | Local access or Docker exec |
+
+### Connecting
+
+```bash
+# Claude Code — add as remote MCP server
+claude mcp add --transport http cstp-decisions http://your-server:8100/mcp
+
+# Claude Desktop — add to claude_desktop_config.json (stdio via Docker)
+{
+  "mcpServers": {
+    "cstp": {
+      "command": "docker",
+      "args": ["exec", "-i", "cstp", "python", "-m", "a2a.mcp_server"]
+    }
+  }
+}
+
+# Local development (stdio)
+python -m a2a.mcp_server
+```
+
+### MCP Tools
+
+#### `query_decisions`
+
+Search similar past decisions using semantic search, keyword matching, or hybrid retrieval.
+
+**Input Schema:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `query` | string | ✅ | — | Natural language query |
+| `limit` | int | ❌ | 5 | Max results (1–50) |
+| `retrieval_mode` | string | ❌ | `"hybrid"` | `"semantic"`, `"keyword"`, or `"hybrid"` |
+| `filters` | object | ❌ | — | `category`, `stakes`, `project`, `has_outcome` |
+
+**Maps to:** `cstp.queryDecisions`
+
+---
+
+#### `check_action`
+
+Validate an intended action against safety guardrails and policies.
+
+**Input Schema:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `description` | string | ✅ | — | Action you intend to take |
+| `category` | string | ❌ | — | Action category |
+| `stakes` | string | ❌ | `"medium"` | `"low"`, `"medium"`, `"high"`, `"critical"` |
+| `confidence` | float | ❌ | — | Your confidence (0.0–1.0) |
+
+**Maps to:** `cstp.checkGuardrails`
+
+---
+
+#### `log_decision`
+
+Record a decision to the immutable decision log.
+
+**Input Schema:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `decision` | string | ✅ | — | What you decided (state the choice) |
+| `confidence` | float | ✅ | — | Confidence level (0.0–1.0) |
+| `category` | string | ✅ | — | `"architecture"`, `"process"`, `"integration"`, `"tooling"`, `"security"` |
+| `stakes` | string | ❌ | `"medium"` | Stakes level |
+| `context` | string | ❌ | — | Situation context |
+| `reasons` | array | ❌ | — | `[{"type": "analysis", "text": "..."}]` — types: authority, analogy, analysis, pattern, intuition |
+| `tags` | array | ❌ | — | Tags for categorization |
+| `project` | string | ❌ | — | Project in owner/repo format |
+| `feature` | string | ❌ | — | Feature or epic name |
+| `pr` | int | ❌ | — | Pull request number |
+
+**Maps to:** `cstp.recordDecision`
+
+---
+
+#### `review_outcome`
+
+Record the outcome of a past decision for calibration.
+
+**Input Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | ✅ | Decision ID (8-char hex) |
+| `outcome` | string | ✅ | `"success"`, `"partial"`, `"failure"`, `"abandoned"` |
+| `actual_result` | string | ❌ | What actually happened |
+| `lessons` | string | ❌ | Lessons learned |
+| `notes` | string | ❌ | Additional review notes |
+
+**Maps to:** `cstp.reviewDecision`
+
+---
+
+#### `get_stats`
+
+Get calibration statistics to assess decision-making quality.
+
+**Input Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `category` | string | ❌ | Filter by category |
+| `project` | string | ❌ | Filter by project (owner/repo) |
+| `window` | string | ❌ | `"30d"`, `"60d"`, `"90d"`, or `"all"` |
+
+**Maps to:** `cstp.getCalibration`
+
+---
+
+### Error Handling
+
+MCP tool errors are returned as `TextContent` with JSON:
+
+```json
+{
+  "error": "validation_error",
+  "message": "1 validation error for QueryDecisionsInput..."
+}
+```
+
+Error types:
+- `validation_error` — Invalid input (Pydantic validation failure)
+- `internal_error` — Unexpected server error
 
 ---
 

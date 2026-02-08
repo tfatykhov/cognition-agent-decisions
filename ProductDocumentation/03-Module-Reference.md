@@ -140,12 +140,49 @@ Analyzes decision history for patterns, calibration accuracy, and anti-patterns.
 
 | Function | Description |
 |----------|-------------|
-| `lifespan(app)` | Async context manager: loads config, initializes `AuthManager`, creates `CstpDispatcher`, registers methods |
-| `create_app(config)` | Factory: creates FastAPI app with CORS, lifespan, and routes |
+| `lifespan(app)` | Async context manager: loads config, initializes `AuthManager`, creates `CstpDispatcher`, registers methods, initializes MCP `StreamableHTTPSessionManager` and runs it within the lifespan context |
+| `create_app(config)` | Factory: creates FastAPI app with CORS, lifespan, routes, and MCP mount at `/mcp` |
+| `_mount_mcp(app)` | Mounts the MCP Streamable HTTP handler as a raw ASGI app at `/mcp`; returns 503 if MCP SDK not installed |
 | `_register_routes(app)` | Registers `/health`, `/.well-known/agent.json`, and `POST /cstp` |
 | `run_server(host, port, config_path)` | Entry point: loads config, creates app, runs uvicorn |
 
-### 2.2 `config.py` — Configuration Management
+### 2.2 `mcp_server.py` — MCP Server
+
+Exposes CSTP capabilities as MCP tools for native integration with MCP-compliant agents (Claude Desktop, Claude Code, OpenClaw, etc.).
+
+| Component | Description |
+|-----------|-------------|
+| `mcp_app` | `Server("cstp-decisions")` instance — importable for mounting in ASGI apps |
+| `list_tools()` | Returns 5 `Tool` definitions with JSON Schema auto-generated from Pydantic models |
+| `call_tool(name, arguments)` | Dispatches tool calls to `_handle_*` functions; returns `TextContent` with JSON result |
+| `_handle_query_decisions()` | Validates input via `QueryDecisionsInput`, calls `query_service.query_decisions()` |
+| `_handle_check_action()` | Validates input via `CheckActionInput`, calls `guardrails_service.evaluate_guardrails()` |
+| `_handle_log_decision()` | Validates input via `LogDecisionInput`, calls `decision_service.record_decision()` |
+| `_handle_review_outcome()` | Validates input via `ReviewOutcomeInput`, calls `decision_service.review_decision()` |
+| `_handle_get_stats()` | Validates input via `GetStatsInput`, calls `calibration_service.get_calibration()` |
+| `run_stdio()` | Runs the MCP server with stdio transport (`async with stdio_server()`) |
+| `main()` | Entry point: `asyncio.run(run_stdio())` |
+
+**Transports:**
+
+- **stdio** — `python -m a2a.mcp_server` (local or `docker exec -i cstp python -m a2a.mcp_server`)
+- **Streamable HTTP** — Mounted at `/mcp` on port 8100 via `StreamableHTTPSessionManager` in `server.py` lifespan
+
+### 2.3 `mcp_schemas.py` — MCP Input Schemas
+
+Pydantic models that define the JSON Schema MCP clients see during tool discovery. They map to existing CSTP dataclass models but use Pydantic for automatic schema generation required by the MCP protocol.
+
+| Schema | MCP Tool | Key Fields |
+|--------|----------|------------|
+| `QueryDecisionsInput` | `query_decisions` | `query` (str), `limit` (1–50), `retrieval_mode` (semantic/keyword/hybrid), `filters` (QueryFiltersInput) |
+| `QueryFiltersInput` | (nested) | `category`, `stakes`, `project`, `has_outcome` |
+| `CheckActionInput` | `check_action` | `description` (str), `category`, `stakes` (low/medium/high/critical), `confidence` (0.0–1.0) |
+| `LogDecisionInput` | `log_decision` | `decision` (str), `confidence` (float), `category`, `stakes`, `context`, `reasons` (ReasonInput[]), `tags`, `project`, `feature`, `pr` |
+| `ReasonInput` | (nested) | `type` (authority/analogy/analysis/pattern/intuition), `text` (str) |
+| `ReviewOutcomeInput` | `review_outcome` | `id` (str), `outcome` (success/partial/failure/abandoned), `actual_result`, `lessons`, `notes` |
+| `GetStatsInput` | `get_stats` | `category`, `project`, `window` (30d/60d/90d/all) |
+
+### 2.4 `config.py` — Configuration Management
 
 | Class | Description |
 |-------|-------------|
@@ -157,7 +194,7 @@ Analyzes decision history for patterns, calibration accuracy, and anti-patterns.
 
 **Config loading priority:** YAML file → Environment variables → Defaults
 
-### 2.3 `auth.py` — Authentication
+### 2.5 `auth.py` — Authentication
 
 | Component | Description |
 |-----------|-------------|
@@ -165,7 +202,7 @@ Analyzes decision history for patterns, calibration accuracy, and anti-patterns.
 | `verify_bearer_token()` | FastAPI `Depends` function for route-level auth |
 | `set_auth_manager()` / `get_auth_manager()` | Global singleton management |
 
-### 2.4 `models/` — Shared Models
+### 2.6 `models/` — Shared Models
 
 | File | Classes |
 |------|---------|
@@ -182,7 +219,7 @@ Analyzes decision history for patterns, calibration accuracy, and anti-patterns.
 | Component | Description |
 |-----------|-------------|
 | `CstpDispatcher` | Registry of method name → async handler; dispatches requests, catches errors, returns JSON-RPC responses |
-| `register_methods(dispatcher)` | Registers all 9 method handlers |
+| `register_methods(dispatcher)` | Registers all 9 method handlers: `queryDecisions`, `checkGuardrails`, `listGuardrails`, `recordDecision`, `reviewDecision`, `getCalibration`, `attributeOutcomes`, `checkDrift`, `reindex` |
 | Custom error codes | `QUERY_FAILED` (-32003), `RATE_LIMITED` (-32002), `GUARDRAIL_EVAL_FAILED` (-32004), `RECORD_FAILED` (-32005), `REVIEW_FAILED` (-32006), `DECISION_NOT_FOUND` (-32007), `ATTRIBUTION_FAILED` (-32008) |
 
 ### 3.2 `query_service.py` — Semantic Search
@@ -194,7 +231,7 @@ Analyzes decision history for patterns, calibration accuracy, and anti-patterns.
 | `query_decisions()` | Full query pipeline: embedding, ChromaDB search, metadata filtering, optional BM25 hybrid |
 | `load_all_decisions()` | Loads YAML files from disk for BM25 indexing |
 
-### 3.3 `decision_service.py` — Decision Recording
+### 3.3 `decision_service.py` — Decision Recording & Review
 
 | Component | Description |
 |-----------|-------------|
@@ -204,6 +241,8 @@ Analyzes decision history for patterns, calibration accuracy, and anti-patterns.
 | `ReasoningStep` | Step in a reasoning trace: step number, thought, output, confidence, tags |
 | `RecordDecisionRequest` | Full request with validation: decision text, confidence, category, stakes, reasons, review_in |
 | `RecordDecisionResponse` | Success indicator, generated ID, file path, index status |
+| `ReviewDecisionRequest` | Review request: decision ID, outcome, actual result, lessons |
+| `review_decision()` | Loads decision YAML, updates with outcome and review metadata, reindexes in ChromaDB |
 | `build_decision_yaml()` | Constructs the YAML dictionary structure |
 | `write_decision_file()` | Writes to `decisions/YYYY/MM/YYYY-MM-DD-decision-<id>.yaml` |
 | `generate_embedding(text)` | Gemini embedding for ChromaDB indexing |
