@@ -27,6 +27,7 @@ from mcp.types import (
 
 from .mcp_schemas import (
     CheckActionInput,
+    GetDecisionInput,
     GetStatsInput,
     LogDecisionInput,
     QueryDecisionsInput,
@@ -130,6 +131,16 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=GetStatsInput.model_json_schema(),
         ),
+        Tool(
+            name="get_decision",
+            description=(
+                "Retrieve full details of a single decision by ID. Returns the "
+                "complete record including context, reasons, project metadata, "
+                "outcome, and review information. Use when you need the full "
+                "decision content beyond what query_decisions returns."
+            ),
+            inputSchema=GetDecisionInput.model_json_schema(),
+        ),
     ]
 
 
@@ -153,6 +164,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "get_stats":
             return await _handle_get_stats(arguments)
+
+        if name == "get_decision":
+            return await _handle_get_decision_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -319,6 +333,27 @@ async def _handle_get_stats(arguments: dict[str, Any]) -> list[TextContent]:
 
     # Get calibration stats
     response = await get_calibration(request)
+
+    # Format response
+    result = response.to_dict()
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_get_decision_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle get_decision tool call."""
+    from .cstp.decision_service import GetDecisionRequest, get_decision
+
+    # Validate input via Pydantic
+    args = GetDecisionInput(**arguments)
+
+    # Create request and fetch
+    request = GetDecisionRequest.from_dict({"id": args.id})
+    response = await get_decision(request)
 
     # Format response
     result = response.to_dict()

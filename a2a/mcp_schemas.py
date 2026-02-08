@@ -188,3 +188,13 @@ class GetStatsInput(BaseModel):
         default=None,
         description="Rolling time window for stats calculation",
     )
+
+
+class GetDecisionInput(BaseModel):
+    """Input for the get_decision tool."""
+
+    id: str = Field(
+        ...,
+        min_length=1,
+        description="Decision ID to retrieve (8-char hex, e.g. 'b02d10ba')",
+    )
