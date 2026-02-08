@@ -617,6 +617,19 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
         deliberation=request.deliberation,
     )
 
+    # F024 Phase 3: Auto-extract bridge if not explicitly provided
+    bridge_auto = False
+    if not request.bridge or not request.bridge.has_content():
+        try:
+            from .bridge_extractor import auto_extract_bridge
+
+            extracted = auto_extract_bridge(request)
+            if extracted and extracted.has_content():
+                request.bridge = extracted
+                bridge_auto = True
+        except Exception:
+            logger.debug("Bridge auto-extraction failed", exc_info=True)
+
     errors = request.validate()
     if errors:
         raise ValueError(f"Validation failed: {'; '.join(errors)}")
@@ -632,6 +645,9 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
+    if bridge_auto and request.bridge:
+        result["bridge_auto"] = True
 
     return result
 
