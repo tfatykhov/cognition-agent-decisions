@@ -438,6 +438,24 @@ If you don't provide explicit bridge definitions, the system auto-extracts them 
 - **Enforcement**: Features that MUST be present
 - **Prevention**: Features that MUST NOT be present
 
+## Related Decisions (F025)
+
+Every decision automatically links to the decisions found during pre-decision queries. This creates lightweight graph edges without a graph database.
+
+```yaml
+related_to:
+  - id: abc12345
+    summary: "Used PostgreSQL for agent memory"
+    distance: 0.234
+  - id: def45678
+    summary: "Adopted retry pattern for API calls"
+    distance: 0.312
+```
+
+- **Auto-populated**: Extracted from query results in the deliberation trace
+- **Zero config**: Works with existing query/check/record workflow
+- **Deduplication**: Keeps the closest distance when same decision appears across multiple queries
+
 ## Guardrail Example
 
 ```yaml
@@ -468,6 +486,7 @@ message: "High-stakes decisions require ≥50% confidence"
 | v0.9.1 | F022 MCP Server | ✅ Shipped |
 | v0.9.2 | F023 Deliberation Traces | ✅ Shipped |
 | v0.9.3 | F024 Bridge-Definitions | ✅ Shipped |
+| v0.9.4 | F025 Related Decisions | ✅ Shipped |
 | v1.0.0 | Multi-Agent Cognition Network | Planned |
 
 ### v0.7.0 — Cross-Agent Federation
@@ -485,6 +504,7 @@ message: "High-stakes decisions require ≥50% confidence"
 - **F022 MCP Server**: Native integration for Claude Desktop and OpenClaw
 - **F023 Deliberation Traces**: Capture the *process* of thinking, not just the result
 - **F024 Bridge-Definitions**: Dual-indexing for structure (form) and function (purpose)
+- **F025 Related Decisions**: Auto-linked predecessors from pre-decision queries
 
 ### v1.0.0 — Multi-Agent Cognition Network
 - **Semantic State Transfer**: Export decision context in portable format
