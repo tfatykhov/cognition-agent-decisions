@@ -21,9 +21,29 @@ class QueryFiltersInput(BaseModel):
         default=None,
         description="Filter by stakes level: low, medium, high, critical",
     )
+    status: list[str] | None = Field(
+        default=None,
+        description="Filter by status: pending, reviewed",
+    )
     project: str | None = Field(
         default=None,
         description="Filter by project (owner/repo format)",
+    )
+    feature: str | None = Field(
+        default=None,
+        description="Filter by feature/epic name",
+    )
+    pr: int | None = Field(
+        default=None,
+        description="Filter by PR number",
+    )
+    min_confidence: float | None = Field(
+        default=None,
+        description="Minimum confidence threshold (0.0-1.0)",
+    )
+    max_confidence: float | None = Field(
+        default=None,
+        description="Maximum confidence threshold (0.0-1.0)",
     )
     has_outcome: bool | None = Field(
         default=None,
