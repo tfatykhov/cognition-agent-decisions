@@ -285,6 +285,30 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     if args.pr is not None:
         params["pr"] = args.pr
 
+    # F023: Pass deliberation trace
+    if args.deliberation:
+        delib: dict[str, Any] = {}
+        if args.deliberation.inputs:
+            delib["inputs"] = [
+                {"id": i.id, "text": i.text, **({"source": i.source} if i.source else {})}
+                for i in args.deliberation.inputs
+            ]
+        if args.deliberation.steps:
+            delib["steps"] = [
+                {
+                    "step": s.step,
+                    "thought": s.thought,
+                    **({"inputs_used": s.inputs_used} if s.inputs_used else {}),
+                    **({"type": s.type} if s.type else {}),
+                    **({"conclusion": s.conclusion} if s.conclusion else {}),
+                }
+                for s in args.deliberation.steps
+            ]
+        if args.deliberation.total_duration_ms is not None:
+            delib["total_duration_ms"] = args.deliberation.total_duration_ms
+        if delib:
+            params["deliberation"] = delib
+
     # Create request and record
     request = RecordDecisionRequest.from_dict(params, agent_id="mcp-client")
     response = await record_decision(request)

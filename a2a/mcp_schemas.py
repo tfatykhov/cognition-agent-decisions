@@ -101,6 +101,69 @@ class ReasonInput(BaseModel):
     )
 
 
+class DeliberationInputSchema(BaseModel):
+    """An input/evidence gathered during deliberation."""
+
+    id: str = Field(
+        ...,
+        description="Short identifier (e.g., 'i1', 'i2')",
+    )
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Description of the input/evidence",
+    )
+    source: str | None = Field(
+        default=None,
+        description="Where the input came from (url, file, memory, api, etc.)",
+    )
+
+
+class DeliberationStepSchema(BaseModel):
+    """A step in the deliberation process."""
+
+    step: int = Field(
+        ...,
+        ge=1,
+        description="Step number (1-indexed)",
+    )
+    thought: str = Field(
+        ...,
+        min_length=1,
+        description="What was considered at this step",
+    )
+    inputs_used: list[str] | None = Field(
+        default=None,
+        description="Which input IDs contributed to this step (e.g., ['i1', 'i2'])",
+    )
+    type: str | None = Field(
+        default=None,
+        description="Reasoning type used: analysis, pattern, empirical, etc.",
+    )
+    conclusion: bool = Field(
+        default=False,
+        description="Whether this step produced the final conclusion",
+    )
+
+
+class DeliberationSchema(BaseModel):
+    """Full deliberation trace capturing chain-of-thought."""
+
+    inputs: list[DeliberationInputSchema] | None = Field(
+        default=None,
+        description="Evidence/inputs gathered during deliberation",
+    )
+    steps: list[DeliberationStepSchema] | None = Field(
+        default=None,
+        description="Reasoning steps showing how inputs were combined",
+    )
+    total_duration_ms: int | None = Field(
+        default=None,
+        ge=0,
+        description="Total time spent deliberating in milliseconds",
+    )
+
+
 class LogDecisionInput(BaseModel):
     """Input for the log_decision tool."""
 
@@ -147,6 +210,10 @@ class LogDecisionInput(BaseModel):
         default=None,
         ge=1,
         description="Pull request number",
+    )
+    deliberation: DeliberationSchema | None = Field(
+        default=None,
+        description="Chain-of-thought trace: inputs gathered, reasoning steps, and timing",
     )
 
 
