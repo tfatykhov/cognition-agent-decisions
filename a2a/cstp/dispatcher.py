@@ -172,6 +172,14 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
     # Parse request
     request = QueryDecisionsRequest.from_params(params)
 
+    # F024: Prefix query with bridge-side for directional search
+    effective_query = request.query
+    if request.bridge_side and effective_query.strip():
+        if request.bridge_side == "structure":
+            effective_query = f"Structure: {effective_query}"
+        elif request.bridge_side == "function":
+            effective_query = f"Function: {effective_query}"
+
     # F017: Handle different retrieval modes
     scores: dict[str, dict[str, float]] = {}
 
@@ -240,7 +248,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         # Use cached index for performance
         cache_key = f"kw:{request.filters.category}:{request.filters.project}"
         bm25_index = get_cached_index(all_decisions, cache_key)
-        keyword_results = bm25_index.search(request.query, request.limit)
+        keyword_results = bm25_index.search(effective_query, request.limit)
 
         # Build decision map for quick lookup
         decision_map = {d["id"]: d for d in all_decisions}
@@ -274,7 +282,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         # Hybrid: combine semantic + keyword
         # First, get semantic results
         response = await query_decisions(
-            query=request.query,
+            query=effective_query,
             n_results=request.limit * 2,  # Get more for merging
             category=request.filters.category,
             min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,
@@ -304,7 +312,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         # Use cached index for performance
         cache_key = f"hybrid:{request.filters.category}:{request.filters.project}"
         bm25_index = get_cached_index(all_decisions, cache_key)
-        keyword_results = bm25_index.search(request.query, request.limit * 2)
+        keyword_results = bm25_index.search(effective_query, request.limit * 2)
 
         # Merge results
         merged = merge_results(
@@ -363,7 +371,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
     else:
         # Default: semantic-only search
         response = await query_decisions(
-            query=request.query,
+            query=effective_query,
             n_results=request.limit,
             category=request.filters.category,
             min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,

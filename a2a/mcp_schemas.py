@@ -73,6 +73,10 @@ class QueryDecisionsInput(BaseModel):
         default=None,
         description="Optional filters to narrow results",
     )
+    bridge_side: Literal["structure", "function"] | None = Field(
+        default=None,
+        description="Search by bridge side: 'structure' (what pattern looks like) or 'function' (what problem it solves)",
+    )
 
 
 class CheckActionInput(BaseModel):
