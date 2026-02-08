@@ -1111,6 +1111,14 @@ async def reindex_decision(
     if data.get("lessons"):
         parts.append(f"Lessons: {data['lessons']}")
 
+    # F024: Include bridge-definition in reindex
+    bridge_data = data.get("bridge")
+    if bridge_data and isinstance(bridge_data, dict):
+        if bridge_data.get("structure"):
+            parts.append(f"Structure: {bridge_data['structure']}")
+        if bridge_data.get("function"):
+            parts.append(f"Function: {bridge_data['function']}")
+
     embedding_text = "\n".join(parts)
 
     # Build metadata — use fallback chain for title (decision > summary)

@@ -37,9 +37,9 @@ class TestBridgeDefinition(unittest.TestCase):
         bridge = BridgeDefinition.from_dict(data)
         assert bridge.structure == "retry with exponential backoff"
         assert bridge.function == "handle transient network failures"
-        assert len(bridge.tolerance) == 2
-        assert len(bridge.enforcement) == 2
-        assert len(bridge.prevention) == 1
+        assert bridge.tolerance == ["max retries count", "jitter algorithm"]
+        assert bridge.enforcement == ["must have backoff", "must have timeout"]
+        assert bridge.prevention == ["must not retry non-idempotent calls"]
 
     def test_from_dict_purpose_alias(self):
         """The 'purpose' key should work as alias for 'function'."""
@@ -154,9 +154,9 @@ class TestRecordDecisionRequestWithBridge(unittest.TestCase):
         }
         req = RecordDecisionRequest.from_dict(data)
         assert req.bridge is not None
-        assert len(req.bridge.tolerance) == 2
-        assert len(req.bridge.enforcement) == 2
-        assert len(req.bridge.prevention) == 2
+        assert req.bridge.tolerance == ["log level", "exception type"]
+        assert req.bridge.enforcement == ["must catch all", "must log"]
+        assert req.bridge.prevention == ["must not re-raise", "must not swallow silently"]
 
     def test_bridge_ignored_if_not_dict(self):
         data = {
