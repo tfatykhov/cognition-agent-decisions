@@ -555,4 +555,4 @@ cognition-agent-decisions/
 
 ## License
 
-Apache 2.0 — See [LICENSE](LICENSE)
+Creative Commons — See [LICENSE](LICENSE)
