@@ -103,13 +103,31 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Dispatch tool calls to CSTP services."""
     logger.info("Tool called: %s", name)
 
-    if name == "query_decisions":
-        return await _handle_query_decisions(arguments)
+    try:
+        if name == "query_decisions":
+            return await _handle_query_decisions(arguments)
 
-    if name == "check_action":
-        return await _handle_check_action(arguments)
+        if name == "check_action":
+            return await _handle_check_action(arguments)
 
-    raise ValueError(f"Unknown tool: {name}")
+        raise ValueError(f"Unknown tool: {name}")
+
+    except ValueError as e:
+        logger.warning("Validation error in tool %s: %s", name, e)
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "validation_error", "message": str(e)}),
+            )
+        ]
+    except Exception as e:
+        logger.error("Tool %s failed: %s", name, e, exc_info=True)
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps({"error": "internal_error", "message": str(e)}),
+            )
+        ]
 
 
 async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent]:
