@@ -257,16 +257,19 @@ async def get_reviewed_decisions(
             if feature and data.get("feature") != feature:
                 continue
 
-            # Date filters
+            # Date filters — normalize to YYYY-MM-DD for consistent comparison
             decision_date = data.get("date", "")
             if isinstance(decision_date, str):
                 date_str = decision_date[:10]  # YYYY-MM-DD
             else:
                 date_str = ""
 
-            if since and date_str < since:
+            since_normalized = since[:10] if since else None
+            until_normalized = until[:10] if until else None
+
+            if since_normalized and date_str < since_normalized:
                 continue
-            if until and date_str > until:
+            if until_normalized and date_str > until_normalized:
                 continue
 
             decisions.append(data)
