@@ -1,6 +1,5 @@
 """Tests for reason-type calibration statistics service."""
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -173,10 +172,10 @@ def test_calculate_reason_type_stats(decisions_dir):
     )
     stats = calculate_reason_type_stats(decisions, min_reviewed=2)
 
-    # Analysis should be present
+    # Analysis should be present (aaa, bbb, eee, fff, ggg = 5 total)
     analysis_stat = next(s for s in stats if s.reason_type == "analysis")
-    assert analysis_stat.total_uses == 4  # aaa, bbb, eee, fff (ggg)
-    assert analysis_stat.reviewed_uses >= 3  # At least aaa, bbb, eee
+    assert analysis_stat.total_uses == 5
+    assert analysis_stat.reviewed_uses >= 3  # At least aaa, bbb, eee, ggg
 
     # Intuition should be present
     intuition_stat = next(s for s in stats if s.reason_type == "intuition")
@@ -264,7 +263,7 @@ async def test_get_reason_stats_full(decisions_dir):
     response = await get_reason_stats(request, decisions_path=str(decisions_dir))
 
     assert response.total_decisions == 7
-    assert response.reviewed_decisions == 5  # 5 with outcomes
+    assert response.reviewed_decisions == 6  # 6 with outcomes (fff is pending)
     assert len(response.by_reason_type) > 0
     assert response.diversity is not None
     assert response.query_time != ""
@@ -353,5 +352,5 @@ def test_reason_type_stats_to_dict():
     assert d["reasonType"] == "analysis"
     assert d["totalUses"] == 10
     assert d["reviewedUses"] == 8
-    assert d["successRate"] == 0.813  # rounded
+    assert d["successRate"] == 0.812  # rounded from 0.8125
     assert d["brierScore"] == 0.0456
