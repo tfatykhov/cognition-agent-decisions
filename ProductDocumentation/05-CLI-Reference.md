@@ -132,6 +132,14 @@ python scripts/cstp.py record \
 | `--enforcement` | Bridge: features that must be present |
 | `--prevention` | Bridge: features that must be absent |
 
+### `cstp.py get`
+
+Get full decision details by ID, including reasons, bridge, related decisions, and deliberation.
+
+```bash
+python scripts/cstp.py get <ID>
+```
+
 ### `cstp.py review`
 
 Review a decision outcome.

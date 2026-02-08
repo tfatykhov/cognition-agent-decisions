@@ -377,6 +377,7 @@ Record a new decision with full metadata, reasoning trace, and optional guardrai
     "bridge_auto": false,
     "deliberation_auto": true,
     "deliberation_inputs_count": 3,
+    "related_count": 5,
     "message": "Decision recorded and indexed"
   },
   "id": "r-001"
