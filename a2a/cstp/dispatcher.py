@@ -217,6 +217,18 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             retrieval_mode="list",
             scores={},
         )
+
+        # F023 Phase 2: Track query for auto-deliberation
+        from .deliberation_tracker import track_query
+
+        track_query(
+            key=f"rpc:{agent_id}",
+            query=request.query,
+            result_count=result.total,
+            top_ids=[d.id for d in result.decisions[:5]],
+            retrieval_mode="list",
+        )
+
         return result.to_dict()
 
     if request.retrieval_mode == "keyword":
@@ -394,6 +406,17 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         scores=scores if scores else {},
     )
 
+    # F023 Phase 2: Track query for auto-deliberation
+    from .deliberation_tracker import track_query
+
+    track_query(
+        key=f"rpc:{agent_id}",
+        query=request.query,
+        result_count=result.total,
+        top_ids=[d.id for d in result.decisions[:5]],
+        retrieval_mode=request.retrieval_mode,
+    )
+
     return result.to_dict()
 
 
@@ -464,6 +487,16 @@ async def _handle_check_guardrails(params: dict[str, Any], agent_id: str) -> dic
         agent="cognition-engines",
     )
 
+    # F023 Phase 2: Track guardrail check for auto-deliberation
+    from .deliberation_tracker import track_guardrail
+
+    track_guardrail(
+        key=f"rpc:{agent_id}",
+        description=request.action.description,
+        allowed=eval_result.allowed,
+        violation_count=len(eval_result.violations),
+    )
+
     return result.to_dict()
 
 
@@ -529,6 +562,16 @@ async def _handle_get_decision(params: dict[str, Any], agent_id: str) -> dict[st
     if not response.found:
         raise ValueError(response.error or f"Decision not found: {request.decision_id}")
 
+    # F023 Phase 2: Track decision lookup for auto-deliberation
+    from .deliberation_tracker import track_lookup
+
+    dec = response.decision or {}
+    track_lookup(
+        key=f"rpc:{agent_id}",
+        decision_id=request.decision_id,
+        title=dec.get("summary", dec.get("decision", ""))[:50],
+    )
+
     return response.to_dict()
 
 
@@ -566,6 +609,14 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     # Parse and validate request
     request = RecordDecisionRequest.from_dict(params, agent_id=agent_id)
 
+    # F023 Phase 2: Auto-attach deliberation from tracked inputs
+    from .deliberation_tracker import auto_attach_deliberation
+
+    request.deliberation, auto_captured = auto_attach_deliberation(
+        key=f"rpc:{agent_id}",
+        deliberation=request.deliberation,
+    )
+
     errors = request.validate()
     if errors:
         raise ValueError(f"Validation failed: {'; '.join(errors)}")
@@ -576,7 +627,13 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     if not response.success:
         raise RuntimeError(response.error or "Failed to record decision")
 
-    return response.to_dict()
+    # Add auto-deliberation info to response only if auto-capture happened
+    result = response.to_dict()
+    if auto_captured and request.deliberation:
+        result["deliberation_auto"] = True
+        result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
+    return result
 
 
 async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -674,4 +731,16 @@ async def _handle_get_reason_stats(params: dict[str, Any], agent_id: str) -> dic
     """
     request = GetReasonStatsRequest.from_dict(params)
     response = await get_reason_stats(request)
-    return response.to_dict()
+
+    # F023 Phase 2: Track stats lookup for auto-deliberation
+    from .deliberation_tracker import track_stats
+
+    result = response.to_dict()
+    track_stats(
+        key=f"rpc:{agent_id}",
+        total_decisions=result.get("totalDecisions", 0),
+        reason_type_count=len(result.get("byReasonType", [])),
+        diversity=result.get("diversity", {}).get("avgTypesPerDecision"),
+    )
+
+    return result

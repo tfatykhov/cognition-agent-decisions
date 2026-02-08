@@ -13,6 +13,7 @@ ASGI applications (see ``a2a/server.py``).
 """
 
 import asyncio
+import contextvars
 import json
 import logging
 import sys
@@ -42,6 +43,18 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger("cstp-mcp")
+
+# F023 Phase 2: ContextVar for MCP session tracking key
+# Set by the HTTP handler or defaults to "mcp:default"
+_mcp_tracker_key: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "_mcp_tracker_key", default="mcp:default"
+)
+
+
+def get_mcp_tracker_key() -> str:
+    """Get the current MCP tracker key for deliberation tracking."""
+    return _mcp_tracker_key.get()
+
 
 # Server instance — importable for mounting in ASGI apps (see a2a/server.py)
 mcp_app = Server("cstp-decisions")
@@ -293,6 +306,18 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
         scores={},
     )
     result = result_obj.to_dict()
+
+    # F023 Phase 2: Track query for auto-deliberation
+    from .cstp.deliberation_tracker import track_query
+
+    track_query(
+        key=get_mcp_tracker_key(),
+        query=request.query,
+        result_count=result_obj.total,
+        top_ids=[d.id for d in result_obj.decisions[:5]],
+        retrieval_mode=request.retrieval_mode,
+    )
+
     return [
         TextContent(
             type="text",
@@ -364,6 +389,17 @@ async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
         "warnings": warnings,
         "evaluated": eval_result.evaluated,
     }
+
+    # F023 Phase 2: Track guardrail check for auto-deliberation
+    from .cstp.deliberation_tracker import track_guardrail
+
+    track_guardrail(
+        key=get_mcp_tracker_key(),
+        description=request.action.description,
+        allowed=eval_result.allowed,
+        violation_count=len(eval_result.violations),
+    )
+
     return [
         TextContent(
             type="text",
@@ -425,10 +461,23 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
     # Create request and record
     request = RecordDecisionRequest.from_dict(params, agent_id="mcp-client")
+
+    # F023 Phase 2: Auto-attach deliberation from tracked inputs
+    from .cstp.deliberation_tracker import auto_attach_deliberation
+
+    request.deliberation, auto_captured = auto_attach_deliberation(
+        key=get_mcp_tracker_key(),
+        deliberation=request.deliberation,
+    )
+
     response = await record_decision(request)
 
     # Format response
     result = response.to_dict()
+    if auto_captured and request.deliberation:
+        result["deliberation_auto"] = True
+        result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
     return [
         TextContent(
             type="text",
@@ -508,6 +557,17 @@ async def _handle_get_decision_mcp(arguments: dict[str, Any]) -> list[TextConten
     request = GetDecisionRequest.from_dict({"id": args.id})
     response = await get_decision(request)
 
+    # F023 Phase 2: Track lookup for auto-deliberation
+    if response.found:
+        from .cstp.deliberation_tracker import track_lookup
+
+        dec = response.decision or {}
+        track_lookup(
+            key=get_mcp_tracker_key(),
+            decision_id=args.id,
+            title=dec.get("summary", dec.get("decision", ""))[:50],
+        )
+
     # Format response
     result = response.to_dict()
     return [
@@ -546,6 +606,17 @@ async def _handle_get_reason_stats_mcp(arguments: dict[str, Any]) -> list[TextCo
 
     # Format response
     result = response.to_dict()
+
+    # F023 Phase 2: Track stats lookup for auto-deliberation
+    from .cstp.deliberation_tracker import track_stats
+
+    track_stats(
+        key=get_mcp_tracker_key(),
+        total_decisions=result.get("totalDecisions", 0),
+        reason_type_count=len(result.get("byReasonType", [])),
+        diversity=result.get("diversity", {}).get("avgTypesPerDecision"),
+    )
+
     return [
         TextContent(
             type="text",
