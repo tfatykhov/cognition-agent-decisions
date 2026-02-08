@@ -464,18 +464,9 @@ async def get_decision(request: GetDecisionRequest) -> GetDecisionResponse:
     if not base.exists():
         return GetDecisionResponse(found=False, error="Decisions directory not found")
 
-    # Search for matching file
+    # Search for matching file (glob handles both exact and prefix matches)
     pattern = f"*-decision-{request.decision_id}*.yaml"
     matches = list(base.rglob(pattern))
-
-    if not matches:
-        # Try partial match (short ID)
-        for yaml_file in base.rglob("*-decision-*.yaml"):
-            filename = yaml_file.stem
-            parts = filename.rsplit("-decision-", 1)
-            if len(parts) == 2 and parts[1].startswith(request.decision_id):
-                matches.append(yaml_file)
-                break
 
     if not matches:
         return GetDecisionResponse(
