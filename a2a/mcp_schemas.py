@@ -198,3 +198,35 @@ class GetDecisionInput(BaseModel):
         min_length=1,
         description="Decision ID to retrieve (8-char hex, e.g. 'b02d10ba')",
     )
+
+
+class ReasonStatsFiltersInput(BaseModel):
+    """Optional filters for reason-type stats."""
+
+    category: str | None = Field(
+        default=None,
+        description="Filter by category: architecture, process, integration, tooling, security",
+    )
+    stakes: str | None = Field(
+        default=None,
+        description="Filter by stakes level: low, medium, high, critical",
+    )
+    project: str | None = Field(
+        default=None,
+        description="Filter by project (owner/repo format)",
+    )
+
+
+class GetReasonStatsInput(BaseModel):
+    """Input for the get_reason_stats tool."""
+
+    filters: ReasonStatsFiltersInput | None = Field(
+        default=None,
+        description="Optional filters to narrow analysis",
+    )
+    min_reviewed: int = Field(
+        default=3,
+        ge=1,
+        le=50,
+        description="Minimum reviewed decisions to include a reason type in stats",
+    )

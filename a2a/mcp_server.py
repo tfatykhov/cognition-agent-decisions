@@ -28,6 +28,7 @@ from mcp.types import (
 from .mcp_schemas import (
     CheckActionInput,
     GetDecisionInput,
+    GetReasonStatsInput,
     GetStatsInput,
     LogDecisionInput,
     QueryDecisionsInput,
@@ -141,6 +142,17 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=GetDecisionInput.model_json_schema(),
         ),
+        Tool(
+            name="get_reason_stats",
+            description=(
+                "Analyze which reason types (analysis, pattern, empirical, etc.) "
+                "correlate with better decision outcomes. Shows per-type success "
+                "rates, Brier scores, and diversity analysis (do decisions with "
+                "more diverse reasoning perform better?). Use to improve "
+                "decision-making by understanding which reasoning approaches work."
+            ),
+            inputSchema=GetReasonStatsInput.model_json_schema(),
+        ),
     ]
 
 
@@ -167,6 +179,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "get_decision":
             return await _handle_get_decision_mcp(arguments)
+
+        if name == "get_reason_stats":
+            return await _handle_get_reason_stats_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -354,6 +369,42 @@ async def _handle_get_decision_mcp(arguments: dict[str, Any]) -> list[TextConten
     # Create request and fetch
     request = GetDecisionRequest.from_dict({"id": args.id})
     response = await get_decision(request)
+
+    # Format response
+    result = response.to_dict()
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_get_reason_stats_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle get_reason_stats tool call."""
+    from .cstp.reason_stats_service import GetReasonStatsRequest, get_reason_stats
+
+    # Validate input via Pydantic
+    args = GetReasonStatsInput(**arguments)
+
+    # Build params dict for CSTP
+    params: dict[str, Any] = {
+        "minReviewed": args.min_reviewed,
+    }
+    if args.filters:
+        filters: dict[str, Any] = {}
+        if args.filters.category:
+            filters["category"] = args.filters.category
+        if args.filters.stakes:
+            filters["stakes"] = args.filters.stakes
+        if args.filters.project:
+            filters["project"] = args.filters.project
+        if filters:
+            params["filters"] = filters
+
+    # Create request and fetch
+    request = GetReasonStatsRequest.from_dict(params)
+    response = await get_reason_stats(request)
 
     # Format response
     result = response.to_dict()
