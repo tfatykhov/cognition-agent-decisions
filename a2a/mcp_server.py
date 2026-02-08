@@ -4,10 +4,12 @@ Exposes CSTP capabilities as MCP tools so any MCP-compliant agent
 (Claude Desktop, OpenClaw, etc.) can discover and use decision
 intelligence natively.
 
-F022 Phase 1: query_decisions + check_action tools via stdio transport.
+Transports:
+    - stdio: ``python -m a2a.mcp_server`` (local / Docker exec)
+    - Streamable HTTP: mounted at ``/mcp`` on the FastAPI server (remote)
 
-Usage:
-    python -m a2a.mcp_server
+The ``mcp_app`` Server instance is importable for mounting into other
+ASGI applications (see ``a2a/server.py``).
 """
 
 import asyncio
@@ -39,8 +41,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("cstp-mcp")
 
-# Server instance
-app = Server("cstp-decisions")
+# Server instance — importable for mounting in ASGI apps (see a2a/server.py)
+mcp_app = Server("cstp-decisions")
 
 
 def _build_query_params(args: QueryDecisionsInput) -> dict[str, Any]:
@@ -78,7 +80,7 @@ def _build_guardrails_params(args: CheckActionInput) -> dict[str, Any]:
     return {"action": action}
 
 
-@app.list_tools()
+@mcp_app.list_tools()
 async def list_tools() -> list[Tool]:
     """List available CSTP tools for MCP discovery."""
     return [
@@ -131,7 +133,7 @@ async def list_tools() -> list[Tool]:
     ]
 
 
-@app.call_tool()
+@mcp_app.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Dispatch tool calls to CSTP services."""
     logger.info("Tool called: %s", name)
@@ -333,10 +335,10 @@ async def run_stdio() -> None:
     logger.info("Starting CSTP MCP server (stdio transport)")
 
     async with stdio_server() as (read_stream, write_stream):
-        await app.run(
+        await mcp_app.run(
             read_stream,
             write_stream,
-            app.create_initialization_options(),
+            mcp_app.create_initialization_options(),
         )
 
 
