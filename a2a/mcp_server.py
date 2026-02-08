@@ -459,6 +459,20 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
         if delib:
             params["deliberation"] = delib
 
+    # F024: Pass bridge-definition
+    if args.bridge:
+        bridge_data: dict[str, Any] = {
+            "structure": args.bridge.structure,
+            "function": args.bridge.function,
+        }
+        if args.bridge.tolerance:
+            bridge_data["tolerance"] = args.bridge.tolerance
+        if args.bridge.enforcement:
+            bridge_data["enforcement"] = args.bridge.enforcement
+        if args.bridge.prevention:
+            bridge_data["prevention"] = args.bridge.prevention
+        params["bridge"] = bridge_data
+
     # Create request and record
     request = RecordDecisionRequest.from_dict(params, agent_id="mcp-client")
 
