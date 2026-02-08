@@ -151,11 +151,13 @@ patterns for Membrain's STDP-based learning.
 - Store in YAML alongside existing fields
 - Backward compatible (field is optional for reads)
 
-### Phase 2: Client-Side Capture
-- Add `DeliberationContext` to `cstp.py`
-- Auto-capture inputs from query/check calls
-- `add_step()` API for explicit reasoning steps
-- Attach to `log_decision` automatically
+### Phase 2: Server-Side Auto-Capture
+- MCP server: per-session `DeliberationContext` in `StreamableHTTPSessionManager`
+- Auto-register `query_decisions` / `check_action` results as inputs
+- New MCP tool: `add_deliberation_step` for explicit reasoning steps
+- `log_decision` consumes accumulated context automatically
+- JSON-RPC: `deliberationId` param to link calls within a deliberation session
+- New endpoint: `cstp.startDeliberation` → returns `deliberationId`
 
 ### Phase 3: Search Integration
 - Extend `queryDecisions` with `includeDeliberation` flag
@@ -173,11 +175,20 @@ patterns for Membrain's STDP-based learning.
 
 ## Open Questions
 
-1. **MCP auto-capture**: Should the MCP server maintain session-level 
-   deliberation context, or is this purely client-side?
-2. **Size limits**: Deliberation traces could get large. Cap at N steps/inputs?
-3. **Privacy**: Deliberation may contain sensitive intermediate thoughts. 
-   Should there be a `redact` option?
+~~1. **MCP auto-capture**: Should the MCP server maintain session-level 
+   deliberation context, or is this purely client-side?~~
+   **RESOLVED:** Server-side. MCP server maintains per-session 
+   `DeliberationContext`. Each `query_decisions` / `check_action` call 
+   auto-registers as an input. `log_decision` consumes and attaches the 
+   accumulated trace. For JSON-RPC (non-MCP), use a `deliberationId` to 
+   link calls within a deliberation session.
+
+~~2. **Size limits**: Deliberation traces could get large. Cap at N steps/inputs?~~
+   **RESOLVED:** No limits for now.
+
+~~3. **Privacy**: Deliberation may contain sensitive intermediate thoughts. 
+   Should there be a `redact` option?~~
+   **RESOLVED:** No redaction. Full traces are stored.
 
 ## Related
 
