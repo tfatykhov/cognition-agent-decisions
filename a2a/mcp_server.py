@@ -207,8 +207,16 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle query_decisions tool call."""
-    from .cstp.models import QueryDecisionsRequest
+    import time
+
+    from .cstp.models import (
+        DecisionSummary,
+        QueryDecisionsRequest,
+        QueryDecisionsResponse,
+    )
     from .cstp.query_service import query_decisions
+
+    start_time = time.time()
 
     # Validate input via Pydantic
     args = QueryDecisionsInput(**arguments)
@@ -217,11 +225,60 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
     params = _build_query_params(args)
     request = QueryDecisionsRequest.from_params(params)
 
-    # Execute query
-    response = await query_decisions(request)
+    # Execute query (function takes keyword args, not request object)
+    response = await query_decisions(
+        query=request.query,
+        n_results=request.limit,
+        category=request.filters.category,
+        min_confidence=(
+            request.filters.min_confidence
+            if request.filters.min_confidence > 0
+            else None
+        ),
+        max_confidence=(
+            request.filters.max_confidence
+            if request.filters.max_confidence < 1
+            else None
+        ),
+        stakes=request.filters.stakes,
+        status_filter=request.filters.status,
+        project=request.filters.project,
+        feature=request.filters.feature,
+        pr=request.filters.pr,
+        has_outcome=request.filters.has_outcome,
+    )
 
-    # Format response
-    result = response.to_dict()
+    query_time_ms = int((time.time() - start_time) * 1000)
+
+    # Convert QueryResponse results to DecisionSummary list
+    decisions = []
+    for r in response.results:
+        decisions.append(
+            DecisionSummary(
+                id=r.id[:8] if len(r.id) > 8 else r.id,
+                title=r.title[:50],
+                category=r.category or "",
+                confidence=r.confidence,
+                stakes=r.stakes,
+                status=r.status or "",
+                outcome=r.outcome,
+                date=r.date or "",
+                distance=r.distance,
+                reasons=None,
+            )
+        )
+
+    # Build proper response with to_dict()
+    result_obj = QueryDecisionsResponse(
+        decisions=decisions,
+        total=len(decisions),
+        query=request.query,
+        query_time_ms=query_time_ms,
+        agent="mcp-client",
+        retrieval_mode=request.retrieval_mode,
+        scores={},
+    )
+    result = result_obj.to_dict()
     return [
         TextContent(
             type="text",
@@ -242,14 +299,43 @@ async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
     params = _build_guardrails_params(args)
     request = CheckGuardrailsRequest.from_params(params)
 
+    # Build evaluation context (matches dispatcher pattern)
+    context: dict[str, Any] = {
+        "category": request.action.category,
+        "stakes": request.action.stakes,
+        "confidence": request.action.confidence,
+    }
+    if request.action.context:
+        context.update(request.action.context)
+
     # Evaluate guardrails
-    response = evaluate_guardrails(request, agent_id="mcp-client")
+    eval_result = await evaluate_guardrails(context)
 
     # Log the check
-    log_guardrail_check(request, response)
+    log_guardrail_check(
+        requesting_agent="mcp-client",
+        action_description=request.action.description,
+        allowed=eval_result.allowed,
+        violations=eval_result.violations,
+        evaluated=eval_result.evaluated,
+    )
 
-    # Format response
-    result = response.to_dict()
+    # Map to response format
+    violations = [
+        {
+            "guardrail_id": v.guardrail_id,
+            "name": v.name,
+            "message": v.message,
+            "severity": v.severity,
+        }
+        for v in eval_result.violations
+    ]
+
+    result = {
+        "allowed": eval_result.allowed,
+        "violations": violations,
+        "evaluated": eval_result.evaluated,
+    }
     return [
         TextContent(
             type="text",
