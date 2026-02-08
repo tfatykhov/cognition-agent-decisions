@@ -120,6 +120,9 @@ class TestDeliberationTracker:
             ),
         )
 
+        # Manually set last_activity to the past so cleanup sees it as expired
+        tracker._sessions["agent:test"].last_activity = time.time() - 2
+
         # Session is expired
         removed = tracker.cleanup_expired()
         assert removed == 1

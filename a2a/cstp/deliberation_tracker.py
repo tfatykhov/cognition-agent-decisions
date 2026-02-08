@@ -171,9 +171,9 @@ class DeliberationTracker:
 
 def _format_timestamp(ts: float) -> str:
     """Convert time.time() to ISO format string."""
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
 
 def _input_type_to_step_type(input_type: str) -> str:
