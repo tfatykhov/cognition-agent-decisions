@@ -7,138 +7,182 @@ metadata:
     emoji: "🧠"
     requires:
       env:
-        - GEMINI_API_KEY
-    primaryEnv: GEMINI_API_KEY
+        - CSTP_TOKEN
+    primaryEnv: CSTP_TOKEN
 ---
 
-# Cognition Engines
+# Cognition Engines v0.10.0
 
-Decision intelligence for AI agents. Query similar past decisions before making new ones, check guardrails to prevent policy violations, and build a searchable decision memory.
+Decision intelligence for AI agents. Every decision automatically captures its full cognitive context - deliberation traces, bridge-definitions, and related decision links.
 
-## Quick Start
+## Setup
 
-### Pre-Decision Protocol (Recommended)
-Single command that does everything:
+**Required:** A running CSTP server and an API token.
+
 ```bash
-uv run {baseDir}/scripts/decide.py "context of your decision" \
-  --title "Short decision title" \
-  --category architecture \
-  --stakes high \
-  --confidence 0.85
+# Set in your .secrets/ or environment
+export CSTP_URL="http://your-server:9991"
+export CSTP_TOKEN="your-token"
 ```
 
-**What it does:**
-1. 📍 Queries similar past decisions
-2. 📍 Checks guardrails (blocks if violated)
-3. 📍 Logs decision YAML automatically
+## Decision Protocol
 
-**Options:**
-- `--dry-run` — Preview without saving
-- `--force` — Override guardrail blocks (not recommended)
-- `--category` — architecture, process, integration, tooling, security
-- `--stakes` — low, medium, high
-- `--confidence` — 0.0-1.0
+Every significant decision follows this workflow. The server auto-captures your query and check as deliberation trace inputs.
 
-### Individual Commands
-If you need fine-grained control:
+### Step 1: Query Similar Decisions
 
-**Query Similar Decisions:**
 ```bash
-uv run {baseDir}/scripts/query.py "choosing a database for vector storage" --top 5
+uv run scripts/cstp.py query "your decision context" --top 5 --mode hybrid
 ```
 
-**Check Guardrails:**
+**Directional search** (F024 Bridge-Definitions):
 ```bash
-uv run {baseDir}/scripts/check.py --category architecture --stakes high --confidence 0.8
+# "What solved problems like this?" (search by purpose)
+uv run scripts/cstp.py query "the problem" --bridge-side function --top 5
+
+# "Where did we use this pattern?" (search by form)
+uv run scripts/cstp.py query "the approach" --bridge-side structure --top 5
 ```
 
-**Index Decisions:**
+### Step 2: Check Guardrails
+
 ```bash
-uv run {baseDir}/scripts/index.py /path/to/decisions/ --incremental
+uv run scripts/cstp.py check -d "what you want to do" -s high -f 0.85
 ```
 
-**Pattern Analysis:**
+### Step 3: Record the Decision
+
 ```bash
-uv run {baseDir}/scripts/patterns.py calibration --dir /path/to/decisions/
-uv run {baseDir}/scripts/patterns.py categories --dir /path/to/decisions/
-uv run {baseDir}/scripts/patterns.py antipatterns --dir /path/to/decisions/
+uv run scripts/cstp.py record \
+  -d "What you decided" \
+  -f 0.85 \
+  -c architecture \
+  -s medium \
+  --context "Situation and what was done" \
+  -r "analysis:Why this approach" \
+  -r "pattern:Similar to past approach X"
 ```
+
+**Optional bridge-definition (Minsky Ch 12):**
+```bash
+uv run scripts/cstp.py record \
+  -d "Used retry with backoff" \
+  -f 0.88 -c architecture -s medium \
+  --structure "Exponential backoff with jitter" \
+  --function "Handle transient API failures without cascading"
+```
+
+### Step 4: Review Outcomes (Later)
+
+```bash
+uv run scripts/cstp.py review --id <id> --outcome success --result "What happened"
+```
+
+### Step 5: Get Decision Details
+
+```bash
+uv run scripts/cstp.py get <id>
+```
+
+### Step 6: Check Calibration
+
+```bash
+uv run scripts/cstp.py calibration
+```
+
+## What Happens Automatically
+
+When you follow the query -> check -> record workflow, three things auto-populate:
+
+| Feature | What It Does | Response Field |
+|---------|-------------|----------------|
+| **Deliberation Traces** (F023) | Links your queries and checks to the decision | `deliberation_auto: true` |
+| **Bridge-Definitions** (F024) | Extracts structure/function from your text | `bridge_auto: true` |
+| **Related Decisions** (F025) | Links to decisions found in pre-decision queries | `related_count: N` |
+
+Zero client changes needed - the server handles everything.
+
+## MCP Integration
+
+For MCP-compliant agents (Claude Desktop, OpenClaw, etc.):
+
+**Endpoint:** `http://your-server:9991/mcp`
+
+**7 Tools Available:**
+- `query_decisions` - search past decisions (supports `bridge_side`)
+- `check_action` - validate against guardrails
+- `log_decision` - record a new decision (with optional bridge)
+- `review_outcome` - record what actually happened
+- `get_stats` - calibration statistics
+- `get_decision` - full decision details by ID
+- `get_reason_stats` - which reason types predict success
+
+## JSON-RPC API
+
+For direct HTTP integration:
+
+```bash
+curl -s -X POST http://your-server:9991/cstp \
+  -H "Authorization: Bearer $CSTP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"cstp.queryDecisions","params":{
+    "query":"database selection",
+    "bridgeSide":"function",
+    "limit":5
+  },"id":1}'
+```
+
+**Methods:** `cstp.queryDecisions`, `cstp.checkGuardrails`, `cstp.recordDecision`, `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getDecision`, `cstp.getReasonStats`, `cstp.attributeOutcomes`, `cstp.listGuardrails`, `cstp.checkDrift`
+
+## For Other Agents
+
+### Quick Onboarding
+
+Any AI agent can use Cognition Engines by adding this to its system prompt or AGENTS.md:
+
+```
+## Decision Protocol
+
+Before making significant decisions (architecture, tooling, process):
+
+1. **Query**: Search past decisions for similar context
+   POST /cstp {"method":"cstp.queryDecisions","params":{"query":"your context"}}
+
+2. **Check**: Validate against guardrails
+   POST /cstp {"method":"cstp.checkGuardrails","params":{"action":{"description":"what you want to do","stakes":"medium"}}}
+
+3. **Record**: Log the decision with reasons
+   POST /cstp {"method":"cstp.recordDecision","params":{"decision":"what you chose","confidence":0.85,"category":"architecture","reasons":[{"type":"analysis","text":"why"}]}}
+
+The server auto-captures your query and check as deliberation inputs.
+Use at least 2 different reason types for robustness.
+```
+
+### What to Log
+
+- Architecture and design choices
+- Tool or library selections
+- Process changes
+- Bug fix approaches
+- Any choice that could be wrong and worth reviewing
+
+### What NOT to Log
+
+- Routine operations (backups, deploys)
+- Trivial formatting choices
+- Decisions already made by someone else
+
+## Guardrails
+
+Default rules in `guardrails/`:
+- **no-high-stakes-low-confidence**: Block if stakes=high and confidence < 0.5
+- **no-production-without-review**: Block production changes without code review
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GEMINI_API_KEY` | Yes | - | Google Gemini API key for embeddings |
-| `CHROMA_URL` | No | `http://chromadb:8000` | ChromaDB server URL |
-| `DECISIONS_DIR` | No | `decisions/` | Default decisions directory |
-
-## Usage Examples
-
-### Before Making a Decision
-```bash
-# 1. Query similar past decisions
-uv run {baseDir}/scripts/query.py "should we use microservices or monolith"
-
-# 2. Check if guardrails allow this decision
-uv run {baseDir}/scripts/check.py --category architecture --stakes high --confidence 0.75
-
-# 3. If allowed, log your decision (via agent-decisions)
-# 4. Auto-index happens on logging
-```
-
-### Output Format
-All scripts output JSON for programmatic use:
-
-**Query:**
-```json
-{
-  "query": "database choice",
-  "results": [
-    {
-      "title": "Use ChromaDB for semantic memory",
-      "category": "architecture",
-      "confidence": 0.85,
-      "outcome": "success",
-      "distance": 0.42
-    }
-  ]
-}
-```
-
-**Check:**
-```json
-{
-  "allowed": true,
-  "evaluated": 3,
-  "violations": []
-}
-```
-
-## Guardrails
-
-Default guardrails are in `guardrails/default.yaml`. Cornerstone rules:
-
-- **no-production-without-review**: Block production changes without code review
-- **no-high-stakes-low-confidence**: Block high-stakes decisions with <50% confidence
-- **no-trading-without-backtest**: Block trading strategy changes without backtesting
-
-## Integration
-
-This skill works best with:
-- **agent-decisions**: Decision logging framework
-- **ChromaDB**: Vector database for semantic search
-- **OpenClaw**: AI agent runtime
-
-## Troubleshooting
-
-**ChromaDB connection error:**
-- Verify `CHROMA_URL` is correct
-- Check if ChromaDB container is running
-
-**No results from query:**
-- Run `index.py` first to index your decisions
-- Check `DECISIONS_DIR` points to correct location
-
-**Guardrail not triggering:**
-- Verify condition fields match your context keys
-- Check guardrail YAML syntax
+| `CSTP_TOKEN` | Yes | - | API authentication token |
+| `CSTP_URL` | No | `http://localhost:9991` | CSTP server URL |
+| `GEMINI_API_KEY` | Server | - | Embeddings (server-side only) |
+| `CHROMA_URL` | Server | `http://localhost:8000` | ChromaDB (server-side only) |
