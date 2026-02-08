@@ -388,36 +388,6 @@ def auto_attach_deliberation(
     return deliberation, True
 
 
-def extract_related_decisions(
-    deliberation: Deliberation | None,
-) -> list[dict]:
-    """Extract related decisions from deliberation trace query results.
-
-    Collects top_results from all query inputs in the deliberation,
-    deduplicates by ID, and returns sorted by distance (closest first).
-
-    Returns list of dicts with id, summary, distance.
-    """
-    if not deliberation or not deliberation.inputs:
-        return []
-
-    # Also check raw tracker data if deliberation was auto-built
-    seen: dict[str, dict] = {}
-
-    for inp in deliberation.inputs:
-        # Deliberation inputs don't have raw_data directly,
-        # but we stored top_results in the tracker's raw_data
-        # which gets consumed into the deliberation.
-        # We need to check the raw_data on TrackedInput before
-        # it becomes a DeliberationInput.
-        pass
-
-    # The raw_data is lost when TrackedInput becomes DeliberationInput.
-    # We need to extract BEFORE the conversion. Let's use a different approach:
-    # extract from the tracker's raw inputs before they're consumed.
-    return []
-
-
 def extract_related_from_tracker(key: str) -> list[dict]:
     """Extract related decisions from tracked inputs BEFORE consumption.
 
@@ -444,11 +414,14 @@ def extract_related_from_tracker(key: str) -> list[dict]:
                 top_results = inp.raw_data.get("top_results", [])
                 for r in top_results:
                     rid = r.get("id", "")
-                    if rid and rid not in seen:
+                    if not rid:
+                        continue
+                    dist = r.get("distance", 0.0)
+                    if rid not in seen or dist < seen[rid]["distance"]:
                         seen[rid] = {
                             "id": rid,
                             "summary": r.get("summary", ""),
-                            "distance": r.get("distance", 0.0),
+                            "distance": dist,
                         }
 
             # Sort by distance (closest first) and return
