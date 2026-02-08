@@ -259,12 +259,13 @@ class DeliberationStep:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "DeliberationStep":
         """Create from dictionary."""
+        duration_raw = data.get("duration_ms") or data.get("durationMs")
         return cls(
             step=int(data.get("step") or 0),
             thought=data.get("thought") or "",
             inputs_used=data.get("inputs_used") or data.get("inputsUsed") or [],
             timestamp=data.get("timestamp"),
-            duration_ms=int(data["duration_ms"]) if data.get("duration_ms") or data.get("durationMs") else None,
+            duration_ms=int(duration_raw) if duration_raw is not None else None,
             type=data.get("type"),
             conclusion=bool(data.get("conclusion", False)),
         )
@@ -307,19 +308,14 @@ class Deliberation:
         inputs_data = data.get("inputs") or []
         steps_data = data.get("steps") or []
 
+        duration_raw = data.get("total_duration_ms") or data.get("totalDurationMs")
+        convergence_raw = data.get("convergence_point") or data.get("convergencePoint")
+
         return cls(
             inputs=[DeliberationInput.from_dict(i) for i in inputs_data],
             steps=[DeliberationStep.from_dict(s) for s in steps_data],
-            total_duration_ms=(
-                int(data["total_duration_ms"])
-                if data.get("total_duration_ms") or data.get("totalDurationMs")
-                else None
-            ),
-            convergence_point=(
-                int(data["convergence_point"])
-                if data.get("convergence_point") or data.get("convergencePoint")
-                else None
-            ),
+            total_duration_ms=int(duration_raw) if duration_raw is not None else None,
+            convergence_point=int(convergence_raw) if convergence_raw is not None else None,
         )
 
     def has_content(self) -> bool:

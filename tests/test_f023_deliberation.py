@@ -83,9 +83,11 @@ class TestDeliberationStep:
             "step": 2,
             "thought": "Converged",
             "inputsUsed": ["i1", "i3"],
+            "durationMs": 4500,
         }
         step = DeliberationStep.from_dict(data)
         assert step.inputs_used == ["i1", "i3"]
+        assert step.duration_ms == 4500
 
     def test_from_dict_minimal(self):
         data = {"step": 1, "thought": "Basic thought"}
