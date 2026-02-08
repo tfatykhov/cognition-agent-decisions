@@ -168,7 +168,7 @@ async def test_load_decisions_with_category_filter(decisions_dir):
 def test_calculate_reason_type_stats(decisions_dir):
     """Test per-type statistics calculation."""
     import asyncio
-    decisions = asyncio.get_event_loop().run_until_complete(
+    decisions = asyncio.run(
         load_decisions_with_reasons(decisions_path=str(decisions_dir))
     )
     stats = calculate_reason_type_stats(decisions, min_reviewed=2)
@@ -190,7 +190,7 @@ def test_calculate_reason_type_stats(decisions_dir):
 def test_calculate_diversity_stats(decisions_dir):
     """Test diversity (parallel bundle) analysis."""
     import asyncio
-    decisions = asyncio.get_event_loop().run_until_complete(
+    decisions = asyncio.run(
         load_decisions_with_reasons(decisions_path=str(decisions_dir))
     )
     diversity = calculate_diversity_stats(decisions)
@@ -319,7 +319,7 @@ def test_request_from_dict_defaults():
 def test_brier_score_calculation(decisions_dir):
     """Test that Brier scores are calculated correctly for types with enough data."""
     import asyncio
-    decisions = asyncio.get_event_loop().run_until_complete(
+    decisions = asyncio.run(
         load_decisions_with_reasons(decisions_path=str(decisions_dir))
     )
     stats = calculate_reason_type_stats(decisions, min_reviewed=3)

@@ -87,9 +87,12 @@ class CheckActionInput(BaseModel):
 class ReasonInput(BaseModel):
     """A reason supporting a decision."""
 
-    type: Literal["authority", "analogy", "analysis", "pattern", "intuition"] = Field(
+    type: Literal[
+        "authority", "analogy", "analysis", "pattern",
+        "intuition", "empirical", "elimination", "constraint",
+    ] = Field(
         ...,
-        description="Type of reasoning: authority, analogy, analysis, pattern, or intuition",
+        description="Type of reasoning: authority, analogy, analysis, pattern, intuition, empirical, elimination, or constraint",
     )
     text: str = Field(
         ...,
