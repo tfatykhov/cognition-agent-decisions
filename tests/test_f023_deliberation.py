@@ -1,9 +1,7 @@
 """Tests for F023 Deliberation Traces — schema and storage."""
 
 import tempfile
-from pathlib import Path
 
-import pytest
 import yaml
 
 from a2a.cstp.decision_service import (
