@@ -28,6 +28,7 @@ RUN pip install --no-cache-dir uv
 
 # Copy dependency files first (for layer caching)
 COPY pyproject.toml ./
+COPY README.md ./
 
 # Install dependencies (a2a + mcp)
 RUN uv pip install --system ".[a2a,mcp]"
