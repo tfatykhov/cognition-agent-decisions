@@ -251,17 +251,9 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
     params = _build_query_params(args)
     request = QueryDecisionsRequest.from_params(params)
 
-    # F024: Prefix query with bridge-side for directional search
-    effective_query = request.query
-    if request.bridge_side and effective_query.strip():
-        if request.bridge_side == "structure":
-            effective_query = f"Structure: {effective_query}"
-        elif request.bridge_side == "function":
-            effective_query = f"Function: {effective_query}"
-
-    # Execute query (function takes keyword args, not request object)
+    # Execute query - use effective_query for bridge-side prefix (F024)
     response = await query_decisions(
-        query=effective_query,
+        query=request.effective_query,
         n_results=request.limit,
         category=request.filters.category,
         min_confidence=(

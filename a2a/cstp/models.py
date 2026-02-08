@@ -57,6 +57,21 @@ class QueryDecisionsRequest:
     # F024: Bridge-side search
     bridge_side: str | None = None  # structure | function | None (both)
 
+    @property
+    def effective_query(self) -> str:
+        """Query text with bridge-side prefix for directional search.
+
+        Prepends 'Structure: ' or 'Function: ' to bias semantic search
+        toward the matching side of bridge-definitions.
+        Use for semantic search only - keyword search should use raw query.
+        """
+        if self.bridge_side and self.query.strip():
+            if self.bridge_side == "structure":
+                return f"Structure: {self.query}"
+            if self.bridge_side == "function":
+                return f"Function: {self.query}"
+        return self.query
+
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> "QueryDecisionsRequest":
         """Create request from JSON-RPC params."""
