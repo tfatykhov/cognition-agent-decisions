@@ -1,6 +1,6 @@
 # Cognition Engines — Product Documentation
 
-> **Version:** 0.7.0  
+> **Version:** 0.9.0  
 > **License:** Apache 2.0  
 > **Python:** ≥ 3.11
 
@@ -19,6 +19,7 @@
 | [Configuration Guide](07-Configuration-Guide.md) | Environment variables, YAML config, and guardrail authoring |
 | [Dashboard Guide](08-Dashboard-Guide.md) | Web dashboard setup, features, and usage |
 | [Guardrails Authoring](09-Guardrails-Authoring.md) | Writing custom guardrail rules and using templates |
+| [MCP Integration](10-MCP-Integration.md) | Model Context Protocol integration guide — tools, transports, and client setup |
 
 ---
 
