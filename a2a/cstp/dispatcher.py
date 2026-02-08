@@ -274,7 +274,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         # Hybrid: combine semantic + keyword
         # First, get semantic results
         response = await query_decisions(
-            query=request.query,
+            query=request.effective_query,
             n_results=request.limit * 2,  # Get more for merging
             category=request.filters.category,
             min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,
@@ -363,7 +363,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
     else:
         # Default: semantic-only search
         response = await query_decisions(
-            query=request.query,
+            query=request.effective_query,
             n_results=request.limit,
             category=request.filters.category,
             min_confidence=request.filters.min_confidence if request.filters.min_confidence > 0 else None,

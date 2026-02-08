@@ -89,6 +89,9 @@ def _build_query_params(args: QueryDecisionsInput) -> dict[str, Any]:
             filters["hasOutcome"] = args.filters.has_outcome
         if filters:
             params["filters"] = filters
+    # F024: Pass bridge_side
+    if args.bridge_side:
+        params["bridgeSide"] = args.bridge_side
     return params
 
 
@@ -248,9 +251,9 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
     params = _build_query_params(args)
     request = QueryDecisionsRequest.from_params(params)
 
-    # Execute query (function takes keyword args, not request object)
+    # Execute query - use effective_query for bridge-side prefix (F024)
     response = await query_decisions(
-        query=request.query,
+        query=request.effective_query,
         n_results=request.limit,
         category=request.filters.category,
         min_confidence=(

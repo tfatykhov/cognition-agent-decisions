@@ -54,6 +54,23 @@ class QueryDecisionsRequest:
     # F017: Hybrid retrieval
     retrieval_mode: str = "semantic"  # semantic | keyword | hybrid
     hybrid_weight: float = 0.7  # semantic weight (keyword = 1 - this)
+    # F024: Bridge-side search
+    bridge_side: str | None = None  # structure | function | None (both)
+
+    @property
+    def effective_query(self) -> str:
+        """Query text with bridge-side prefix for directional search.
+
+        Prepends 'Structure: ' or 'Function: ' to bias semantic search
+        toward the matching side of bridge-definitions.
+        Use for semantic search only - keyword search should use raw query.
+        """
+        if self.bridge_side and self.query.strip():
+            if self.bridge_side == "structure":
+                return f"Structure: {self.query}"
+            if self.bridge_side == "function":
+                return f"Function: {self.query}"
+        return self.query
 
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> "QueryDecisionsRequest":
@@ -73,6 +90,11 @@ class QueryDecisionsRequest:
         hybrid_weight = float(params.get("hybridWeight", params.get("hybrid_weight", 0.7)))
         hybrid_weight = max(0.0, min(1.0, hybrid_weight))
 
+        # F024: Parse bridge_side
+        bridge_side = params.get("bridgeSide", params.get("bridge_side"))
+        if bridge_side and bridge_side not in ("structure", "function"):
+            bridge_side = None
+
         return cls(
             query=query,
             filters=QueryFilters.from_dict(params.get("filters")),
@@ -80,6 +102,7 @@ class QueryDecisionsRequest:
             include_reasons=params.get("includeReasons", False),
             retrieval_mode=retrieval_mode,
             hybrid_weight=hybrid_weight,
+            bridge_side=bridge_side,
         )
 
 
