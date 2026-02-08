@@ -25,8 +25,10 @@ from .calibration_service import (
     get_calibration,
 )
 from .decision_service import (
+    GetDecisionRequest,
     RecordDecisionRequest,
     ReviewDecisionRequest,
+    get_decision,
     record_decision,
     review_decision,
 )
@@ -491,12 +493,38 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.checkGuardrails", _handle_check_guardrails)
     dispatcher.register("cstp.listGuardrails", _handle_list_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
+    dispatcher.register("cstp.getDecision", _handle_get_decision)
 
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
     dispatcher.register("cstp.getCalibration", _handle_get_calibration)
     dispatcher.register("cstp.attributeOutcomes", _handle_attribute_outcomes)
     dispatcher.register("cstp.checkDrift", _handle_check_drift)
     dispatcher.register("cstp.reindex", _handle_reindex)
+
+
+async def _handle_get_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.getDecision method.
+
+    Retrieves full decision details by ID, including context, reasons,
+    and all metadata stored in the YAML file.
+
+    Args:
+        params: JSON-RPC params with 'id' field.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Full decision data as dict.
+
+    Raises:
+        ValueError: If ID is missing or invalid.
+    """
+    request = GetDecisionRequest.from_dict(params)
+    response = await get_decision(request)
+
+    if not response.found:
+        raise ValueError(response.error or f"Decision not found: {request.decision_id}")
+
+    return response.to_dict()
 
 
 async def _handle_reindex(params: dict[str, Any], agent_id: str) -> dict[str, Any]:

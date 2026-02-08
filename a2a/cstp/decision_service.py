@@ -412,6 +412,103 @@ def write_decision_file(
     return str(file_path)
 
 
+@dataclass
+class GetDecisionRequest:
+    """Request to get a single decision by ID."""
+
+    decision_id: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GetDecisionRequest":
+        """Create from JSON-RPC params dict."""
+        decision_id = data.get("id") or data.get("decision_id") or ""
+        if not decision_id:
+            raise ValueError("Missing required parameter: id")
+        # Validate ID is alphanumeric (prevent path traversal)
+        clean_id = decision_id.replace("-", "")
+        if not clean_id.isalnum():
+            raise ValueError(f"Invalid decision ID: {decision_id}")
+        return cls(decision_id=decision_id)
+
+
+@dataclass
+class GetDecisionResponse:
+    """Response for getting a single decision."""
+
+    found: bool
+    decision: dict[str, Any] | None = None
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to JSON-serializable dict."""
+        result: dict[str, Any] = {"found": self.found}
+        if self.decision is not None:
+            result["decision"] = self.decision
+        if self.error:
+            result["error"] = self.error
+        return result
+
+
+async def get_decision(request: GetDecisionRequest) -> GetDecisionResponse:
+    """Get a single decision by ID, returning full YAML contents.
+
+    Searches the decisions directory for a file matching the ID.
+
+    Args:
+        request: Contains the decision ID to look up.
+
+    Returns:
+        Full decision data if found, or error.
+    """
+    base = Path(DECISIONS_PATH)
+    if not base.exists():
+        return GetDecisionResponse(found=False, error="Decisions directory not found")
+
+    # Search for matching file (glob handles both exact and prefix matches)
+    pattern = f"*-decision-{request.decision_id}*.yaml"
+    matches = list(base.rglob(pattern))
+
+    if not matches:
+        return GetDecisionResponse(
+            found=False,
+            error=f"Decision not found: {request.decision_id}",
+        )
+
+    # Read the first match
+    yaml_file = matches[0]
+    try:
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
+
+        if not data:
+            return GetDecisionResponse(
+                found=False,
+                error=f"Empty decision file: {yaml_file.name}",
+            )
+
+        # Extract ID from filename
+        filename = yaml_file.stem
+        parts = filename.rsplit("-decision-", 1)
+        if len(parts) == 2:
+            data["id"] = parts[1]
+
+        # Add file path for reference
+        data["_file"] = str(yaml_file)
+
+        return GetDecisionResponse(found=True, decision=data)
+
+    except yaml.YAMLError as e:
+        return GetDecisionResponse(
+            found=False,
+            error=f"Failed to parse YAML: {e}",
+        )
+    except OSError as e:
+        return GetDecisionResponse(
+            found=False,
+            error=f"Failed to read file: {e}",
+        )
+
+
 async def generate_embedding(text: str) -> list[float] | None:
     """Generate embedding using Gemini API."""
     if not GEMINI_API_KEY:
