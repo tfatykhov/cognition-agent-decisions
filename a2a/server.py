@@ -1,8 +1,10 @@
 """CSTP HTTP Server.
 
-FastAPI-based server exposing CSTP methods via JSON-RPC 2.0.
+FastAPI-based server exposing CSTP methods via JSON-RPC 2.0
+and MCP tools via Streamable HTTP transport.
 """
 
+import logging
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -24,12 +26,14 @@ from .models.jsonrpc import (
     JsonRpcResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager.
 
-    Initializes auth manager and dispatcher on startup.
+    Initializes auth manager, dispatcher, and MCP session manager on startup.
     Stores state in app.state instead of global variables.
     """
     # Use monotonic time for uptime (not affected by system clock changes)
@@ -50,7 +54,25 @@ async def lifespan(app: FastAPI):
     register_methods(dispatcher)
     app.state.dispatcher = dispatcher
 
-    yield
+    # Initialize MCP Streamable HTTP session manager
+    try:
+        from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+
+        from .mcp_server import mcp_app
+
+        session_manager = StreamableHTTPSessionManager(
+            app=mcp_app,
+            json_response=True,
+        )
+        app.state.mcp_session_manager = session_manager
+
+        async with session_manager.run():
+            logger.info("MCP Streamable HTTP transport available at /mcp")
+            yield
+    except ImportError:
+        logger.warning("MCP SDK not installed — Streamable HTTP transport disabled")
+        app.state.mcp_session_manager = None
+        yield
 
     # Cleanup (if needed)
 
@@ -88,7 +110,37 @@ def create_app(config: Config | None = None) -> FastAPI:
     # Register routes
     _register_routes(app)
 
+    # Mount MCP Streamable HTTP transport at /mcp
+    _mount_mcp(app)
+
     return app
+
+
+def _mount_mcp(app: FastAPI) -> None:
+    """Mount the MCP Streamable HTTP handler at /mcp.
+
+    Falls back gracefully if the MCP SDK is not installed.
+    """
+    from starlette.routing import Mount
+    from starlette.types import Receive, Scope, Send
+
+    async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
+        """ASGI handler that delegates to the MCP session manager."""
+        session_manager = getattr(app.state, "mcp_session_manager", None)
+        if session_manager is None:
+            # MCP not available — return 503
+            from starlette.responses import JSONResponse as StarletteJSON
+
+            response = StarletteJSON(
+                {"error": "MCP transport not available"},
+                status_code=503,
+            )
+            await response(scope, receive, send)
+            return
+        await session_manager.handle_request(scope, receive, send)
+
+    # Mount as raw ASGI app (not a FastAPI route — MCP handles its own dispatch)
+    app.routes.append(Mount("/mcp", app=handle_mcp))
 
 
 def _register_routes(app: FastAPI) -> None:

@@ -2,7 +2,29 @@
 
 Connect any MCP-compliant agent to CSTP decision intelligence.
 
-## Claude Desktop
+## Remote Access (Streamable HTTP)
+
+The CSTP server exposes MCP tools via Streamable HTTP at `/mcp`:
+
+```
+http://your-server:8100/mcp
+```
+
+### Claude Code
+
+```bash
+claude mcp add --transport http cstp-decisions http://your-server:8100/mcp
+```
+
+### Any MCP Client
+
+Point your MCP client to `http://your-server:8100/mcp` using the
+Streamable HTTP transport. The endpoint handles both POST (tool calls)
+and GET (event streams) on the same path.
+
+## Local Access (stdio)
+
+### Claude Desktop
 
 Add to your Claude Desktop config (`claude_desktop_config.json`):
 
@@ -21,7 +43,7 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
 > **Note:** The CSTP container must be running. The MCP server inherits
 > all environment variables (CHROMA_URL, GEMINI_API_KEY, etc.) from the container.
 
-## Local Development
+### Local Development
 
 ```bash
 # Install with MCP support
@@ -130,17 +152,22 @@ and confidence variance metrics.
 ## Architecture
 
 ```
-MCP Client (Claude, OpenClaw, etc.)
-    │  stdio (JSON-RPC over stdin/stdout)
-    ▼
-a2a/mcp_server.py (FastMCP bridge)
-    │  direct function calls
-    ▼
-CSTP Services (query, guardrails, etc.)
+MCP Client (Claude Code, OpenClaw, etc.)
     │
-    ▼
-ChromaDB (semantic index) + YAML files (decisions)
+    ├── Streamable HTTP ──► :8100/mcp ──► StreamableHTTPSessionManager
+    │                                         │
+    └── stdio ────────────► a2a.mcp_server ───┤
+                                              │
+                                         MCP Server (5 tools)
+                                              │  direct function calls
+                                              ▼
+                                     CSTP Services (query, guardrails,
+                                         decisions, calibration)
+                                              │
+                                              ▼
+                                     ChromaDB + YAML files
 ```
 
 The MCP server is a thin bridge — it validates inputs via Pydantic schemas,
-then delegates to the same services used by the JSON-RPC API.
+then delegates to the same services used by the JSON-RPC API. Both stdio and
+Streamable HTTP transports share the same `Server` instance and tool handlers.
