@@ -36,6 +36,10 @@ from .drift_service import (
     CheckDriftRequest,
     check_drift,
 )
+from .reason_stats_service import (
+    GetReasonStatsRequest,
+    get_reason_stats,
+)
 from .guardrails_service import evaluate_guardrails, log_guardrail_check, list_guardrails
 from .models import (
     CheckGuardrailsRequest,
@@ -500,6 +504,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.attributeOutcomes", _handle_attribute_outcomes)
     dispatcher.register("cstp.checkDrift", _handle_check_drift)
     dispatcher.register("cstp.reindex", _handle_reindex)
+    dispatcher.register("cstp.getReasonStats", _handle_get_reason_stats)
 
 
 async def _handle_get_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
@@ -651,4 +656,22 @@ async def _handle_check_drift(params: dict[str, Any], agent_id: str) -> dict[str
     """
     request = CheckDriftRequest.from_dict(params)
     response = await check_drift(request)
+    return response.to_dict()
+
+
+async def _handle_get_reason_stats(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.getReasonStats method.
+
+    Analyzes which reason types correlate with better outcomes.
+    Implements Minsky Ch 18 parallel bundle analysis.
+
+    Args:
+        params: JSON-RPC params with optional filters.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Reason-type calibration statistics as dict.
+    """
+    request = GetReasonStatsRequest.from_dict(params)
+    response = await get_reason_stats(request)
     return response.to_dict()
