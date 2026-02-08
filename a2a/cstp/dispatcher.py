@@ -227,6 +227,10 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             result_count=result.total,
             top_ids=[d.id for d in result.decisions[:5]],
             retrieval_mode="list",
+            top_results=[
+                {"id": d.id, "summary": d.title[:100], "distance": d.distance}
+                for d in result.decisions[:5]
+            ],
         )
 
         return result.to_dict()
@@ -415,6 +419,10 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         result_count=result.total,
         top_ids=[d.id for d in result.decisions[:5]],
         retrieval_mode=request.retrieval_mode,
+        top_results=[
+            {"id": d.id, "summary": d.title[:100], "distance": d.distance}
+            for d in result.decisions[:5]
+        ],
     )
 
     return result.to_dict()
@@ -609,6 +617,18 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     # Parse and validate request
     request = RecordDecisionRequest.from_dict(params, agent_id=agent_id)
 
+    # F025: Extract related decisions BEFORE consuming tracker
+    from .deliberation_tracker import extract_related_from_tracker
+
+    if not request.related_to:
+        related_raw = extract_related_from_tracker(f"rpc:{agent_id}")
+        if related_raw:
+            from .decision_service import RelatedDecision
+
+            request.related_to = [
+                RelatedDecision.from_dict(r) for r in related_raw
+            ]
+
     # F023 Phase 2: Auto-attach deliberation from tracked inputs
     from .deliberation_tracker import auto_attach_deliberation
 
@@ -640,6 +660,9 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
 
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True
+
+    if request.related_to:
+        result["related_count"] = len(request.related_to)
 
     return result
 
