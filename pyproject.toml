@@ -31,6 +31,10 @@ a2a = [
     "uvicorn[standard]>=0.27.0",
     "pydantic>=2.0.0",
 ]
+mcp = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -40,7 +44,7 @@ dev = [
     "httpx>=0.27.0",
 ]
 all = [
-    "cognition-agent-decisions[a2a,dev]",
+    "cognition-agent-decisions[a2a,mcp,dev]",
 ]
 
 [project.urls]
@@ -50,6 +54,7 @@ Documentation = "https://github.com/tfatykhov/cognition-agent-decisions#readme"
 
 [project.scripts]
 cstp-server = "a2a.server:run_server"
+cstp-mcp = "a2a.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]
