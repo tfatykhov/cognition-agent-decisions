@@ -163,19 +163,21 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             )
         ]
     except Exception as e:
-        logger.error("Tool %s failed: %s", name, e, exc_info=True)
+        # Catches pydantic.ValidationError and any other unexpected errors
+        error_type = "validation_error" if "ValidationError" in type(e).__name__ else "internal_error"
+        logger.error("Tool %s failed (%s): %s", name, type(e).__name__, e, exc_info=True)
         return [
             TextContent(
                 type="text",
-                text=json.dumps({"error": "internal_error", "message": str(e)}),
+                text=json.dumps({"error": error_type, "message": str(e)}),
             )
         ]
 
 
 async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle query_decisions tool call."""
-    from .models import QueryDecisionsRequest
-    from .query_service import query_decisions
+    from .cstp.models import QueryDecisionsRequest
+    from .cstp.query_service import query_decisions
 
     # Validate input via Pydantic
     args = QueryDecisionsInput(**arguments)
@@ -199,8 +201,8 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
 
 async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle check_action tool call."""
-    from .guardrails_service import evaluate_guardrails, log_guardrail_check
-    from .models import CheckGuardrailsRequest
+    from .cstp.guardrails_service import evaluate_guardrails, log_guardrail_check
+    from .cstp.models import CheckGuardrailsRequest
 
     # Validate input via Pydantic
     args = CheckActionInput(**arguments)
@@ -227,7 +229,7 @@ async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle log_decision tool call."""
-    from .decision_service import RecordDecisionRequest, record_decision
+    from .cstp.decision_service import RecordDecisionRequest, record_decision
 
     # Validate input via Pydantic
     args = LogDecisionInput(**arguments)
@@ -268,7 +270,7 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
 async def _handle_review_outcome(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle review_outcome tool call."""
-    from .decision_service import ReviewDecisionRequest, review_decision
+    from .cstp.decision_service import ReviewDecisionRequest, review_decision
 
     # Validate input via Pydantic
     args = ReviewOutcomeInput(**arguments)
@@ -301,7 +303,7 @@ async def _handle_review_outcome(arguments: dict[str, Any]) -> list[TextContent]
 
 async def _handle_get_stats(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle get_stats tool call."""
-    from .calibration_service import GetCalibrationRequest, get_calibration
+    from .cstp.calibration_service import GetCalibrationRequest, get_calibration
 
     # Validate input via Pydantic
     args = GetStatsInput(**arguments)
