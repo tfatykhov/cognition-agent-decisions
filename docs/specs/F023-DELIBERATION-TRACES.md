@@ -152,12 +152,35 @@ patterns for Membrain's STDP-based learning.
 - Backward compatible (field is optional for reads)
 
 ### Phase 2: Server-Side Auto-Capture
-- MCP server: per-session `DeliberationContext` in `StreamableHTTPSessionManager`
-- Auto-register `query_decisions` / `check_action` results as inputs
-- New MCP tool: `add_deliberation_step` for explicit reasoning steps
-- `log_decision` consumes accumulated context automatically
-- JSON-RPC: `deliberationId` param to link calls within a deliberation session
-- New endpoint: `cstp.startDeliberation` → returns `deliberationId`
+Server-side `DeliberationTracker` captures inputs automatically for both
+JSON-RPC and MCP — zero client changes required.
+
+**Tracking key:** `agent_id` (from auth token) for JSON-RPC, `session_id`
+for MCP. Sub-agents have different agent_ids, so parallel agents are
+naturally isolated.
+
+**Hooks:**
+- After `queryDecisions` succeeds → register query + result count as input
+- After `checkGuardrails` succeeds → register action + allowed/blocked as input
+- After `getDecision` succeeds → register decision lookup as input
+- After `getReasonStats` succeeds → register stats snapshot as input
+- On `recordDecision` → auto-build `Deliberation` from unconsumed inputs,
+  attach to decision, clear tracker for that agent
+
+**Edge case — sequential decisions by same agent:**
+Inputs captured AFTER the last `recordDecision` belong to the next decision.
+`recordDecision` consumes and clears tracked inputs atomically.
+
+**Auto-generated steps:** The server creates `DeliberationStep` entries from
+the call sequence (query → check → record), each referencing which inputs
+they used. These are lower-fidelity than manual steps but provide baseline
+provenance automatically.
+
+**Merge behavior:** If `recordDecision` includes an explicit `deliberation`
+field, tracked inputs are merged into it (appended, not overwritten).
+
+**TTL:** Tracked inputs expire after 5 minutes (configurable). Periodic
+cleanup sweeps expired entries.
 
 ### Phase 3: Search Integration
 - Extend `queryDecisions` with `includeDeliberation` flag
@@ -169,7 +192,7 @@ patterns for Membrain's STDP-based learning.
 - Input diversity analysis
 - Convergence speed patterns
 
-### Phase 5: Membrain Bridge (Future)
+### Phase 5: Membrain Bridge (Future — deferred until Membrain ready)
 - Export deliberation traces as spike timing patterns
 - Feed into Membrain SNN for associative learning
 
@@ -177,11 +200,11 @@ patterns for Membrain's STDP-based learning.
 
 ~~1. **MCP auto-capture**: Should the MCP server maintain session-level 
    deliberation context, or is this purely client-side?~~
-   **RESOLVED:** Server-side. MCP server maintains per-session 
-   `DeliberationContext`. Each `query_decisions` / `check_action` call 
-   auto-registers as an input. `log_decision` consumes and attaches the 
-   accumulated trace. For JSON-RPC (non-MCP), use a `deliberationId` to 
-   link calls within a deliberation session.
+   **RESOLVED:** Server-side. `DeliberationTracker` tracks inputs per
+   `agent_id` (JSON-RPC) or `session_id` (MCP). Sub-agents are naturally
+   isolated by their auth identity. No client changes needed — the server
+   hooks into query/check/record handlers and auto-captures inputs.
+   `recordDecision` consumes tracked inputs and clears the tracker.
 
 ~~2. **Size limits**: Deliberation traces could get large. Cap at N steps/inputs?~~
    **RESOLVED:** No limits for now.
