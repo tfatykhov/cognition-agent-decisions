@@ -1,8 +1,6 @@
 """Tests for F024: Bridge-Definitions."""
 
-import time
 import unittest
-from unittest.mock import AsyncMock, patch
 
 from a2a.cstp.decision_service import (
     BridgeDefinition,
