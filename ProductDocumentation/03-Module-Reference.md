@@ -235,6 +235,7 @@ Pydantic models that define the JSON Schema MCP clients see during tool discover
 
 | Component | Description |
 |-----------|-------------|
+| `BridgeDefinition` | Dataclass: structure, function, tolerance, enforcement, prevention |
 | `Reason` | Decision reason with type, text, strength |
 | `PreDecisionProtocol` | Tracks whether query was run and guardrails were checked before recording |
 | `ProjectContext` | Project, feature, PR, file, line, commit associations |
@@ -308,12 +309,42 @@ Pydantic models that define the JSON Schema MCP clients see during tool discover
 | `merge_results()` | Weighted merge of semantic + keyword results (default 70/30) |
 | `get_cached_index()` | 5-minute TTL cache with count-based invalidation |
 
-### 3.10 `models.py` — CSTP Data Models
+### 3.10 `deliberation_tracker.py` — Deliberation Traces
+
+Tracks input/reasoning steps across API calls to build full deliberation traces.
+
+| Component | Description |
+|-----------|-------------|
+| `TrackedInput` | Dataclass: type (query/check), content, timestamp, source |
+| `TrackerSession` | Per-agent session state with inputs list and start time |
+| `DeliberationTracker` | Singleton manager for active deliberation sessions |
+| `track_query(agent_id, query)` | Hooks into `queryDecisions` to record search inputs |
+| `track_check(agent_id, action)` | Hooks into `checkGuardrails` to record constraint inputs |
+| `track_lookup(agent_id, id)` | Hooks into `getDecision` to record reference inputs |
+| `auto_attach_deliberation(agent_id)` | Returns and clears tracked inputs for `recordDecision` |
+
+### 3.11 `bridge_extractor.py` — Bridge Auto-Extraction
+
+Extracts structure/function pairs from decision text when not explicitly provided.
+
+| Component | Description |
+|-----------|-------------|
+| `auto_extract_bridge(text, context)` | Main entry point: heuristic extraction pipeline |
+| `_score_as_function(text)` | Scorer: how likely is text to be a function/purpose? |
+| `_score_as_structure(text)` | Scorer: how likely is text to be a structure/pattern? |
+
+### 3.12 `bridge_hook.py` — Shared Hook
+
+| Component | Description |
+|-----------|-------------|
+| `maybe_auto_extract_bridge(req)` | Wraps extraction logic for use in `decision_service` |
+
+### 3.13 `models.py` — CSTP Data Models
 
 | Model | Used By |
 |-------|---------|
 | `QueryFilters` | `cstp.queryDecisions` — category, confidence, stakes, status, project, feature, PR, has_outcome |
-| `QueryDecisionsRequest` | `cstp.queryDecisions` — query text, filters, limit, retrieval_mode (semantic/hybrid/keyword) |
+| `QueryDecisionsRequest` | `cstp.queryDecisions` — query text, bridge_side (structure/function), filters, limit |
 | `DecisionSummary` | Query results — id, title, category, confidence, distance, reasons |
 | `QueryDecisionsResponse` | Wrapper with decisions, total, timing, retrieval mode, scores |
 | `ActionContext` | `cstp.checkGuardrails` — description, category, stakes, confidence, context dict |

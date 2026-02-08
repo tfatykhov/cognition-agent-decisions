@@ -75,6 +75,8 @@ graph TB
         AS["attribution_service<br/>(PR stability)"]
         DRS["drift_service<br/>(30d vs 90d)"]
         RS["reindex_service<br/>(full rebuild)"]
+        DT["deliberation_tracker<br/>(auto-capture traces)"]
+        BE["bridge_extractor<br/>(structure/function)"]
         BM["bm25_index<br/>(keyword search)"]
     end
 
@@ -146,6 +148,8 @@ Each JSON-RPC method is backed by a dedicated service module:
 | `attribution_service.py` | `cstp.attributeOutcomes` | Auto-attribute outcomes via PR stability |
 | `drift_service.py` | `cstp.checkDrift` | Compare 30-day vs. 90-day+ calibration |
 | `reindex_service.py` | `cstp.reindex` | Delete and rebuild ChromaDB collection |
+| `deliberation_tracker.py` | (auto-hook) | Tracks inputs and steps for reasoning traces |
+| `bridge_extractor.py` | (auto-hook) | Extracts structure/function from decision text |
 | `dispatcher.py` | (router) | Maps JSON-RPC method names to async handlers |
 | `models.py` | (shared) | Pydantic-style dataclasses for request/response objects |
 | `bm25_index.py` | (internal) | BM25Okapi keyword index with caching and score merging |
@@ -341,6 +345,41 @@ sequenceDiagram
     Engine-->>GuardSvc: violations + warnings
     GuardSvc->>Audit: log audit trail
     GuardSvc-->>Agent: allowed/blocked + details
+```
+
+### Deliberation & Bridge Flow
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant FastAPI as POST /cstp
+    participant Tracker as DeliberationTracker
+    participant DecSvc as decision_service
+    participant Extractor as BridgeExtractor
+    participant Storage as ChromaDB + YAML
+
+    Agent->>FastAPI: queryDecisions("...")
+    FastAPI->>Tracker: track_query(agent_id, query)
+    FastAPI-->>Agent: results
+
+    Agent->>FastAPI: checkGuardrails("...")
+    FastAPI->>Tracker: track_check(agent_id, action)
+    FastAPI-->>Agent: allowed/blocked
+
+    Agent->>FastAPI: recordDecision("...", bridge=None)
+    FastAPI->>DecSvc: record_decision()
+    
+    DecSvc->>Tracker: auto_attach_deliberation(agent_id)
+    Tracker-->>DecSvc: Deliberation object (inputs + steps)
+    
+    alt No explicit bridge
+        DecSvc->>Extractor: auto_extract_bridge(decision, context)
+        Extractor-->>DecSvc: BridgeDefinition (structure + function)
+    end
+
+    DecSvc->>Storage: write YAML (with deliberation + bridge)
+    DecSvc->>Storage: index (embedding: structure + function)
+    DecSvc-->>Agent: success
 ```
 
 ---

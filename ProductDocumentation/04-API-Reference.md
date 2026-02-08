@@ -121,6 +121,7 @@ Search for semantically similar decisions using vector similarity, keyword match
 | `limit` | int | ❌ | 10 | Maximum results |
 | `include_reasons` | bool | ❌ | false | Include decision reasons in results |
 | `retrieval_mode` | string | ❌ | `"semantic"` | `"semantic"`, `"keyword"`, or `"hybrid"` |
+| `bridge_side` | string | ❌ | `"both"` | `"structure"`, `"function"`, or `"both"` |
 | `hybrid_weight` | float | ❌ | 0.7 | Semantic weight in hybrid mode (0.0–1.0) |
 | `filters` | object | ❌ | `{}` | Filtering criteria (see below) |
 
@@ -323,6 +324,12 @@ Record a new decision with full metadata, reasoning trace, and optional guardrai
 | `project.pr` | int | — | — | Pull request number |
 | `project.files` | array | — | — | Affected files |
 | `reasoning_trace` | array | ❌ | — | Step-by-step reasoning |
+| `bridge` | object | ❌ | — | Bridge definition (structure + function) |
+| `bridge.structure` | string | ❌ | — | What the decision looks like (pattern) |
+| `bridge.function` | string | ❌ | — | What problem it solves (purpose) |
+| `bridge.tolerance` | array | ❌ | — | Features that don't matter |
+| `bridge.enforcement` | array | ❌ | — | Features that must be present |
+| `bridge.prevention` | array | ❌ | — | Features that must be absent |
 | `pre_decision_protocol` | object | ❌ | — | Track whether query + guardrail check were performed |
 
 **Example request:**
@@ -336,6 +343,10 @@ Record a new decision with full metadata, reasoning trace, and optional guardrai
     "confidence": 0.82,
     "category": "architecture",
     "stakes": "high",
+    "bridge": {
+        "structure": "PostgreSQL with row-level security",
+        "function": "secure multi-tenant data storage"
+    },
     "context": "Evaluating database options for agent state persistence",
     "reasons": [
       {"type": "technical", "text": "ACID compliance for critical state", "strength": 0.9},
@@ -363,6 +374,9 @@ Record a new decision with full metadata, reasoning trace, and optional guardrai
     "path": "decisions/2026/02/2026-02-07-decision-a1b2c3d4.yaml",
     "indexed": true,
     "guardrails_checked": false,
+    "bridge_auto": false,
+    "deliberation_auto": true,
+    "deliberation_inputs_count": 3,
     "message": "Decision recorded and indexed"
   },
   "id": "r-001"
@@ -397,6 +411,65 @@ Record the actual outcome of a previously recorded decision.
     "lessons": "Connection pooling was needed sooner than expected"
   },
   "id": "rv-001"
+}
+```
+
+---
+
+### `cstp.getDecision` — Get Decision Details
+
+Retrieve full decision record including bridge definition and deliberation trace.
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | ✅ | Decision ID |
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "id": "2026-02-07-decision-a1b2c3d4",
+    "title": "Use PostgreSQL",
+    "deliberation": {
+      "inputs": [{"type": "query", "content": "db options"}],
+      "steps": [{"step": 1, "thought": "PostgreSQL meets ACID reqs"}]
+    },
+    "bridge": {
+      "structure": "PostgreSQL",
+      "function": "persistence"
+    }
+  },
+  "id": "gd-001"
+}
+```
+
+---
+
+### `cstp.getReasonStats` — Reason Analytics
+
+Analyze success rates and diversity of decision reasons.
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `min_reviewed` | int | ❌ | Minimum number of reviewed decisions (default 10) |
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "success_rates": {"technical": 0.9, "intuition": 0.6},
+    "diversity_score": 0.75,
+    "dominant_type": "technical"
+  },
+  "id": "grs-001"
 }
 ```
 

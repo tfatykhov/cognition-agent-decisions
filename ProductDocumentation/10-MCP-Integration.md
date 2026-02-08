@@ -160,6 +160,7 @@ Search similar past decisions using semantic search, keyword matching, or hybrid
 | `query` | string | ✅ | — | Natural language query (min 1 char) |
 | `limit` | int | ❌ | 5 | Maximum results (1–50) |
 | `retrieval_mode` | `"semantic"` \| `"keyword"` \| `"hybrid"` | ❌ | `"hybrid"` | Search mode |
+| `bridge_side` | `"structure"` \| `"function"` \| `"both"` | ❌ | `"both"` | Search by bridge side |
 | `filters` | object | ❌ | — | See below |
 
 **Filters:**
@@ -220,9 +221,16 @@ Record a decision to the immutable decision log. Include what you decided, your 
     {"type": "pattern", "text": "Team has strong PostgreSQL expertise"}
   ],
   "project": "owner/repo",
-  "pr": 42
+  "pr": 42,
+  "bridge": {
+    "structure": "PostgreSQL",
+    "function": "persistence"
+  }
 }
 ```
+
+**Deliberation Auto-Capture:**
+When `log_decision` is called, the server automatically attaches a "deliberation trace" if you previously called `query_decisions` or `check_action` within the same session. This captures the "chain of thought" leading to the decision without extra effort.
 
 **Input Schema:**
 
@@ -238,6 +246,17 @@ Record a decision to the immutable decision log. Include what you decided, your 
 | `project` | string | ❌ | — | Project in `owner/repo` format |
 | `feature` | string | ❌ | — | Feature or epic name |
 | `pr` | int | ❌ | — | Pull request number (≥ 1) |
+| `bridge` | object | ❌ | — | Bridge definition (structure/function) |
+
+**Bridge object:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `structure` | string | What it looks like (pattern) |
+| `function` | string | What problem it solves (purpose) |
+| `tolerance` | string[] | Features that don't matter |
+| `enforcement` | string[] | Features that must be present |
+| `prevention` | string[] | Features that must be absent |
 
 **Reason object:**
 
