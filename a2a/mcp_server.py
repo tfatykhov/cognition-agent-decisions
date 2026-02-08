@@ -60,8 +60,18 @@ def _build_query_params(args: QueryDecisionsInput) -> dict[str, Any]:
             filters["category"] = args.filters.category
         if args.filters.stakes:
             filters["stakes"] = args.filters.stakes
+        if args.filters.status:
+            filters["status"] = args.filters.status
         if args.filters.project:
             filters["project"] = args.filters.project
+        if args.filters.feature:
+            filters["feature"] = args.filters.feature
+        if args.filters.pr is not None:
+            filters["pr"] = args.filters.pr
+        if args.filters.min_confidence is not None:
+            filters["minConfidence"] = args.filters.min_confidence
+        if args.filters.max_confidence is not None:
+            filters["maxConfidence"] = args.filters.max_confidence
         if args.filters.has_outcome is not None:
             filters["hasOutcome"] = args.filters.has_outcome
         if filters:
@@ -306,7 +316,10 @@ async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
         "confidence": request.action.confidence,
     }
     if request.action.context:
-        context.update(request.action.context)
+        # Merge additional context but don't overwrite explicit params
+        for k, v in request.action.context.items():
+            if k not in context:
+                context[k] = v
 
     # Evaluate guardrails
     eval_result = await evaluate_guardrails(context)
