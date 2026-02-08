@@ -487,6 +487,11 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
         deliberation=request.deliberation,
     )
 
+    # F024 Phase 3: Auto-extract bridge if not explicitly provided
+    from .cstp.bridge_hook import maybe_auto_extract_bridge
+
+    bridge_auto = maybe_auto_extract_bridge(request)
+
     response = await record_decision(request)
 
     # Format response
@@ -494,6 +499,9 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
+    if bridge_auto and request.bridge:
+        result["bridge_auto"] = True
 
     return [
         TextContent(

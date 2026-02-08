@@ -617,6 +617,11 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
         deliberation=request.deliberation,
     )
 
+    # F024 Phase 3: Auto-extract bridge if not explicitly provided
+    from .bridge_hook import maybe_auto_extract_bridge
+
+    bridge_auto = maybe_auto_extract_bridge(request)
+
     errors = request.validate()
     if errors:
         raise ValueError(f"Validation failed: {'; '.join(errors)}")
@@ -632,6 +637,9 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
+    if bridge_auto and request.bridge:
+        result["bridge_auto"] = True
 
     return result
 
