@@ -23,7 +23,13 @@ from mcp.types import (
     Tool,
 )
 
-from .mcp_schemas import CheckActionInput, QueryDecisionsInput
+from .mcp_schemas import (
+    CheckActionInput,
+    GetStatsInput,
+    LogDecisionInput,
+    QueryDecisionsInput,
+    ReviewOutcomeInput,
+)
 
 # Configure logging to stderr (stdout is reserved for MCP protocol)
 logging.basicConfig(
@@ -95,6 +101,33 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=CheckActionInput.model_json_schema(),
         ),
+        Tool(
+            name="log_decision",
+            description=(
+                "Record a decision to the immutable decision log. Include what you "
+                "decided, your confidence level, category, and supporting reasons. "
+                "Use after making a decision to build calibration history."
+            ),
+            inputSchema=LogDecisionInput.model_json_schema(),
+        ),
+        Tool(
+            name="review_outcome",
+            description=(
+                "Record the outcome of a past decision. Provide the decision ID, "
+                "whether it succeeded or failed, what actually happened, and lessons "
+                "learned. Builds calibration data over time."
+            ),
+            inputSchema=ReviewOutcomeInput.model_json_schema(),
+        ),
+        Tool(
+            name="get_stats",
+            description=(
+                "Get calibration statistics: Brier score, accuracy, confidence "
+                "distribution, and decision counts. Optionally filter by category, "
+                "project, or time window. Use to check decision-making quality."
+            ),
+            inputSchema=GetStatsInput.model_json_schema(),
+        ),
     ]
 
 
@@ -109,6 +142,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "check_action":
             return await _handle_check_action(arguments)
+
+        if name == "log_decision":
+            return await _handle_log_decision(arguments)
+
+        if name == "review_outcome":
+            return await _handle_review_outcome(arguments)
+
+        if name == "get_stats":
+            return await _handle_get_stats(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -172,6 +214,107 @@ async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
 
     # Log the check
     log_guardrail_check(request, response)
+
+    # Format response
+    result = response.to_dict()
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle log_decision tool call."""
+    from .decision_service import RecordDecisionRequest, record_decision
+
+    # Validate input via Pydantic
+    args = LogDecisionInput(**arguments)
+
+    # Build params dict for CSTP
+    params: dict[str, Any] = {
+        "decision": args.decision,
+        "confidence": args.confidence,
+        "category": args.category,
+        "stakes": args.stakes,
+    }
+    if args.context:
+        params["context"] = args.context
+    if args.reasons:
+        params["reasons"] = [{"type": r.type, "text": r.text} for r in args.reasons]
+    if args.tags:
+        params["tags"] = args.tags
+    if args.project:
+        params["project"] = args.project
+    if args.feature:
+        params["feature"] = args.feature
+    if args.pr is not None:
+        params["pr"] = args.pr
+
+    # Create request and record
+    request = RecordDecisionRequest.from_dict(params, agent_id="mcp-client")
+    response = await record_decision(request)
+
+    # Format response
+    result = response.to_dict()
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_review_outcome(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle review_outcome tool call."""
+    from .decision_service import ReviewDecisionRequest, review_decision
+
+    # Validate input via Pydantic
+    args = ReviewOutcomeInput(**arguments)
+
+    # Build params dict for CSTP
+    params: dict[str, Any] = {
+        "id": args.id,
+        "outcome": args.outcome,
+    }
+    if args.actual_result:
+        params["actualResult"] = args.actual_result
+    if args.lessons:
+        params["lessons"] = args.lessons
+    if args.notes:
+        params["notes"] = args.notes
+
+    # Create request and review
+    request = ReviewDecisionRequest.from_dict(params, reviewer_id="mcp-client")
+    response = await review_decision(request)
+
+    # Format response
+    result = response.to_dict()
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(result, indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_get_stats(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle get_stats tool call."""
+    from .calibration_service import GetCalibrationRequest, get_calibration
+
+    # Validate input via Pydantic
+    args = GetStatsInput(**arguments)
+
+    # Build request directly
+    request = GetCalibrationRequest(
+        category=args.category,
+        project=args.project,
+        window=args.window,
+    )
+
+    # Get calibration stats
+    response = await get_calibration(request)
 
     # Format response
     result = response.to_dict()

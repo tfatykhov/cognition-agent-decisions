@@ -77,3 +77,114 @@ class CheckActionInput(BaseModel):
         le=1.0,
         description="Your confidence in this action (0.0 to 1.0)",
     )
+
+
+# ============================================================================
+# Phase 2: log_decision, review_outcome, get_stats
+# ============================================================================
+
+
+class ReasonInput(BaseModel):
+    """A reason supporting a decision."""
+
+    type: Literal["authority", "analogy", "analysis", "pattern", "intuition"] = Field(
+        ...,
+        description="Type of reasoning: authority, analogy, analysis, pattern, or intuition",
+    )
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Explanation of this reason",
+    )
+
+
+class LogDecisionInput(BaseModel):
+    """Input for the log_decision tool."""
+
+    decision: str = Field(
+        ...,
+        min_length=1,
+        description="What you decided — state the choice, not the question",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Your confidence in this decision (0.0 to 1.0)",
+    )
+    category: Literal["architecture", "process", "integration", "tooling", "security"] = Field(
+        ...,
+        description="Decision category",
+    )
+    stakes: Literal["low", "medium", "high", "critical"] = Field(
+        default="medium",
+        description="Stakes level of the decision",
+    )
+    context: str | None = Field(
+        default=None,
+        description="Situation context — what led to this decision",
+    )
+    reasons: list[ReasonInput] | None = Field(
+        default=None,
+        description="Reasons supporting the decision (aim for 2+ different types)",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Tags for categorization",
+    )
+    project: str | None = Field(
+        default=None,
+        description="Project in owner/repo format",
+    )
+    feature: str | None = Field(
+        default=None,
+        description="Feature or epic name",
+    )
+    pr: int | None = Field(
+        default=None,
+        ge=1,
+        description="Pull request number",
+    )
+
+
+class ReviewOutcomeInput(BaseModel):
+    """Input for the review_outcome tool."""
+
+    id: str = Field(
+        ...,
+        min_length=1,
+        description="Decision ID to review (8-char hex)",
+    )
+    outcome: Literal["success", "partial", "failure", "abandoned"] = Field(
+        ...,
+        description="Outcome of the decision",
+    )
+    actual_result: str | None = Field(
+        default=None,
+        description="What actually happened",
+    )
+    lessons: str | None = Field(
+        default=None,
+        description="Lessons learned from this decision",
+    )
+    notes: str | None = Field(
+        default=None,
+        description="Additional review notes",
+    )
+
+
+class GetStatsInput(BaseModel):
+    """Input for the get_stats tool."""
+
+    category: str | None = Field(
+        default=None,
+        description="Filter stats by category: architecture, process, integration, tooling, security",
+    )
+    project: str | None = Field(
+        default=None,
+        description="Filter stats by project (owner/repo format)",
+    )
+    window: Literal["30d", "60d", "90d", "all"] | None = Field(
+        default=None,
+        description="Rolling time window for stats calculation",
+    )
