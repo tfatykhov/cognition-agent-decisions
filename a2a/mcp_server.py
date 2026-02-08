@@ -258,6 +258,10 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
         has_outcome=request.filters.has_outcome,
     )
 
+    # P2: Surface query errors instead of masking them
+    if response.error:
+        raise RuntimeError(response.error)
+
     query_time_ms = int((time.time() - start_time) * 1000)
 
     # Convert QueryResponse results to DecisionSummary list
@@ -344,9 +348,20 @@ async def _handle_check_action(arguments: dict[str, Any]) -> list[TextContent]:
         for v in eval_result.violations
     ]
 
+    warnings = [
+        {
+            "guardrail_id": w.guardrail_id,
+            "name": w.name,
+            "message": w.message,
+            "severity": w.severity,
+        }
+        for w in eval_result.warnings
+    ]
+
     result = {
         "allowed": eval_result.allowed,
         "violations": violations,
+        "warnings": warnings,
         "evaluated": eval_result.evaluated,
     }
     return [
