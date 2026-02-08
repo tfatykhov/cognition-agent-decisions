@@ -178,6 +178,152 @@ class ReasoningStep:
 
 
 @dataclass
+class DeliberationInput:
+    """An input/evidence item gathered during deliberation.
+
+    Attributes:
+        id: Short identifier (e.g., "i1", "i2").
+        text: Description of the input.
+        source: Where the input came from (url, file, memory, api, etc.).
+        timestamp: When this input was gathered.
+    """
+
+    id: str
+    text: str
+    source: str | None = None
+    timestamp: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {
+            "id": self.id,
+            "text": self.text,
+        }
+        if self.source:
+            result["source"] = self.source
+        if self.timestamp:
+            result["timestamp"] = self.timestamp
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DeliberationInput":
+        """Create from dictionary."""
+        return cls(
+            id=data.get("id") or "",
+            text=data.get("text") or "",
+            source=data.get("source"),
+            timestamp=data.get("timestamp"),
+        )
+
+
+@dataclass
+class DeliberationStep:
+    """A step in the deliberation process.
+
+    Attributes:
+        step: Step number (1-indexed).
+        thought: What was considered at this step.
+        inputs_used: Which input IDs contributed to this step.
+        timestamp: When this step occurred.
+        duration_ms: How long this step took.
+        type: Reasoning type used (maps to reason types).
+        conclusion: Whether this step produced the final conclusion.
+    """
+
+    step: int
+    thought: str
+    inputs_used: list[str] = field(default_factory=list)
+    timestamp: str | None = None
+    duration_ms: int | None = None
+    type: str | None = None
+    conclusion: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {
+            "step": self.step,
+            "thought": self.thought,
+        }
+        if self.inputs_used:
+            result["inputs_used"] = self.inputs_used
+        if self.timestamp:
+            result["timestamp"] = self.timestamp
+        if self.duration_ms is not None:
+            result["duration_ms"] = self.duration_ms
+        if self.type:
+            result["type"] = self.type
+        if self.conclusion:
+            result["conclusion"] = self.conclusion
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DeliberationStep":
+        """Create from dictionary."""
+        duration_raw = data.get("duration_ms") or data.get("durationMs")
+        return cls(
+            step=int(data.get("step") or 0),
+            thought=data.get("thought") or "",
+            inputs_used=data.get("inputs_used") or data.get("inputsUsed") or [],
+            timestamp=data.get("timestamp"),
+            duration_ms=int(duration_raw) if duration_raw is not None else None,
+            type=data.get("type"),
+            conclusion=bool(data.get("conclusion", False)),
+        )
+
+
+@dataclass
+class Deliberation:
+    """Full deliberation trace for a decision (F023).
+
+    Captures the chain-of-thought: which inputs were gathered,
+    how they were combined step-by-step, and timing information.
+
+    Attributes:
+        inputs: Evidence/inputs gathered during deliberation.
+        steps: Reasoning steps showing how inputs were combined.
+        total_duration_ms: Total time spent deliberating.
+        convergence_point: Step number where inputs converged to decision.
+    """
+
+    inputs: list[DeliberationInput] = field(default_factory=list)
+    steps: list[DeliberationStep] = field(default_factory=list)
+    total_duration_ms: int | None = None
+    convergence_point: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary."""
+        result: dict[str, Any] = {
+            "inputs": [i.to_dict() for i in self.inputs],
+            "steps": [s.to_dict() for s in self.steps],
+        }
+        if self.total_duration_ms is not None:
+            result["total_duration_ms"] = self.total_duration_ms
+        if self.convergence_point is not None:
+            result["convergence_point"] = self.convergence_point
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Deliberation":
+        """Create from dictionary."""
+        inputs_data = data.get("inputs") or []
+        steps_data = data.get("steps") or []
+
+        duration_raw = data.get("total_duration_ms") or data.get("totalDurationMs")
+        convergence_raw = data.get("convergence_point") or data.get("convergencePoint")
+
+        return cls(
+            inputs=[DeliberationInput.from_dict(i) for i in inputs_data],
+            steps=[DeliberationStep.from_dict(s) for s in steps_data],
+            total_duration_ms=int(duration_raw) if duration_raw is not None else None,
+            convergence_point=int(convergence_raw) if convergence_raw is not None else None,
+        )
+
+    def has_content(self) -> bool:
+        """Check if deliberation has any content."""
+        return bool(self.inputs or self.steps)
+
+
+@dataclass
 class RecordDecisionRequest:
     """Request to record a new decision."""
 
@@ -188,6 +334,7 @@ class RecordDecisionRequest:
     context: str | None = None
     reasons: list[Reason] = field(default_factory=list)
     trace: list[ReasoningStep] = field(default_factory=list)  # F020: Reasoning trace
+    deliberation: Deliberation | None = None  # F023: Full deliberation trace
     kpi_indicators: list[str] = field(default_factory=list)
     mental_state: str | None = None
     review_in: str | None = None
@@ -211,6 +358,12 @@ class RecordDecisionRequest:
             for t in trace_data
         ]
 
+        # F023: Parse deliberation trace
+        deliberation = None
+        delib_data = data.get("deliberation")
+        if delib_data and isinstance(delib_data, dict):
+            deliberation = Deliberation.from_dict(delib_data)
+
         pre_decision = None
         if "preDecision" in data or "pre_decision" in data:
             pd_data = data.get("preDecision") or data.get("pre_decision") or {}
@@ -231,6 +384,7 @@ class RecordDecisionRequest:
             context=data.get("context"),
             reasons=reasons,
             trace=trace,
+            deliberation=deliberation,
             kpi_indicators=data.get("kpiIndicators") or data.get("kpi_indicators") or [],
             mental_state=data.get("mentalState") or data.get("mental_state"),
             review_in=data.get("reviewIn") or data.get("review_in"),
@@ -349,6 +503,10 @@ def build_decision_yaml(request: RecordDecisionRequest, decision_id: str) -> dic
     # F020: Add reasoning trace
     if request.trace:
         decision_data["trace"] = [t.to_dict() for t in request.trace]
+
+    # F023: Add deliberation trace
+    if request.deliberation and request.deliberation.has_content():
+        decision_data["deliberation"] = request.deliberation.to_dict()
 
     if request.kpi_indicators:
         decision_data["kpi_indicators"] = request.kpi_indicators
