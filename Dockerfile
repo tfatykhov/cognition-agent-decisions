@@ -29,8 +29,8 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files first (for layer caching)
 COPY pyproject.toml ./
 
-# Install dependencies
-RUN uv pip install --system ".[a2a]"
+# Install dependencies (a2a + mcp)
+RUN uv pip install --system ".[a2a,mcp]"
 
 # --- Runtime stage ---
 FROM base AS runtime
@@ -57,5 +57,8 @@ EXPOSE 8100
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8100/health || exit 1
 
-# Default command
+# Default command (JSON-RPC server)
 CMD ["python", "-m", "a2a.server", "--host", "0.0.0.0", "--port", "8100"]
+
+# Alternative: MCP server (stdio transport)
+# CMD ["python", "-m", "a2a.mcp_server"]
