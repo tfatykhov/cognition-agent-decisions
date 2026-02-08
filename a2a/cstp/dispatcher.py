@@ -618,17 +618,9 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     )
 
     # F024 Phase 3: Auto-extract bridge if not explicitly provided
-    bridge_auto = False
-    if not request.bridge or not request.bridge.has_content():
-        try:
-            from .bridge_extractor import auto_extract_bridge
+    from .bridge_hook import maybe_auto_extract_bridge
 
-            extracted = auto_extract_bridge(request)
-            if extracted and extracted.has_content():
-                request.bridge = extracted
-                bridge_auto = True
-        except Exception:
-            logger.debug("Bridge auto-extraction failed", exc_info=True)
+    bridge_auto = maybe_auto_extract_bridge(request)
 
     errors = request.validate()
     if errors:

@@ -79,10 +79,12 @@ class TestAutoExtract(unittest.TestCase):
         assert bridge is not None
         assert "prevent" in bridge.function.lower() or "telemetry" in bridge.function.lower()
 
-    def test_explicit_bridge_not_overwritten(self):
-        """Auto-extract should not run when bridge is already provided."""
+    def test_explicit_bridge_skipped_by_hook(self):
+        """Hook should not overwrite an explicit bridge."""
+        from a2a.cstp.bridge_hook import maybe_auto_extract_bridge
+
         req = RecordDecisionRequest(
-            decision="test",
+            decision="Added retry logic to API client",
             confidence=0.8,
             category="process",
             bridge=BridgeDefinition(
@@ -90,9 +92,10 @@ class TestAutoExtract(unittest.TestCase):
                 function="explicit function",
             ),
         )
-        # The extractor should return None or not be called
-        # (caller checks has_content before calling)
-        assert req.bridge.has_content()
+        result = maybe_auto_extract_bridge(req)
+        assert result is False
+        assert req.bridge.structure == "explicit structure"
+        assert req.bridge.function == "explicit function"
 
     def test_truncation(self):
         req = RecordDecisionRequest(
