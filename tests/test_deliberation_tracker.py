@@ -290,10 +290,14 @@ class TestAutoAttachDeliberation:
 
         result = auto_attach_deliberation("rpc:test", explicit)
         assert result is not None
-        # Should have both: manual + auto-tracked
+        # Should have both: manual + auto-tracked inputs
         assert len(result.inputs) == 2
         ids = {i.id for i in result.inputs}
         assert "manual" in ids
+        # Should also have merged steps (manual step + auto step)
+        assert len(result.steps) >= 2
+        # Auto step should be renumbered after manual step
+        assert result.steps[-1].step > 1
 
     def test_no_duplicate_merge(self):
         """Tracked inputs with same ID shouldn't be duplicated."""

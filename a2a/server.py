@@ -136,7 +136,23 @@ def _mount_mcp(app: FastAPI) -> None:
             )
             await response(scope, receive, send)
             return
-        await session_manager.handle_request(scope, receive, send)
+
+        # F023 Phase 2: Set MCP tracker key from session ID header
+        from .mcp_server import _mcp_tracker_key
+
+        session_id = None
+        for header_name, header_value in scope.get("headers", []):
+            if header_name.lower() == b"mcp-session-id":
+                session_id = header_value.decode("utf-8", errors="replace")
+                break
+
+        token = _mcp_tracker_key.set(
+            f"mcp:{session_id}" if session_id else "mcp:default"
+        )
+        try:
+            await session_manager.handle_request(scope, receive, send)
+        finally:
+            _mcp_tracker_key.reset(token)
 
     # Mount as raw ASGI app (not a FastAPI route — MCP handles its own dispatch)
     app.mount("/mcp", handle_mcp)

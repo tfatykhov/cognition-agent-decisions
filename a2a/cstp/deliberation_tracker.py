@@ -5,10 +5,14 @@ and auto-builds Deliberation objects when decisions are recorded.
 
 Works for both JSON-RPC (keyed by agent_id) and MCP (keyed by session_id).
 Zero client changes required.
+
+All tracking operations are fail-open: errors are logged but never
+propagate to the main API flow.
 """
 
 from __future__ import annotations
 
+import logging
 import random
 import threading
 import time
@@ -17,6 +21,8 @@ from typing import Any
 from uuid import uuid4
 
 from .decision_service import Deliberation, DeliberationInput, DeliberationStep
+
+logger = logging.getLogger("cstp-deliberation")
 
 
 @dataclass(slots=True)
@@ -219,24 +225,27 @@ def track_query(
     top_ids: list[str],
     retrieval_mode: str,
 ) -> None:
-    """Track a queryDecisions call."""
-    tracker = get_tracker()
-    tracker.track(
-        key,
-        TrackedInput(
-            id=f"q-{uuid4().hex[:8]}",
-            type="query",
-            text=f"Queried '{query[:50]}': {result_count} results ({retrieval_mode})",
-            source="cstp:queryDecisions",
-            timestamp=time.time(),
-            raw_data={
-                "query": query,
-                "result_count": result_count,
-                "top_ids": top_ids[:5],
-                "retrieval_mode": retrieval_mode,
-            },
-        ),
-    )
+    """Track a queryDecisions call. Fail-open."""
+    try:
+        tracker = get_tracker()
+        tracker.track(
+            key,
+            TrackedInput(
+                id=f"q-{uuid4().hex[:8]}",
+                type="query",
+                text=f"Queried '{query[:50]}': {result_count} results ({retrieval_mode})",
+                source="cstp:queryDecisions",
+                timestamp=time.time(),
+                raw_data={
+                    "query": query,
+                    "result_count": result_count,
+                    "top_ids": top_ids[:5],
+                    "retrieval_mode": retrieval_mode,
+                },
+            ),
+        )
+    except Exception:
+        logger.debug("Failed to track query", exc_info=True)
 
 
 def track_guardrail(
@@ -245,24 +254,27 @@ def track_guardrail(
     allowed: bool,
     violation_count: int,
 ) -> None:
-    """Track a checkGuardrails call."""
-    status = "allowed" if allowed else f"blocked ({violation_count} violations)"
-    tracker = get_tracker()
-    tracker.track(
-        key,
-        TrackedInput(
-            id=f"g-{uuid4().hex[:8]}",
-            type="guardrail",
-            text=f"Checked '{description[:50]}': {status}",
-            source="cstp:checkGuardrails",
-            timestamp=time.time(),
-            raw_data={
-                "description": description,
-                "allowed": allowed,
-                "violation_count": violation_count,
-            },
-        ),
-    )
+    """Track a checkGuardrails call. Fail-open."""
+    try:
+        status = "allowed" if allowed else f"blocked ({violation_count} violations)"
+        tracker = get_tracker()
+        tracker.track(
+            key,
+            TrackedInput(
+                id=f"g-{uuid4().hex[:8]}",
+                type="guardrail",
+                text=f"Checked '{description[:50]}': {status}",
+                source="cstp:checkGuardrails",
+                timestamp=time.time(),
+                raw_data={
+                    "description": description,
+                    "allowed": allowed,
+                    "violation_count": violation_count,
+                },
+            ),
+        )
+    except Exception:
+        logger.debug("Failed to track guardrail", exc_info=True)
 
 
 def track_lookup(
@@ -270,22 +282,25 @@ def track_lookup(
     decision_id: str,
     title: str,
 ) -> None:
-    """Track a getDecision call."""
-    tracker = get_tracker()
-    tracker.track(
-        key,
-        TrackedInput(
-            id=f"l-{uuid4().hex[:8]}",
-            type="lookup",
-            text=f"Retrieved decision {decision_id}: {title[:50]}",
-            source="cstp:getDecision",
-            timestamp=time.time(),
-            raw_data={
-                "decision_id": decision_id,
-                "title": title,
-            },
-        ),
-    )
+    """Track a getDecision call. Fail-open."""
+    try:
+        tracker = get_tracker()
+        tracker.track(
+            key,
+            TrackedInput(
+                id=f"l-{uuid4().hex[:8]}",
+                type="lookup",
+                text=f"Retrieved decision {decision_id}: {title[:50]}",
+                source="cstp:getDecision",
+                timestamp=time.time(),
+                raw_data={
+                    "decision_id": decision_id,
+                    "title": title,
+                },
+            ),
+        )
+    except Exception:
+        logger.debug("Failed to track lookup", exc_info=True)
 
 
 def track_stats(
@@ -294,38 +309,45 @@ def track_stats(
     reason_type_count: int,
     diversity: float | None = None,
 ) -> None:
-    """Track a getReasonStats call."""
-    tracker = get_tracker()
-    diversity_str = f", diversity={diversity:.2f}" if diversity else ""
-    tracker.track(
-        key,
-        TrackedInput(
-            id=f"s-{uuid4().hex[:8]}",
-            type="stats",
-            text=f"Reviewed reason stats: {reason_type_count} types, {total_decisions} decisions{diversity_str}",
-            source="cstp:getReasonStats",
-            timestamp=time.time(),
-            raw_data={
-                "total_decisions": total_decisions,
-                "reason_type_count": reason_type_count,
-                "diversity": diversity,
-            },
-        ),
-    )
+    """Track a getReasonStats call. Fail-open."""
+    try:
+        tracker = get_tracker()
+        diversity_str = f", diversity={diversity:.2f}" if diversity else ""
+        tracker.track(
+            key,
+            TrackedInput(
+                id=f"s-{uuid4().hex[:8]}",
+                type="stats",
+                text=f"Reviewed reason stats: {reason_type_count} types, {total_decisions} decisions{diversity_str}",
+                source="cstp:getReasonStats",
+                timestamp=time.time(),
+                raw_data={
+                    "total_decisions": total_decisions,
+                    "reason_type_count": reason_type_count,
+                    "diversity": diversity,
+                },
+            ),
+        )
+    except Exception:
+        logger.debug("Failed to track stats", exc_info=True)
 
 
 def auto_attach_deliberation(
     key: str,
     deliberation: Deliberation | None,
 ) -> Deliberation | None:
-    """Consume tracked inputs and attach/merge with deliberation.
+    """Consume tracked inputs and attach/merge with deliberation. Fail-open.
 
     - If no explicit deliberation: return auto-built from tracker
-    - If explicit deliberation: merge tracked inputs into it
+    - If explicit deliberation: merge tracked inputs + steps into it
     - If nothing tracked: return the explicit deliberation as-is (or None)
     """
-    tracker = get_tracker()
-    auto_delib = tracker.consume(key)
+    try:
+        tracker = get_tracker()
+        auto_delib = tracker.consume(key)
+    except Exception:
+        logger.debug("Failed to consume deliberation", exc_info=True)
+        return deliberation
 
     if not auto_delib:
         # Nothing tracked — return whatever was passed in
@@ -335,10 +357,18 @@ def auto_attach_deliberation(
         # No explicit deliberation — use auto-built
         return auto_delib
 
-    # Merge: append tracked inputs to explicit deliberation
-    existing_ids = {i.id for i in deliberation.inputs}
+    # Merge: append tracked inputs AND steps to explicit deliberation
+    existing_input_ids = {i.id for i in deliberation.inputs}
     for inp in auto_delib.inputs:
-        if inp.id not in existing_ids:
+        if inp.id not in existing_input_ids:
             deliberation.inputs.append(inp)
+
+    # Also merge auto-generated steps (append after existing steps)
+    if auto_delib.steps:
+        max_step = max((s.step for s in deliberation.steps), default=0)
+        for step in auto_delib.steps:
+            # Re-number to follow existing steps
+            step.step = max_step + step.step
+            deliberation.steps.append(step)
 
     return deliberation
