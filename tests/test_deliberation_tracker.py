@@ -247,8 +247,9 @@ class TestAutoAttachDeliberation:
         reset_tracker()
 
     def test_no_tracking_no_explicit(self):
-        result = auto_attach_deliberation("rpc:test", None)
+        result, auto = auto_attach_deliberation("rpc:test", None)
         assert result is None
+        assert auto is False
 
     def test_auto_only(self):
         track_query(
@@ -259,8 +260,9 @@ class TestAutoAttachDeliberation:
             retrieval_mode="semantic",
         )
 
-        result = auto_attach_deliberation("rpc:test", None)
+        result, auto = auto_attach_deliberation("rpc:test", None)
         assert result is not None
+        assert auto is True
         assert len(result.inputs) == 1
         assert result.inputs[0].source == "cstp:queryDecisions"
 
@@ -270,8 +272,9 @@ class TestAutoAttachDeliberation:
             steps=[DeliberationStep(step=1, thought="manual step")],
         )
 
-        result = auto_attach_deliberation("rpc:test", explicit)
+        result, auto = auto_attach_deliberation("rpc:test", explicit)
         assert result is not None
+        assert auto is False
         assert len(result.inputs) == 1
         assert result.inputs[0].id == "manual"
 
@@ -291,8 +294,9 @@ class TestAutoAttachDeliberation:
             steps=[DeliberationStep(step=1, thought="manual step")],
         )
 
-        result = auto_attach_deliberation("rpc:test", explicit)
+        result, auto = auto_attach_deliberation("rpc:test", explicit)
         assert result is not None
+        assert auto is True
         # Should have both: manual + auto-tracked inputs
         assert len(result.inputs) == 2
         ids = {i.id for i in result.inputs}
@@ -321,7 +325,7 @@ class TestAutoAttachDeliberation:
             inputs=[DeliberationInput(id="shared-id", text="same input")],
         )
 
-        result = auto_attach_deliberation("rpc:test", explicit)
+        result, auto = auto_attach_deliberation("rpc:test", explicit)
         assert result is not None
         assert len(result.inputs) == 1  # No duplicate
 

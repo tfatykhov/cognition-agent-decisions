@@ -465,7 +465,7 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     # F023 Phase 2: Auto-attach deliberation from tracked inputs
     from .cstp.deliberation_tracker import auto_attach_deliberation
 
-    request.deliberation = auto_attach_deliberation(
+    request.deliberation, auto_captured = auto_attach_deliberation(
         key=get_mcp_tracker_key(),
         deliberation=request.deliberation,
     )
@@ -474,7 +474,7 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
     # Format response
     result = response.to_dict()
-    if request.deliberation and request.deliberation.has_content():
+    if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
 

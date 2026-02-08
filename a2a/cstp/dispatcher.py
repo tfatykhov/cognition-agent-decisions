@@ -612,7 +612,7 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     # F023 Phase 2: Auto-attach deliberation from tracked inputs
     from .deliberation_tracker import auto_attach_deliberation
 
-    request.deliberation = auto_attach_deliberation(
+    request.deliberation, auto_captured = auto_attach_deliberation(
         key=f"rpc:{agent_id}",
         deliberation=request.deliberation,
     )
@@ -627,9 +627,9 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     if not response.success:
         raise RuntimeError(response.error or "Failed to record decision")
 
-    # Add auto-deliberation info to response
+    # Add auto-deliberation info to response only if auto-capture happened
     result = response.to_dict()
-    if request.deliberation and request.deliberation.has_content():
+    if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
 

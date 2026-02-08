@@ -75,6 +75,7 @@ class DeliberationTracker:
 
         Returns None if no inputs were tracked.
         Called during recordDecision.
+        Filters out inputs older than TTL.
         """
         with self._lock:
             session = self._sessions.pop(key, None)
@@ -82,7 +83,14 @@ class DeliberationTracker:
         if not session or not session.inputs:
             return None
 
-        return self._build_deliberation(session.inputs)
+        # Filter expired inputs
+        cutoff = time.time() - self._ttl
+        valid_inputs = [i for i in session.inputs if i.timestamp >= cutoff]
+
+        if not valid_inputs:
+            return None
+
+        return self._build_deliberation(valid_inputs)
 
     def get_inputs(self, key: str) -> list[TrackedInput]:
         """Peek at current tracked inputs without consuming."""
@@ -335,8 +343,12 @@ def track_stats(
 def auto_attach_deliberation(
     key: str,
     deliberation: Deliberation | None,
-) -> Deliberation | None:
+) -> tuple[Deliberation | None, bool]:
     """Consume tracked inputs and attach/merge with deliberation. Fail-open.
+
+    Returns:
+        (deliberation, auto_captured) — auto_captured is True only if
+        tracked inputs were actually consumed and attached.
 
     - If no explicit deliberation: return auto-built from tracker
     - If explicit deliberation: merge tracked inputs + steps into it
@@ -347,15 +359,15 @@ def auto_attach_deliberation(
         auto_delib = tracker.consume(key)
     except Exception:
         logger.debug("Failed to consume deliberation", exc_info=True)
-        return deliberation
+        return deliberation, False
 
     if not auto_delib:
         # Nothing tracked — return whatever was passed in
-        return deliberation
+        return deliberation, False
 
     if not deliberation or not deliberation.has_content():
         # No explicit deliberation — use auto-built
-        return auto_delib
+        return auto_delib, True
 
     # Merge: append tracked inputs AND steps to explicit deliberation
     existing_input_ids = {i.id for i in deliberation.inputs}
@@ -371,4 +383,4 @@ def auto_attach_deliberation(
             step.step = max_step + step.step
             deliberation.steps.append(step)
 
-    return deliberation
+    return deliberation, True
