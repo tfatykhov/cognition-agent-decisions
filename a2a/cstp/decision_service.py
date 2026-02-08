@@ -374,6 +374,36 @@ class BridgeDefinition:
 
 
 @dataclass
+class RelatedDecision:
+    """A decision related to the current one.
+
+    Auto-populated from pre-decision query results (deliberation trace).
+    Provides lightweight graph edges without a full graph database.
+    """
+
+    id: str
+    summary: str
+    distance: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for YAML."""
+        return {
+            "id": self.id,
+            "summary": self.summary,
+            "distance": round(self.distance, 3),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "RelatedDecision":
+        """Create from dictionary."""
+        return cls(
+            id=data.get("id") or "",
+            summary=data.get("summary") or "",
+            distance=float(data.get("distance") or 0.0),
+        )
+
+
+@dataclass
 class RecordDecisionRequest:
     """Request to record a new decision."""
 
@@ -386,6 +416,7 @@ class RecordDecisionRequest:
     trace: list[ReasoningStep] = field(default_factory=list)  # F020: Reasoning trace
     deliberation: Deliberation | None = None  # F023: Full deliberation trace
     bridge: BridgeDefinition | None = None  # F024: Bridge-definition (structure/function)
+    related_to: list[RelatedDecision] = field(default_factory=list)  # F025: Related decisions
     kpi_indicators: list[str] = field(default_factory=list)
     mental_state: str | None = None
     review_in: str | None = None
@@ -572,6 +603,10 @@ def build_decision_yaml(request: RecordDecisionRequest, decision_id: str) -> dic
     # F024: Add bridge-definition
     if request.bridge and request.bridge.has_content():
         decision_data["bridge"] = request.bridge.to_dict()
+
+    # F025: Add related decisions
+    if request.related_to:
+        decision_data["related_to"] = [r.to_dict() for r in request.related_to]
 
     if request.kpi_indicators:
         decision_data["kpi_indicators"] = request.kpi_indicators

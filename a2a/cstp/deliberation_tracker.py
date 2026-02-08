@@ -232,6 +232,7 @@ def track_query(
     result_count: int,
     top_ids: list[str],
     retrieval_mode: str,
+    top_results: list[dict] | None = None,
 ) -> None:
     """Track a queryDecisions call. Fail-open."""
     try:
@@ -249,6 +250,7 @@ def track_query(
                     "result_count": result_count,
                     "top_ids": top_ids[:5],
                     "retrieval_mode": retrieval_mode,
+                    "top_results": top_results[:5] if top_results else [],
                 },
             ),
         )
@@ -384,3 +386,73 @@ def auto_attach_deliberation(
             deliberation.steps.append(step)
 
     return deliberation, True
+
+
+def extract_related_decisions(
+    deliberation: Deliberation | None,
+) -> list[dict]:
+    """Extract related decisions from deliberation trace query results.
+
+    Collects top_results from all query inputs in the deliberation,
+    deduplicates by ID, and returns sorted by distance (closest first).
+
+    Returns list of dicts with id, summary, distance.
+    """
+    if not deliberation or not deliberation.inputs:
+        return []
+
+    # Also check raw tracker data if deliberation was auto-built
+    seen: dict[str, dict] = {}
+
+    for inp in deliberation.inputs:
+        # Deliberation inputs don't have raw_data directly,
+        # but we stored top_results in the tracker's raw_data
+        # which gets consumed into the deliberation.
+        # We need to check the raw_data on TrackedInput before
+        # it becomes a DeliberationInput.
+        pass
+
+    # The raw_data is lost when TrackedInput becomes DeliberationInput.
+    # We need to extract BEFORE the conversion. Let's use a different approach:
+    # extract from the tracker's raw inputs before they're consumed.
+    return []
+
+
+def extract_related_from_tracker(key: str) -> list[dict]:
+    """Extract related decisions from tracked inputs BEFORE consumption.
+
+    Call this before auto_attach_deliberation to capture top_results
+    from query inputs while they're still in the tracker.
+
+    Returns list of dicts with id, summary, distance - deduplicated and sorted.
+    """
+    try:
+        tracker = get_tracker()
+        with tracker._lock:
+            session = tracker._sessions.get(key)
+            if not session:
+                return []
+
+            seen: dict[str, dict] = {}
+            cutoff = time.time() - tracker._ttl
+
+            for inp in session.inputs:
+                if inp.timestamp < cutoff:
+                    continue
+                if inp.type != "query" or not inp.raw_data:
+                    continue
+                top_results = inp.raw_data.get("top_results", [])
+                for r in top_results:
+                    rid = r.get("id", "")
+                    if rid and rid not in seen:
+                        seen[rid] = {
+                            "id": rid,
+                            "summary": r.get("summary", ""),
+                            "distance": r.get("distance", 0.0),
+                        }
+
+            # Sort by distance (closest first) and return
+            return sorted(seen.values(), key=lambda x: x["distance"])
+    except Exception:
+        logger.debug("Failed to extract related decisions", exc_info=True)
+        return []

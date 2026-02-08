@@ -479,6 +479,18 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     # Create request and record
     request = RecordDecisionRequest.from_dict(params, agent_id="mcp-client")
 
+    # F025: Extract related decisions BEFORE consuming tracker
+    from .cstp.deliberation_tracker import extract_related_from_tracker
+
+    if not request.related_to:
+        related_raw = extract_related_from_tracker(get_mcp_tracker_key())
+        if related_raw:
+            from .cstp.decision_service import RelatedDecision
+
+            request.related_to = [
+                RelatedDecision.from_dict(r) for r in related_raw
+            ]
+
     # F023 Phase 2: Auto-attach deliberation from tracked inputs
     from .cstp.deliberation_tracker import auto_attach_deliberation
 
@@ -502,6 +514,9 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True
+
+    if request.related_to:
+        result["related_count"] = len(request.related_to)
 
     return [
         TextContent(
