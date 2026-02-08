@@ -324,6 +324,56 @@ class Deliberation:
 
 
 @dataclass
+class BridgeDefinition:
+    """Minsky Ch 12 bridge-definition: connects structure to function.
+
+    Bridges between two descriptions of a decision:
+    - Structure: what the pattern looks like (recognizable form)
+    - Function: what problem it solves (purpose, goal)
+
+    Plus three operators from Ch 12.3 (Uniframes):
+    - Enforcement: features that MUST be present
+    - Prevention: features that MUST NOT be present
+    - Tolerance: features that DON'T MATTER
+    """
+
+    structure: str  # What it looks like / recognizable pattern
+    function: str  # What problem it solves / purpose
+    tolerance: list[str] = field(default_factory=list)
+    enforcement: list[str] = field(default_factory=list)
+    prevention: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for YAML."""
+        result: dict[str, Any] = {
+            "structure": self.structure,
+            "function": self.function,
+        }
+        if self.tolerance:
+            result["tolerance"] = self.tolerance
+        if self.enforcement:
+            result["enforcement"] = self.enforcement
+        if self.prevention:
+            result["prevention"] = self.prevention
+        return result
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "BridgeDefinition":
+        """Create from dictionary."""
+        return cls(
+            structure=data.get("structure") or "",
+            function=data.get("function") or data.get("purpose") or "",
+            tolerance=data.get("tolerance") or [],
+            enforcement=data.get("enforcement") or [],
+            prevention=data.get("prevention") or [],
+        )
+
+    def has_content(self) -> bool:
+        """Check if bridge has meaningful content."""
+        return bool(self.structure or self.function)
+
+
+@dataclass
 class RecordDecisionRequest:
     """Request to record a new decision."""
 
@@ -335,6 +385,7 @@ class RecordDecisionRequest:
     reasons: list[Reason] = field(default_factory=list)
     trace: list[ReasoningStep] = field(default_factory=list)  # F020: Reasoning trace
     deliberation: Deliberation | None = None  # F023: Full deliberation trace
+    bridge: BridgeDefinition | None = None  # F024: Bridge-definition (structure/function)
     kpi_indicators: list[str] = field(default_factory=list)
     mental_state: str | None = None
     review_in: str | None = None
@@ -364,6 +415,12 @@ class RecordDecisionRequest:
         if delib_data and isinstance(delib_data, dict):
             deliberation = Deliberation.from_dict(delib_data)
 
+        # F024: Parse bridge-definition
+        bridge = None
+        bridge_data = data.get("bridge")
+        if bridge_data and isinstance(bridge_data, dict):
+            bridge = BridgeDefinition.from_dict(bridge_data)
+
         pre_decision = None
         if "preDecision" in data or "pre_decision" in data:
             pd_data = data.get("preDecision") or data.get("pre_decision") or {}
@@ -385,6 +442,7 @@ class RecordDecisionRequest:
             reasons=reasons,
             trace=trace,
             deliberation=deliberation,
+            bridge=bridge,
             kpi_indicators=data.get("kpiIndicators") or data.get("kpi_indicators") or [],
             mental_state=data.get("mentalState") or data.get("mental_state"),
             review_in=data.get("reviewIn") or data.get("review_in"),
@@ -510,6 +568,10 @@ def build_decision_yaml(request: RecordDecisionRequest, decision_id: str) -> dic
     # F023: Add deliberation trace
     if request.deliberation and request.deliberation.has_content():
         decision_data["deliberation"] = request.deliberation.to_dict()
+
+    # F024: Add bridge-definition
+    if request.bridge and request.bridge.has_content():
+        decision_data["bridge"] = request.bridge.to_dict()
 
     if request.kpi_indicators:
         decision_data["kpi_indicators"] = request.kpi_indicators
@@ -730,6 +792,13 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
             parts.append(f"File: {pc.file}")
         if pc.pr is not None:
             parts.append(f"PR #{pc.pr}")
+
+    # F024: Include bridge-definition in embedding
+    if request.bridge and request.bridge.has_content():
+        if request.bridge.structure:
+            parts.append(f"Structure: {request.bridge.structure}")
+        if request.bridge.function:
+            parts.append(f"Function: {request.bridge.function}")
 
     return "\n".join(parts)
 

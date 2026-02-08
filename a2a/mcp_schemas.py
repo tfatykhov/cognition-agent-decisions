@@ -235,6 +235,41 @@ class LogDecisionInput(BaseModel):
         default=None,
         description="Chain-of-thought trace: inputs gathered, reasoning steps, and timing",
     )
+    bridge: "BridgeSchema | None" = Field(
+        default=None,
+        description="Bridge-definition: connects structure (what it looks like) to function (what it solves)",
+    )
+
+
+class BridgeSchema(BaseModel):
+    """Minsky Ch 12 bridge-definition: connects structure to function."""
+
+    structure: str = Field(
+        ...,
+        min_length=1,
+        description="What the pattern looks like - recognizable form, files, tools, code shape",
+    )
+    function: str = Field(
+        ...,
+        min_length=1,
+        description="What problem it solves - purpose, goal, constraint addressed",
+    )
+    tolerance: list[str] | None = Field(
+        default=None,
+        description="Features that DON'T MATTER for this pattern (Minsky Ch 12.3)",
+    )
+    enforcement: list[str] | None = Field(
+        default=None,
+        description="Features that MUST be present for the pattern to apply (Minsky Ch 12.3)",
+    )
+    prevention: list[str] | None = Field(
+        default=None,
+        description="Features that MUST NOT be present (Minsky Ch 12.3)",
+    )
+
+
+# Rebuild LogDecisionInput model to resolve forward ref
+LogDecisionInput.model_rebuild()
 
 
 class ReviewOutcomeInput(BaseModel):
