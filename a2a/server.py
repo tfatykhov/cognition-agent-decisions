@@ -121,7 +121,6 @@ def _mount_mcp(app: FastAPI) -> None:
 
     Falls back gracefully if the MCP SDK is not installed.
     """
-    from starlette.routing import Mount
     from starlette.types import Receive, Scope, Send
 
     async def handle_mcp(scope: Scope, receive: Receive, send: Send) -> None:
@@ -140,7 +139,7 @@ def _mount_mcp(app: FastAPI) -> None:
         await session_manager.handle_request(scope, receive, send)
 
     # Mount as raw ASGI app (not a FastAPI route — MCP handles its own dispatch)
-    app.routes.append(Mount("/mcp", app=handle_mcp))
+    app.mount("/mcp", handle_mcp)
 
 
 def _register_routes(app: FastAPI) -> None:
