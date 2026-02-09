@@ -432,13 +432,19 @@ async def evaluate_record_guardrails(
         List of warning dicts (empty if no guardrails triggered).
     """
     delib_input_count = len(request.deliberation.inputs) if request.deliberation else 0
+    has_reasoning = False
+    if request.deliberation and request.deliberation.steps:
+        has_reasoning = any(
+            s.type == "reasoning" for s in request.deliberation.steps
+        )
     record_context = {
         "description": request.decision,
         "category": request.category,
         "stakes": request.stakes,
         "confidence": request.confidence,
         "deliberation_inputs_count": delib_input_count,
-        "has_deliberation": delib_input_count > 0,
+        "has_deliberation": delib_input_count > 0 or has_reasoning,
+        "has_reasoning": has_reasoning,
         "phase": "record",
     }
 

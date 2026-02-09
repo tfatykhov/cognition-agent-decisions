@@ -559,9 +559,9 @@ def score_decision_quality(request: "RecordDecisionRequest") -> dict[str, Any]:
     score = 0.0
     suggestions: list[str] = []
 
-    # Pattern provided? (+0.2)
+    # Pattern provided? (+0.15)
     if request.pattern:
-        score += 0.2
+        score += 0.15
     else:
         suggestions.append(
             "Add --pattern for the abstract principle "
@@ -591,9 +591,9 @@ def score_decision_quality(request: "RecordDecisionRequest") -> dict[str, Any]:
     else:
         suggestions.append("No reasons provided - add -r 'type:explanation'")
 
-    # Explicit bridge? (+0.15)
+    # Explicit bridge? (+0.10)
     if request.bridge and request.bridge.has_content():
-        score += 0.15
+        score += 0.10
 
     # Decision text length > 20 chars? (+0.1)
     if len(request.decision) > 20:
@@ -618,6 +618,20 @@ def score_decision_quality(request: "RecordDecisionRequest") -> dict[str, Any]:
     )
     if has_deliberation:
         score += 0.05
+
+    # F028: Reasoning steps in deliberation? (+0.10)
+    has_reasoning = False
+    if request.deliberation and request.deliberation.steps:
+        has_reasoning = any(
+            s.type == "reasoning" for s in request.deliberation.steps
+        )
+    if has_reasoning:
+        score += 0.10
+    else:
+        suggestions.append(
+            "No reasoning captured - use cstp.py think \"your thought process\" "
+            "to record chain-of-thought before recording"
+        )
 
     return {
         "score": round(score, 2),
