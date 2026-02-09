@@ -34,6 +34,7 @@ from .mcp_schemas import (
     LogDecisionInput,
     QueryDecisionsInput,
     ReviewOutcomeInput,
+    UpdateDecisionInput,
 )
 
 # Configure logging to stderr (stdout is reserved for MCP protocol)
@@ -179,6 +180,15 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=GetReasonStatsInput.model_json_schema(),
         ),
+        Tool(
+            name="update_decision",
+            description=(
+                "Update specific fields on an existing decision. Currently "
+                "supports updating tags and pattern. Use for backfilling "
+                "decisions with missing metadata."
+            ),
+            inputSchema=UpdateDecisionInput.model_json_schema(),
+        ),
     ]
 
 
@@ -208,6 +218,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "get_reason_stats":
             return await _handle_get_reason_stats_mcp(arguments)
+
+        if name == "update_decision":
+            return await _handle_update_decision_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -672,6 +685,26 @@ async def _handle_get_reason_stats_mcp(arguments: dict[str, Any]) -> list[TextCo
             text=json.dumps(result, indent=2, default=str),
         )
     ]
+
+
+async def _handle_update_decision_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle update_decision tool call."""
+    from .cstp.decision_service import update_decision
+
+    input_data = UpdateDecisionInput(**arguments)
+
+    updates: dict[str, Any] = {}
+    if input_data.tags is not None:
+        updates["tags"] = input_data.tags
+    if input_data.pattern is not None:
+        updates["pattern"] = input_data.pattern
+
+    if not updates:
+        return [TextContent(type="text", text=json.dumps({"error": "No fields to update"}))]
+
+    result = await update_decision(input_data.id, updates)
+
+    return [TextContent(type="text", text=json.dumps(result))]
 
 
 async def run_stdio() -> None:
