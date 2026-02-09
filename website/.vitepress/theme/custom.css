@@ -1,0 +1,23 @@
+/* Hero image: blend dark background away, keep neon glow */
+.VPHero .VPImage img,
+.VPHero .image-container img {
+  mix-blend-mode: lighten;
+}
+
+/* Move image to the left side of the hero */
+.VPHero .VPImage {
+  order: -1;
+}
+
+.VPHero .container {
+  flex-direction: row !important;
+}
+
+.VPHero .main {
+  order: 1;
+}
+
+/* Nav bar logo: blend into dark header */
+.VPNavBarTitle img {
+  mix-blend-mode: lighten;
+}

@@ -203,6 +203,8 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                     date=d.get("created_at", "")[:10],
                     distance=0.0,
                     reasons=None,
+                    tags=d.get("tags"),
+                    pattern=d.get("pattern"),
                 )
             )
 
@@ -264,6 +266,8 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                     date=d.get("created_at", "")[:10],
                     distance=round(1.0 - score / 10.0, 4),  # Approximate distance
                     reasons=None,
+                    tags=d.get("tags"),
+                    pattern=d.get("pattern"),
                 )
             )
             scores[doc_id[:8] if len(doc_id) > 8 else doc_id] = {
@@ -289,6 +293,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             feature=request.filters.feature,
             pr=request.filters.pr,
             has_outcome=request.filters.has_outcome,
+            tags=request.filters.tags,
         )
 
         if response.error:
@@ -342,6 +347,8 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                         date=r.date,
                         distance=round(1.0 - score_dict["combined"], 4),
                         reasons=r.reason_types if request.include_reasons else None,
+                        tags=r.tags,
+                        pattern=r.pattern,
                     )
                 )
             elif doc_id in decision_map:
@@ -358,6 +365,8 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                         date=d.get("created_at", "")[:10],
                         distance=round(1.0 - score_dict["combined"], 4),
                         reasons=None,
+                        tags=d.get("tags"),
+                        pattern=d.get("pattern"),
                     )
                 )
             scores[doc_id] = score_dict
@@ -378,6 +387,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             feature=request.filters.feature,
             pr=request.filters.pr,
             has_outcome=request.filters.has_outcome,
+            tags=request.filters.tags,
         )
 
         if response.error:
@@ -395,6 +405,8 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                 date=r.date,
                 distance=r.distance,
                 reasons=r.reason_types if request.include_reasons else None,
+                tags=r.tags,
+                pattern=r.pattern,
             )
             for r in response.results
         ]
@@ -657,6 +669,12 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
+    # F026: Run guardrails against record context (supports deliberation checks)
+    from .guardrails_service import evaluate_record_guardrails
+    record_warnings = await evaluate_record_guardrails(request)
+    if record_warnings:
+        result["guardrail_warnings"] = record_warnings
 
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True

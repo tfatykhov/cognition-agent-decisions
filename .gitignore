@@ -27,3 +27,6 @@ __pycache__/
 /src/cognition_engines/__pycache__
 *.pyc
 .env
+website/node_modules/
+website/.vitepress/dist/
+website/.vitepress/cache/

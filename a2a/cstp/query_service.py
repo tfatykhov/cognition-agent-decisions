@@ -42,6 +42,9 @@ class QueryResult:
     date: str
     distance: float
     reason_types: list[str] | None = None
+    # F027: Tags and pattern
+    tags: list[str] | None = None
+    pattern: str | None = None
 
 
 @dataclass(slots=True)
@@ -169,6 +172,8 @@ async def query_decisions(
     feature: str | None = None,
     pr: int | None = None,
     has_outcome: bool | None = None,
+    # F027: Tag filter
+    tags: list[str] | None = None,
 ) -> QueryResponse:
     """Query similar decisions from ChromaDB.
 
@@ -229,6 +234,13 @@ async def query_decisions(
         where["feature"] = feature
     if pr is not None:
         where["pr"] = pr
+    # F027: Tag filter (tags stored as comma-separated string)
+    if tags:
+        if len(tags) == 1:
+            where["tags"] = {"$contains": tags[0]}
+        else:
+            # Match any tag - OR across tags using $contains on each
+            where["$or"] = [{"tags": {"$contains": t}} for t in tags]
     if has_outcome is True:
         where["status"] = "reviewed"
     elif has_outcome is False:
@@ -270,6 +282,11 @@ async def query_decisions(
             if meta.get("reason_types"):
                 reason_types = meta["reason_types"].split(",")
 
+            # F027: Parse tags from comma-separated metadata
+            tags = None
+            if meta.get("tags"):
+                tags = meta["tags"].split(",")
+
             results.append(
                 QueryResult(
                     id=doc_id[:8] if len(doc_id) > 8 else doc_id,
@@ -282,6 +299,8 @@ async def query_decisions(
                     date=meta.get("date", ""),
                     distance=round(dist, 4) if dist else 0.0,
                     reason_types=reason_types,
+                    tags=tags,
+                    pattern=meta.get("pattern"),
                 )
             )
 

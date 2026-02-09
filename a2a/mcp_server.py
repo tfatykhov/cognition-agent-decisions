@@ -295,6 +295,8 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
                 date=r.date or "",
                 distance=r.distance,
                 reasons=None,
+                tags=r.tags,
+                pattern=r.pattern,
             )
         )
 
@@ -511,6 +513,12 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
+
+    # F026: Run guardrails against record context
+    from .cstp.guardrails_service import evaluate_record_guardrails
+    record_warnings = await evaluate_record_guardrails(request)
+    if record_warnings:
+        result["guardrail_warnings"] = record_warnings
 
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True
