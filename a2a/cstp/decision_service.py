@@ -1326,7 +1326,7 @@ async def update_decision(
     file_path, data = result
 
     # Merge updates
-    allowed_fields = {"tags", "pattern", "context", "reasons", "bridge"}
+    allowed_fields = {"tags", "pattern", "context", "reasons", "bridge", "deliberation"}
     applied: list[str] = []
     for key, value in updates.items():
         if key in allowed_fields:

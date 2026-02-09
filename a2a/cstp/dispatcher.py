@@ -551,6 +551,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.listGuardrails", _handle_list_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
     dispatcher.register("cstp.updateDecision", _handle_update_decision)
+    dispatcher.register("cstp.recordThought", _handle_record_thought)
     dispatcher.register("cstp.getDecision", _handle_get_decision)
 
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
@@ -584,6 +585,78 @@ async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict
         raise ValueError("Missing required parameter: updates")
 
     return await update_decision(decision_id, updates)
+
+
+async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.recordThought method (F028).
+
+    Records a reasoning/chain-of-thought step in the deliberation tracker.
+    Two modes:
+    - Pre-decision: no decision_id - thought accumulates in tracker,
+      auto-attached when recordDecision is called.
+    - Post-decision: decision_id provided - thought is appended to
+      the existing decision's deliberation trace.
+
+    Args:
+        params: {"text": "reasoning...", "decision_id": "optional"}
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Acknowledgment with tracked input ID.
+    """
+    from .deliberation_tracker import track_reasoning
+
+    text = params.get("text", "")
+    if not text:
+        raise ValueError("Missing required parameter: text")
+
+    decision_id = params.get("decision_id") or params.get("id")
+
+    if decision_id:
+        # Post-decision: append to existing deliberation
+        from .decision_service import find_decision, update_decision
+
+        import time as _time
+
+        from datetime import UTC, datetime
+
+        result = await find_decision(decision_id)
+        if not result:
+            raise ValueError(f"Decision {decision_id} not found")
+
+        _, data = result
+        delib = data.get("deliberation", {})
+        if not delib:
+            delib = {"inputs": [], "steps": []}
+
+        # Append reasoning step
+        steps = delib.get("steps", [])
+        max_step = max((s.get("step", 0) for s in steps), default=0)
+        steps.append({
+            "step": max_step + 1,
+            "thought": text,
+            "type": "reasoning",
+            "timestamp": datetime.now(UTC).isoformat(),
+            "conclusion": False,
+        })
+        delib["steps"] = steps
+
+        await update_decision(decision_id, {"deliberation": delib})
+
+        return {
+            "success": True,
+            "mode": "post-decision",
+            "decision_id": decision_id,
+            "step_number": max_step + 1,
+        }
+
+    # Pre-decision: accumulate in tracker
+    track_reasoning(agent_id, text)
+    return {
+        "success": True,
+        "mode": "pre-decision",
+        "agent_id": agent_id,
+    }
 
 
 async def _handle_get_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:

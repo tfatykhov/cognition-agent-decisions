@@ -377,3 +377,20 @@ class UpdateDecisionInput(BaseModel):
         default=None,
         description="Abstract pattern this decision represents",
     )
+
+
+class RecordThoughtInput(BaseModel):
+    """Input for the record_thought tool (F028)."""
+
+    text: str = Field(
+        ...,
+        min_length=1,
+        description="Reasoning/chain-of-thought text to record",
+    )
+    decision_id: str | None = Field(
+        default=None,
+        description=(
+            "Decision ID to append thought to (post-decision mode). "
+            "Omit for pre-decision mode (auto-attached on next recordDecision)."
+        ),
+    )
