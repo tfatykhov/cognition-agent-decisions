@@ -359,3 +359,21 @@ class GetReasonStatsInput(BaseModel):
         le=50,
         description="Minimum reviewed decisions to include a reason type in stats",
     )
+
+
+class UpdateDecisionInput(BaseModel):
+    """Input for the update_decision tool."""
+
+    id: str = Field(
+        ...,
+        min_length=1,
+        description="Decision ID to update (8-char hex, e.g. 'b02d10ba')",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Tags to set on the decision (replaces existing)",
+    )
+    pattern: str | None = Field(
+        default=None,
+        description="Abstract pattern this decision represents",
+    )
