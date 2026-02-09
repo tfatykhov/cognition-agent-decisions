@@ -151,12 +151,51 @@ curl -s -X POST $CSTP_URL/cstp \
 
 ---
 
-## 4. Record a Decision
+## 4. Capture Your Reasoning
 
-Now log the decision. The server automatically attaches:
-- **Deliberation trace** from your query (step 2) and guardrail check (step 3)
+Record your chain-of-thought as you work through the problem. These reasoning steps auto-attach to whatever decision you record next.
+
+```bash
+curl -s -X POST $CSTP_URL/cstp \
+  -H "Authorization: Bearer $CSTP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "cstp.recordThought",
+    "params": {
+      "text": "In-memory caching fails on restart. Redis adds a dependency but gives persistence and shared state across instances."
+    },
+    "id": 3
+  }' | python3 -m json.tool
+```
+
+**Expected output:**
+
+```json
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "success": true,
+        "mode": "pre-decision",
+        "agent_id": "your-agent-id"
+    },
+    "id": 3
+}
+```
+
+You can call `recordThought` multiple times - each call captures a timestamped reasoning step. All thoughts accumulate and auto-attach when you record a decision.
+
+> **Key:** These reasoning steps become part of the deliberation trace, capturing *how* you decided - not just *what*.
+
+---
+
+## 5. Record a Decision
+
+Now log the decision. Include tags and a pattern for better retrieval. The server automatically attaches:
+- **Deliberation trace** from your query (step 2), guardrail check (step 3), and reasoning (step 4)
 - **Bridge-definition** extracted from your decision text (structure + function)
 - **Related decisions** linked from query results
+- **Quality score** measuring recording completeness
 
 ```bash
 curl -s -X POST $CSTP_URL/cstp \
@@ -174,9 +213,11 @@ curl -s -X POST $CSTP_URL/cstp \
       "reasons": [
         {"type": "analysis", "text": "Redis survives process restarts and supports multi-instance deployments"},
         {"type": "pattern", "text": "Previous projects had cache-loss bugs with in-memory stores"}
-      ]
+      ],
+      "tags": ["caching", "infrastructure", "redis"],
+      "pattern": "Choose stateless-compatible infrastructure for multi-instance deployments"
     },
-    "id": 3
+    "id": 4
   }' | python3 -m json.tool
 ```
 
@@ -192,28 +233,35 @@ curl -s -X POST $CSTP_URL/cstp \
         "indexed": true,
         "timestamp": "2026-02-09T12:00:00.000000+00:00",
         "deliberation_auto": true,
-        "deliberation_inputs_count": 2,
+        "deliberation_inputs_count": 3,
         "bridge_auto": true,
-        "related_count": 2
+        "bridge_method": "both-extracted",
+        "related_count": 2,
+        "quality": {
+            "score": 0.95,
+            "suggestions": []
+        }
     },
-    "id": 3
+    "id": 4
 }
 ```
 
 Notice the auto-captured fields:
 - **`deliberation_auto: true`** - The server built a deliberation trace automatically
-- **`deliberation_inputs_count: 2`** - It captured your query (step 2) and guardrail check (step 3) as inputs
-- **`bridge_auto: true`** - A bridge-definition (structure + function) was extracted from your decision text
+- **`deliberation_inputs_count: 3`** - It captured your query, guardrail check, and reasoning steps
+- **`bridge_auto: true`** - A bridge-definition (structure + function) was extracted
+- **`bridge_method`** - How the bridge was extracted (`rule`, `llm`, or `both-extracted`)
 - **`related_count: 2`** - Related decisions were linked from your query results
+- **`quality`** - Score (0.0-1.0) measuring recording completeness, with improvement suggestions
 - **`indexed: true`** - The decision is searchable in ChromaDB immediately
 
-> Save the `id` value - you'll need it in step 6.
+> Save the `id` value - you'll need it in step 7.
 
 ---
 
-## 5. Inspect the Full Decision
+## 6. Inspect the Full Decision
 
-Retrieve the decision to see everything the server captured, including the bridge-definition and reasons with strength scores.
+Retrieve the decision to see everything the server captured, including the bridge-definition, reasoning trace, and quality score.
 
 ```bash
 curl -s -X POST $CSTP_URL/cstp \
@@ -225,7 +273,7 @@ curl -s -X POST $CSTP_URL/cstp \
     "params": {
       "id": "dec_abc12345"
     },
-    "id": 4
+    "id": 5
   }' | python3 -m json.tool
 ```
 
@@ -246,6 +294,8 @@ curl -s -X POST $CSTP_URL/cstp \
             "status": "pending",
             "date": "2026-02-09T12:00:00.000000+00:00",
             "context": "Evaluating caching strategies for multi-instance deployment. In-memory fails on restart; Redis provides persistence and shared state across instances.",
+            "tags": ["caching", "infrastructure", "redis"],
+            "pattern": "Choose stateless-compatible infrastructure for multi-instance deployments",
             "reasons": [
                 {
                     "type": "analysis",
@@ -271,6 +321,12 @@ curl -s -X POST $CSTP_URL/cstp \
                         "text": "Checked 'Deploy untested model to production': blocked",
                         "source": "cstp:checkGuardrails",
                         "timestamp": "2026-02-09T11:59:00.000000+00:00"
+                    },
+                    {
+                        "id": "r-3c7a9f12",
+                        "text": "In-memory caching fails on restart. Redis adds a dependency but gives persistence and shared state across instances.",
+                        "source": "cstp:recordThought",
+                        "timestamp": "2026-02-09T11:59:30.000000+00:00"
                     }
                 ],
                 "steps": [
@@ -287,6 +343,13 @@ curl -s -X POST $CSTP_URL/cstp \
                         "inputs_used": ["g-81fdd447"],
                         "timestamp": "2026-02-09T11:59:00.000000+00:00",
                         "type": "constraint"
+                    },
+                    {
+                        "step": 3,
+                        "thought": "In-memory caching fails on restart. Redis adds a dependency but gives persistence and shared state across instances.",
+                        "inputs_used": ["r-3c7a9f12"],
+                        "timestamp": "2026-02-09T11:59:30.000000+00:00",
+                        "type": "reasoning"
                     }
                 ],
                 "total_duration_ms": 41
@@ -310,14 +373,16 @@ curl -s -X POST $CSTP_URL/cstp \
 ```
 
 The full decision includes everything the server auto-captured:
-- **`deliberation`** - The complete trace: `inputs` (what you queried/checked), `steps` (how they were processed), and `total_duration_ms`
+- **`deliberation`** - The complete trace: `inputs` (what you queried/checked/thought), `steps` (how they were processed), and `total_duration_ms`. Reasoning steps (type `"reasoning"`) capture your chain-of-thought.
+- **`tags`** - Reusable keywords for cross-domain retrieval
+- **`pattern`** - Abstract principle this decision represents (helps find similar decisions across projects)
 - **`bridge`** - Structure (what it looks like) and function (what it solves), from Minsky Ch 12
 - **`related_to`** - Linked decisions from your pre-decision query, with semantic `distance` scores
 - **`reasons`** - Each reason has an auto-assigned `strength` score
 
 ---
 
-## 6. Review an Outcome
+## 7. Review an Outcome
 
 Close the feedback loop by recording what actually happened. Replace `dec_abc12345` with your ID from step 4.
 
@@ -358,7 +423,7 @@ The system now knows this 0.85-confidence decision succeeded. This data feeds di
 
 ---
 
-## 7. Check Calibration
+## 8. Check Calibration
 
 See how well your confidence scores match actual outcomes.
 
@@ -433,7 +498,7 @@ Key metrics:
 
 ---
 
-## 8. Check Reason Stats
+## 9. Check Reason Stats
 
 See which reasoning patterns predict success, and whether your reasoning is diverse enough.
 
@@ -537,16 +602,17 @@ A healthy system shows:
 What you just walked through:
 
 ```
-Query  →  "What solved problems like this?"        (auto-captured as deliberation input)
-Check  →  "Am I allowed to do this?"                (auto-captured as deliberation input)
-Record →  "Here's what I decided and why"           (auto: deliberation trace + bridge + related)
-Inspect → "Show me everything about this decision"  (bridge, reasons, recorded_by)
-Review →  "Here's what actually happened"           (closes the feedback loop)
-Stats  →  "How well am I calibrated?"               (Brier score, recommendations)
-Reason →  "Which reasoning patterns work best?"     (per-type success rates, diversity)
+Query   →  "What solved problems like this?"        (auto-captured as deliberation input)
+Check   →  "Am I allowed to do this?"                (auto-captured as deliberation input)
+Think   →  "Here's my reasoning..."                  (auto-captured as deliberation reasoning step)
+Record  →  "Here's what I decided and why"           (auto: deliberation + bridge + related + quality)
+Inspect → "Show me everything about this decision"   (bridge, reasons, tags, pattern, reasoning trace)
+Review  →  "Here's what actually happened"           (closes the feedback loop)
+Stats   →  "How well am I calibrated?"               (Brier score, recommendations)
+Reason  →  "Which reasoning patterns work best?"     (per-type success rates, diversity)
 ```
 
-Zero client-side work needed for deliberation traces, bridge-definitions, or related decisions - the server handles it all.
+Zero client-side work needed for deliberation traces, bridge-definitions, quality scores, or related decisions - the server handles it all.
 
 ---
 
