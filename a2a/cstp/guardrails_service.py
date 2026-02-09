@@ -417,6 +417,46 @@ async def evaluate_guardrails(
     )
 
 
+async def evaluate_record_guardrails(
+    request: Any,
+) -> list[dict[str, Any]]:
+    """F026: Evaluate guardrails against a recordDecision request.
+
+    Builds record context from the request and returns guardrail warnings.
+    Shared between JSON-RPC dispatcher and MCP server.
+
+    Args:
+        request: RecordDecisionRequest with deliberation, decision, etc.
+
+    Returns:
+        List of warning dicts (empty if no guardrails triggered).
+    """
+    delib_input_count = len(request.deliberation.inputs) if request.deliberation else 0
+    record_context = {
+        "description": request.decision,
+        "category": request.category,
+        "stakes": request.stakes,
+        "confidence": request.confidence,
+        "deliberation_inputs_count": delib_input_count,
+        "has_deliberation": delib_input_count > 0,
+        "phase": "record",
+    }
+    record_eval = await evaluate_guardrails(record_context)
+    warnings: list[dict[str, Any]] = []
+    for v in record_eval.violations:
+        warnings.append({
+            "guardrail_id": v.guardrail_id,
+            "message": v.message,
+            "severity": "block",
+        })
+    for w in record_eval.warnings:
+        warnings.append({
+            "guardrail_id": w.guardrail_id,
+            "message": w.message,
+        })
+    return warnings
+
+
 def log_guardrail_check(
     requesting_agent: str,
     action_description: str,
