@@ -5,6 +5,9 @@ hero:
   name: Cognition Engines
   text: Decision Intelligence for AI Agents
   tagline: Every decision automatically captures its full cognitive context - deliberation traces, bridge-definitions, and related decision links.
+  image:
+    src: /logo.png
+    alt: Cognition Engines
   actions:
     - theme: brand
       text: Get Started
