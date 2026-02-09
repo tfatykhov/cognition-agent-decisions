@@ -2,7 +2,7 @@
 
 > **Feature:** F022 | **Status:** Shipped in v0.10.0
 
-Cognition Engines exposes 7 tools via the [Model Context Protocol](https://modelcontextprotocol.io/) for integration with Claude Desktop, OpenClaw, and any MCP-compliant agent.
+Cognition Engines exposes 9 tools via the [Model Context Protocol](https://modelcontextprotocol.io/) for integration with Claude Desktop, OpenClaw, and any MCP-compliant agent.
 
 ## Endpoint
 
@@ -23,6 +23,8 @@ Streamable HTTP - handles both POST (tool calls) and GET (SSE events).
 | `get_stats` | Calibration statistics |
 | `get_decision` | Full decision details by ID |
 | `get_reason_stats` | Which reason types predict success |
+| `update_decision` | Update tags/pattern on existing decisions |
+| `record_thought` | Capture chain-of-thought reasoning steps |
 
 ## Claude Desktop Configuration
 

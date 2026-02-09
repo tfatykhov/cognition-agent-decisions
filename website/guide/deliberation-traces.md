@@ -1,16 +1,17 @@
 # Deliberation Traces
 
-> **Feature:** F023 | **Status:** Shipped in v0.10.0
+> **Feature:** F023 + F028 | **Status:** Shipped in v0.10.0+
 
-Deliberation traces capture the chain-of-thought behind every decision - which past decisions you queried, which guardrails you checked, and how long the process took.
+Deliberation traces capture the full chain-of-thought behind every decision - which past decisions you queried, which guardrails you checked, what reasoning you applied, and how long the process took.
 
 ## How It Works
 
-The CSTP server tracks your queries and checks per `agent_id`. When you record a decision, it automatically attaches the trace.
+The CSTP server tracks your queries, checks, and reasoning per `agent_id`. When you record a decision, it automatically attaches the trace.
 
 ```
 Agent queries "retry patterns"     → Tracker stores input
 Agent checks guardrails            → Tracker stores input
+Agent records thought              → Tracker stores reasoning step
 Agent records decision             → Tracker builds trace, attaches it, clears
 ```
 
@@ -20,10 +21,32 @@ Agent records decision             → Tracker builds trace, attaches it, clears
 
 Each deliberation trace contains:
 
-- **Inputs** - queries and guardrail checks that preceded the decision
-- **Steps** - timestamped processing events
+- **Inputs** - queries, guardrail checks, and reasoning steps that preceded the decision
+- **Steps** - timestamped processing events with types (`analysis`, `constraint`, `reasoning`)
 - **Timing** - total deliberation duration in milliseconds
 - **Convergence** - whether multiple search paths pointed to the same answer
+
+## Reasoning Steps (F028)
+
+Use `cstp.recordThought` to capture your chain-of-thought reasoning before recording a decision:
+
+```bash
+curl -s -X POST $CSTP_URL/cstp \
+  -H "Authorization: Bearer $CSTP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"cstp.recordThought","params":{"text":"Option A is simpler but Option B handles edge cases better"},"id":1}'
+```
+
+Reasoning steps appear in the trace with `"type": "reasoning"` and `"source": "cstp:recordThought"`.
+
+**Post-decision mode:** You can also append reasoning to an existing decision:
+
+```bash
+curl -s -X POST $CSTP_URL/cstp \
+  -H "Authorization: Bearer $CSTP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"cstp.recordThought","params":{"text":"Retrospective: Option B was the right call","decision_id":"dec_abc123"},"id":1}'
+```
 
 ## Example
 
