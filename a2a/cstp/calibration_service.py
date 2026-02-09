@@ -197,7 +197,7 @@ class GetCalibrationResponse:
         return result
 
 
-async def count_all_decisions(
+async def _scan_decisions(
     decisions_path: str | None = None,
     agent: str | None = None,
     category: str | None = None,
@@ -206,10 +206,11 @@ async def count_all_decisions(
     until: str | None = None,
     project: str | None = None,
     feature: str | None = None,
-) -> tuple[int, list[dict[str, Any]]]:
-    """Count all decisions matching filters (regardless of review status).
+    reviewed_only: bool = False,
+) -> list[dict[str, Any]]:
+    """Scan decision YAML files with optional filters.
 
-    Also returns the full list for confidence stats.
+    Shared helper for both all-decision and reviewed-only queries.
 
     Args:
         decisions_path: Override for decisions directory.
@@ -220,15 +221,16 @@ async def count_all_decisions(
         until: Only decisions before this ISO date.
         project: Filter by project (owner/repo).
         feature: Filter by feature name.
+        reviewed_only: If True, only include reviewed decisions with outcomes.
 
     Returns:
-        Tuple of (total count, list of all matching decisions).
+        List of matching decision data dictionaries.
     """
     base = Path(decisions_path or DECISIONS_PATH)
-    all_decisions: list[dict[str, Any]] = []
+    decisions: list[dict[str, Any]] = []
 
     if not base.exists():
-        return 0, all_decisions
+        return decisions
 
     for yaml_file in base.rglob("*-decision-*.yaml"):
         try:
@@ -238,7 +240,14 @@ async def count_all_decisions(
             if not data:
                 continue
 
-            # Apply same filters as get_reviewed_decisions, minus the status check
+            # Review status filter
+            if reviewed_only:
+                if data.get("status") != "reviewed":
+                    continue
+                if "outcome" not in data:
+                    continue
+
+            # Apply filters
             if agent and data.get("recorded_by") != agent:
                 continue
             if category and data.get("category") != category:
@@ -250,9 +259,10 @@ async def count_all_decisions(
             if feature and data.get("feature") != feature:
                 continue
 
+            # Date filters - normalize to YYYY-MM-DD for consistent comparison
             decision_date = data.get("date", "")
             if isinstance(decision_date, str):
-                date_str = decision_date[:10]
+                date_str = decision_date[:10]  # YYYY-MM-DD
             else:
                 date_str = ""
 
@@ -264,12 +274,13 @@ async def count_all_decisions(
             if until_normalized and date_str > until_normalized:
                 continue
 
-            all_decisions.append(data)
+            decisions.append(data)
 
         except Exception:
+            # Skip corrupt files
             continue
 
-    return len(all_decisions), all_decisions
+    return decisions
 
 
 async def get_reviewed_decisions(
@@ -298,62 +309,17 @@ async def get_reviewed_decisions(
     Returns:
         List of decision data dictionaries.
     """
-    base = Path(decisions_path or DECISIONS_PATH)
-    decisions: list[dict[str, Any]] = []
-
-    if not base.exists():
-        return decisions
-
-    for yaml_file in base.rglob("*-decision-*.yaml"):
-        try:
-            with open(yaml_file) as f:
-                data = yaml.safe_load(f)
-
-            if not data:
-                continue
-
-            # Must be reviewed with outcome
-            if data.get("status") != "reviewed":
-                continue
-            if "outcome" not in data:
-                continue
-
-            # Apply filters
-            if agent and data.get("recorded_by") != agent:
-                continue
-            if category and data.get("category") != category:
-                continue
-            if stakes and data.get("stakes") != stakes:
-                continue
-
-            # F010: Project context filters
-            if project and data.get("project") != project:
-                continue
-            if feature and data.get("feature") != feature:
-                continue
-
-            # Date filters — normalize to YYYY-MM-DD for consistent comparison
-            decision_date = data.get("date", "")
-            if isinstance(decision_date, str):
-                date_str = decision_date[:10]  # YYYY-MM-DD
-            else:
-                date_str = ""
-
-            since_normalized = since[:10] if since else None
-            until_normalized = until[:10] if until else None
-
-            if since_normalized and date_str < since_normalized:
-                continue
-            if until_normalized and date_str > until_normalized:
-                continue
-
-            decisions.append(data)
-
-        except Exception:
-            # Skip corrupt files
-            continue
-
-    return decisions
+    return await _scan_decisions(
+        decisions_path=decisions_path,
+        agent=agent,
+        category=category,
+        stakes=stakes,
+        since=since,
+        until=until,
+        project=project,
+        feature=feature,
+        reviewed_only=True,
+    )
 
 
 def calculate_calibration(
@@ -718,35 +684,30 @@ async def get_calibration(
     effective_since = window_since or request.since
     effective_until = window_until or request.until
 
-    # Get reviewed decisions
-    decisions = await get_reviewed_decisions(
+    # Scan all decisions once, then partition
+    all_decisions = await _scan_decisions(
         decisions_path=decisions_path,
         agent=request.agent,
         category=request.category,
         stakes=request.stakes,
         since=effective_since,
         until=effective_until,
-        # F010: Project context filters
         project=request.project,
         feature=request.feature,
+        reviewed_only=False,
     )
+    total_count = len(all_decisions)
 
-    # Count all decisions (regardless of review status)
-    total_count, all_decisions = await count_all_decisions(
-        decisions_path=decisions_path,
-        agent=request.agent,
-        category=request.category,
-        stakes=request.stakes,
-        since=effective_since,
-        until=effective_until,
-        project=request.project,
-        feature=request.feature,
-    )
+    # Filter to reviewed for calibration math
+    reviewed = [
+        d for d in all_decisions
+        if d.get("status") == "reviewed" and "outcome" in d
+    ]
 
     # Calculate overall calibration
     overall = (
-        calculate_calibration(decisions, total_decisions=total_count)
-        if len(decisions) >= request.min_decisions
+        calculate_calibration(reviewed, total_decisions=total_count)
+        if len(reviewed) >= request.min_decisions
         else None
     )
 
@@ -757,14 +718,14 @@ async def get_calibration(
         overall.period_end = effective_until
 
     # Calculate bucket calibration
-    buckets = calculate_buckets(decisions)
+    buckets = calculate_buckets(reviewed)
 
     # Generate recommendations
     recommendations = generate_recommendations(
         overall=overall,
         buckets=buckets,
         min_decisions=request.min_decisions,
-        total_found=len(decisions),
+        total_found=len(reviewed),
     )
 
     # F016: Calculate confidence variance stats (from ALL decisions, not just reviewed)
