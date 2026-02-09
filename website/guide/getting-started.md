@@ -283,20 +283,27 @@ report = detector.full_report()
 
 ## Method 4: OpenClaw Skill
 
-If using the [OpenClaw](https://github.com/tfatykhov/openclaw) agent framework:
+If using the [OpenClaw](https://openclaw.ai) agent framework:
 
 ```bash
-# Copy the skill definition
-cp -r skills/openclaw/cognition_skill.py /path/to/openclaw/skills/
+# Copy the skill into your OpenClaw workspace
+cp -r skills/cognition-engines /path/to/openclaw/workspace/skills/
+
+# Copy the CLI client
+cp scripts/cstp.py /path/to/openclaw/workspace/scripts/
+
+# Configure credentials
+echo 'CSTP_URL=http://your-server:8100' >> /path/to/openclaw/workspace/.secrets/cstp.env
+echo 'CSTP_TOKEN=your-token' >> /path/to/openclaw/workspace/.secrets/cstp.env
 ```
 
-The skill provides `query_decisions` and `check_guardrails` tools to any OpenClaw agent.
+The skill provides a `SKILL.md` with decision workflow instructions, and `cstp.py` gives the agent CLI access to query, check, record, and review decisions.
 
 ---
 
 ## Method 5: MCP Quick Start
 
-Connect any MCP-compliant agent to CSTP decision intelligence. The MCP server exposes 5 tools (`query_decisions`, `check_action`, `log_decision`, `review_outcome`, `get_stats`) via two transports.
+Connect any MCP-compliant agent to CSTP decision intelligence. The MCP server exposes 7 tools (`query_decisions`, `check_action`, `log_decision`, `review_outcome`, `get_stats`, `get_decision`, `get_reason_stats`) via two transports.
 
 ### Streamable HTTP (Remote)
 
