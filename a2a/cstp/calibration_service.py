@@ -197,6 +197,81 @@ class GetCalibrationResponse:
         return result
 
 
+async def count_all_decisions(
+    decisions_path: str | None = None,
+    agent: str | None = None,
+    category: str | None = None,
+    stakes: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+    project: str | None = None,
+    feature: str | None = None,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Count all decisions matching filters (regardless of review status).
+
+    Also returns the full list for confidence stats.
+
+    Args:
+        decisions_path: Override for decisions directory.
+        agent: Filter by recorded_by field.
+        category: Filter by category.
+        stakes: Filter by stakes level.
+        since: Only decisions after this ISO date.
+        until: Only decisions before this ISO date.
+        project: Filter by project (owner/repo).
+        feature: Filter by feature name.
+
+    Returns:
+        Tuple of (total count, list of all matching decisions).
+    """
+    base = Path(decisions_path or DECISIONS_PATH)
+    all_decisions: list[dict[str, Any]] = []
+
+    if not base.exists():
+        return 0, all_decisions
+
+    for yaml_file in base.rglob("*-decision-*.yaml"):
+        try:
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+
+            if not data:
+                continue
+
+            # Apply same filters as get_reviewed_decisions, minus the status check
+            if agent and data.get("recorded_by") != agent:
+                continue
+            if category and data.get("category") != category:
+                continue
+            if stakes and data.get("stakes") != stakes:
+                continue
+            if project and data.get("project") != project:
+                continue
+            if feature and data.get("feature") != feature:
+                continue
+
+            decision_date = data.get("date", "")
+            if isinstance(decision_date, str):
+                date_str = decision_date[:10]
+            else:
+                date_str = ""
+
+            since_normalized = since[:10] if since else None
+            until_normalized = until[:10] if until else None
+
+            if since_normalized and date_str < since_normalized:
+                continue
+            if until_normalized and date_str > until_normalized:
+                continue
+
+            all_decisions.append(data)
+
+        except Exception:
+            continue
+
+    return len(all_decisions), all_decisions
+
+
 async def get_reviewed_decisions(
     decisions_path: str | None = None,
     agent: str | None = None,
@@ -281,11 +356,15 @@ async def get_reviewed_decisions(
     return decisions
 
 
-def calculate_calibration(decisions: list[dict[str, Any]]) -> CalibrationResult | None:
+def calculate_calibration(
+    decisions: list[dict[str, Any]],
+    total_decisions: int | None = None,
+) -> CalibrationResult | None:
     """Calculate overall calibration metrics.
 
     Args:
         decisions: List of reviewed decision data.
+        total_decisions: Total decisions (all statuses). If None, uses len(decisions).
 
     Returns:
         CalibrationResult or None if insufficient data.
@@ -336,7 +415,7 @@ def calculate_calibration(decisions: list[dict[str, Any]]) -> CalibrationResult 
     return CalibrationResult(
         brier_score=round(brier, 3),
         accuracy=round(accuracy, 3),
-        total_decisions=len(decisions),
+        total_decisions=total_decisions if total_decisions is not None else len(decisions),
         reviewed_decisions=len(decisions),
         calibration_gap=round(gap, 3),
         interpretation=interpretation,
@@ -652,9 +731,21 @@ async def get_calibration(
         feature=request.feature,
     )
 
+    # Count all decisions (regardless of review status)
+    total_count, all_decisions = await count_all_decisions(
+        decisions_path=decisions_path,
+        agent=request.agent,
+        category=request.category,
+        stakes=request.stakes,
+        since=effective_since,
+        until=effective_until,
+        project=request.project,
+        feature=request.feature,
+    )
+
     # Calculate overall calibration
     overall = (
-        calculate_calibration(decisions)
+        calculate_calibration(decisions, total_decisions=total_count)
         if len(decisions) >= request.min_decisions
         else None
     )
@@ -676,8 +767,8 @@ async def get_calibration(
         total_found=len(decisions),
     )
 
-    # F016: Calculate confidence variance stats
-    confidence_stats = calculate_confidence_stats(decisions)
+    # F016: Calculate confidence variance stats (from ALL decisions, not just reviewed)
+    confidence_stats = calculate_confidence_stats(all_decisions)
 
     # F016: Add variance recommendations
     if confidence_stats:
