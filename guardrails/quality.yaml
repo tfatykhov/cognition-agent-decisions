@@ -1,0 +1,10 @@
+# F027 P3: Decision Quality Guardrails
+# Warns when recording quality is low, encouraging better decision hygiene
+
+- id: low-quality-recording
+  description: Decisions with low quality score lack tags, patterns, or reasons
+  condition:
+    phase: record
+    quality_score: "< 0.5"
+  action: warn
+  message: "Low quality recording (score {quality_score}). Add --tag, --pattern, and diverse reasons for better retrieval."
