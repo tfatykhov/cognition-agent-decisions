@@ -193,7 +193,8 @@ curl -s -X POST $CSTP_URL/cstp \
         "timestamp": "2026-02-09T12:00:00.000000+00:00",
         "deliberation_auto": true,
         "deliberation_inputs_count": 2,
-        "bridge_auto": true
+        "bridge_auto": true,
+        "related_count": 2
     },
     "id": 3
 }
@@ -203,6 +204,7 @@ Notice the auto-captured fields:
 - **`deliberation_auto: true`** - The server built a deliberation trace automatically
 - **`deliberation_inputs_count: 2`** - It captured your query (step 2) and guardrail check (step 3) as inputs
 - **`bridge_auto: true`** - A bridge-definition (structure + function) was extracted from your decision text
+- **`related_count: 2`** - Related decisions were linked from your query results
 - **`indexed: true`** - The decision is searchable in ChromaDB immediately
 
 > Save the `id` value - you'll need it in step 6.
@@ -256,10 +258,50 @@ curl -s -X POST $CSTP_URL/cstp \
                     "strength": 0.8
                 }
             ],
+            "deliberation": {
+                "inputs": [
+                    {
+                        "id": "q-5af3c565",
+                        "text": "Queried 'caching strategy for web application': 0 results (hybrid)",
+                        "source": "cstp:queryDecisions",
+                        "timestamp": "2026-02-09T11:58:00.000000+00:00"
+                    },
+                    {
+                        "id": "g-81fdd447",
+                        "text": "Checked 'Deploy untested model to production': blocked",
+                        "source": "cstp:checkGuardrails",
+                        "timestamp": "2026-02-09T11:59:00.000000+00:00"
+                    }
+                ],
+                "steps": [
+                    {
+                        "step": 1,
+                        "thought": "Queried 'caching strategy for web application': 0 results (hybrid)",
+                        "inputs_used": ["q-5af3c565"],
+                        "timestamp": "2026-02-09T11:58:00.000000+00:00",
+                        "type": "analysis"
+                    },
+                    {
+                        "step": 2,
+                        "thought": "Checked 'Deploy untested model to production': blocked",
+                        "inputs_used": ["g-81fdd447"],
+                        "timestamp": "2026-02-09T11:59:00.000000+00:00",
+                        "type": "constraint"
+                    }
+                ],
+                "total_duration_ms": 41
+            },
             "bridge": {
                 "structure": "Use Redis for session caching instead of in-memory store",
                 "function": "Redis survives process restarts and supports multi-instance deployments"
             },
+            "related_to": [
+                {
+                    "id": "dec_xyz789",
+                    "summary": "Use PostgreSQL connection pooling for multi-instance deployment",
+                    "distance": 0.25
+                }
+            ],
             "recorded_by": "your-agent-id"
         }
     },
@@ -267,9 +309,11 @@ curl -s -X POST $CSTP_URL/cstp \
 }
 ```
 
-The **bridge-definition** (Minsky Ch 12) connects what the decision *looks like* (structure) to what it *solves* (function). This enables two independent search paths:
-- `--bridge-side structure`: "Where else did we use this pattern?"
-- `--bridge-side function`: "What solved problems like this?"
+The full decision includes everything the server auto-captured:
+- **`deliberation`** - The complete trace: `inputs` (what you queried/checked), `steps` (how they were processed), and `total_duration_ms`
+- **`bridge`** - Structure (what it looks like) and function (what it solves), from Minsky Ch 12
+- **`related_to`** - Linked decisions from your pre-decision query, with semantic `distance` scores
+- **`reasons`** - Each reason has an auto-assigned `strength` score
 
 ---
 
