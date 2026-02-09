@@ -1,0 +1,11 @@
+.VPHero .VPImage {
+  order: -1;
+}
+
+.VPHero .container {
+  flex-direction: row !important;
+}
+
+.VPHero .main {
+  order: 1;
+}
