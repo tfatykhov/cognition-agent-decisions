@@ -450,7 +450,127 @@ Retrieve full decision record including bridge definition and deliberation trace
 
 ---
 
-### `cstp.getReasonStats` — Reason Analytics
+### `cstp.updateDecision` - Update Existing Decision
+
+Update fields on an existing decision. Use after recording to finalize with actual outcomes.
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | ✅ | Decision ID |
+| `updates` | object | ✅ | Fields to update |
+
+**Allowed update fields:** `decision`, `confidence`, `context`, `tags`, `pattern`, `reasons`, `bridge`
+
+> **Note:** `deliberation` is intentionally excluded - it's append-only via `recordThought`.
+
+**Example request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.updateDecision",
+  "params": {
+    "id": "dec_abc123",
+    "updates": {
+      "decision": "Used Redis with connection pooling",
+      "confidence": 0.90,
+      "context": "Deployed successfully. Latency improved 5x.",
+      "tags": ["caching", "redis", "infrastructure"]
+    }
+  },
+  "id": 1
+}
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "success": true,
+    "id": "dec_abc123",
+    "applied": ["decision", "confidence", "context", "tags"],
+    "indexed": true
+  },
+  "id": 1
+}
+```
+
+---
+
+### `cstp.recordThought` - Capture Reasoning Steps
+
+Record chain-of-thought reasoning. Pre-decision mode accumulates in the tracker; post-decision mode appends to an existing decision's trace.
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text` | string | ✅ | Reasoning text |
+| `decision_id` | string | ❌ | If set, appends to existing decision (post-decision mode) |
+
+**Pre-decision example (no decision_id):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.recordThought",
+  "params": {
+    "text": "Considering Redis vs Memcached - Redis has persistence"
+  },
+  "id": 1
+}
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "success": true,
+    "mode": "pre-decision",
+    "agent_id": "emerson"
+  },
+  "id": 1
+}
+```
+
+**Post-decision example (with decision_id):**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.recordThought",
+  "params": {
+    "text": "Redis chosen - persistence and pub/sub clinched it",
+    "decision_id": "dec_abc123"
+  },
+  "id": 1
+}
+```
+
+**Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "success": true,
+    "mode": "post-decision",
+    "decision_id": "dec_abc123",
+    "step_number": 4
+  },
+  "id": 1
+}
+```
+
+---
+
+### `cstp.getReasonStats` - Reason Analytics
 
 Analyze success rates and diversity of decision reasons.
 

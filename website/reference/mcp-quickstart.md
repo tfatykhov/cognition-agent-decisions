@@ -129,7 +129,7 @@ Or configure stdio transport to launch the MCP server process directly.
 
 ### Generic MCP Client
 
-Any client implementing the [MCP specification](https://modelcontextprotocol.io/) can connect via either transport. The server advertises itself as `cstp-decisions` and exposes 7 tools via the standard `tools/list` method.
+Any client implementing the [MCP specification](https://modelcontextprotocol.io/) can connect via either transport. The server advertises itself as `cstp-decisions` and exposes 9 tools via the standard `tools/list` method.
 
 ---
 
@@ -383,3 +383,7 @@ python -m uvicorn a2a.server:app --host 0.0.0.0 --port 9991
 | `log_decision` | `cstp.recordDecision` | `a2a/cstp/decision_service.py` |
 | `review_outcome` | `cstp.reviewDecision` | `a2a/cstp/decision_service.py` |
 | `get_stats` | `cstp.getCalibration` | `a2a/cstp/calibration_service.py` |
+| `get_decision` | `cstp.getDecision` | `a2a/cstp/decision_service.py` |
+| `get_reason_stats` | `cstp.getReasonStats` | `a2a/cstp/reason_stats_service.py` |
+| `update_decision` | `cstp.updateDecision` | `a2a/cstp/decision_service.py` |
+| `record_thought` | `cstp.recordThought` | `a2a/cstp/deliberation_tracker.py` |

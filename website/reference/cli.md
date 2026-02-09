@@ -104,16 +104,16 @@ python scripts/cstp.py check -d "deploy to prod" -s high -f 0.9
 
 ### `cstp.py record`
 
-Record a decision.
+Record a decision. Record early to capture deliberation inputs.
 
 ```bash
 python scripts/cstp.py record \
-  -d "Use PostgreSQL" \
+  -d "Plan: Use PostgreSQL for persistence" \
   -c architecture \
   -s high \
   -f 0.85 \
-  --structure "PostgreSQL" \
-  --function "Relational persistence"
+  --tag database --tag infrastructure \
+  --pattern "Choose ACID-compliant stores for transactional data"
 ```
 
 **Options:**
@@ -125,12 +125,57 @@ python scripts/cstp.py record \
 | `-s`, `--stakes` | Stakes: low, medium, high, critical |
 | `-f`, `--confidence` | Confidence (0.0-1.0) |
 | `--context` | Context description |
-| `-r`, `--reason` | Add reason (type:text) |
+| `-r`, `--reason` | Add reason (type:text, repeatable) |
+| `--tag`, `-t` | Reusable keyword tag (repeatable) |
+| `--pattern` | Abstract pattern this decision represents |
+| `--project` | Project (owner/repo) |
+| `--pr` | PR number |
 | `--structure` | Bridge: structure/pattern |
 | `--function` | Bridge: function/purpose |
 | `--tolerance` | Bridge: features that don't matter |
 | `--enforcement` | Bridge: features that must be present |
 | `--prevention` | Bridge: features that must be absent |
+
+### `cstp.py think`
+
+Record a chain-of-thought reasoning step. Pre-decision mode (no `--id`) accumulates in the tracker; post-decision mode (`--id`) appends to an existing decision's trace.
+
+```bash
+# Pre-decision: captured automatically when you record
+python scripts/cstp.py think "Considering Redis vs Memcached for caching"
+
+# Post-decision: appends to existing decision trace
+python scripts/cstp.py think --id <ID> "Redis chosen because it supports persistence"
+```
+
+### `cstp.py update`
+
+Update an existing decision's fields. Use after recording to finalize with actual outcomes.
+
+```bash
+python scripts/cstp.py update <ID> \
+  -d "Used PostgreSQL with connection pooling" \
+  --context "Deployed with PgBouncer. 3 replicas." \
+  --tag database --tag infrastructure --tag pgbouncer
+```
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `-d`, `--decision` | Updated decision text |
+| `-f`, `--confidence` | Updated confidence (0.0-1.0) |
+| `--context` | Updated context |
+| `--tag`, `-t` | Tags (repeatable, replaces existing) |
+| `--pattern` | Abstract pattern |
+
+### `cstp.py pre`
+
+Pre-decision helper: runs query + guardrail check in one call. Use before recording.
+
+```bash
+python scripts/cstp.py pre "deploy retry logic to production" -s high -f 0.85
+```
 
 ### `cstp.py get`
 
