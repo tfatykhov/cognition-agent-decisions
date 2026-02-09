@@ -441,6 +441,13 @@ async def evaluate_record_guardrails(
         "has_deliberation": delib_input_count > 0,
         "phase": "record",
     }
+
+    # F027 P3: Add quality score to context for guardrail evaluation
+    if hasattr(request, "pattern") or hasattr(request, "tags"):
+        from .decision_service import score_decision_quality
+        quality = score_decision_quality(request)
+        record_context["quality_score"] = quality["score"]
+
     record_eval = await evaluate_guardrails(record_context)
     warnings: list[dict[str, Any]] = []
     for v in record_eval.violations:

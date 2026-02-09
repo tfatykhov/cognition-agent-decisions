@@ -530,6 +530,8 @@ class RecordDecisionResponse:
     indexed: bool
     timestamp: str
     error: str | None = None
+    quality: dict[str, Any] | None = None  # F027 P3: Quality score
+    guardrail_warnings: list[dict[str, Any]] | None = None  # F026
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON-RPC response."""
@@ -542,7 +544,85 @@ class RecordDecisionResponse:
         }
         if self.error:
             result["error"] = self.error
+        if self.quality:
+            result["quality"] = self.quality
+        if self.guardrail_warnings:
+            result["guardrail_warnings"] = self.guardrail_warnings
         return result
+
+
+def score_decision_quality(request: "RecordDecisionRequest") -> dict[str, Any]:
+    """Score the quality of a decision recording (F027 P3).
+
+    Returns a dict with score (0.0-1.0) and suggestions for improvement.
+    """
+    score = 0.0
+    suggestions: list[str] = []
+
+    # Pattern provided? (+0.2)
+    if request.pattern:
+        score += 0.2
+    else:
+        suggestions.append(
+            "Add --pattern for the abstract principle "
+            "(e.g. 'Override defaults when they don't match workload')"
+        )
+
+    # Tags provided? (+0.15)
+    if request.tags:
+        score += 0.15
+    else:
+        suggestions.append(
+            "Add --tag keywords for cross-domain retrieval "
+            "(e.g. --tag timeout --tag infrastructure)"
+        )
+
+    # 2+ distinct reason types? (+0.15)
+    if request.reasons:
+        reason_types = {r.type for r in request.reasons}
+        if len(reason_types) >= 2:
+            score += 0.15
+        else:
+            suggestions.append(
+                f"Only 1 reason type ({next(iter(reason_types))}). "
+                "Diverse reasons improve robustness - try analysis + empirical, "
+                "or pattern + analogy"
+            )
+    else:
+        suggestions.append("No reasons provided - add -r 'type:explanation'")
+
+    # Explicit bridge? (+0.15)
+    if request.bridge and request.bridge.has_content():
+        score += 0.15
+
+    # Decision text length > 20 chars? (+0.1)
+    if len(request.decision) > 20:
+        score += 0.1
+    else:
+        suggestions.append("Decision text is very short - be more descriptive")
+
+    # Context provided? (+0.1)
+    if request.context and len(request.context) > 10:
+        score += 0.1
+    else:
+        suggestions.append("Add --context with what was actually done")
+
+    # Project context? (+0.1)
+    if request.project_context and request.project_context.has_any():
+        score += 0.1
+
+    # Deliberation inputs? (+0.05)
+    has_deliberation = (
+        (request.deliberation and request.deliberation.has_content())
+        or request.pre_decision
+    )
+    if has_deliberation:
+        score += 0.05
+
+    return {
+        "score": round(score, 2),
+        "suggestions": suggestions,
+    }
 
 
 def generate_decision_id() -> str:
@@ -1007,12 +1087,16 @@ async def record_decision(
 
     indexed = await index_to_chromadb(decision_id, embedding_text, metadata)
 
+    # F027 P3: Score recording quality
+    quality = score_decision_quality(request)
+
     return RecordDecisionResponse(
         success=True,
         id=decision_id,
         path=file_path,
         indexed=indexed,
         timestamp=now.isoformat(),
+        quality=quality,
     )
 
 
