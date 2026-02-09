@@ -169,6 +169,8 @@ async def query_decisions(
     feature: str | None = None,
     pr: int | None = None,
     has_outcome: bool | None = None,
+    # F027: Tag filter
+    tags: list[str] | None = None,
 ) -> QueryResponse:
     """Query similar decisions from ChromaDB.
 
@@ -229,6 +231,13 @@ async def query_decisions(
         where["feature"] = feature
     if pr is not None:
         where["pr"] = pr
+    # F027: Tag filter (tags stored as comma-separated string)
+    if tags:
+        if len(tags) == 1:
+            where["tags"] = {"$contains": tags[0]}
+        else:
+            # Match any tag - OR across tags using $contains on each
+            where["$or"] = [{"tags": {"$contains": t}} for t in tags]
     if has_outcome is True:
         where["status"] = "reviewed"
     elif has_outcome is False:

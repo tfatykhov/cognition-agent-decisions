@@ -289,6 +289,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             feature=request.filters.feature,
             pr=request.filters.pr,
             has_outcome=request.filters.has_outcome,
+            tags=request.filters.tags,
         )
 
         if response.error:
@@ -378,6 +379,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             feature=request.filters.feature,
             pr=request.filters.pr,
             has_outcome=request.filters.has_outcome,
+            tags=request.filters.tags,
         )
 
         if response.error:
