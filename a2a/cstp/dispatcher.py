@@ -627,7 +627,7 @@ async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[
         }
 
     # Pre-decision: accumulate in tracker
-    track_reasoning(agent_id, text)
+    track_reasoning(f"rpc:{agent_id}", text)
     return {
         "success": True,
         "mode": "pre-decision",
