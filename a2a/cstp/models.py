@@ -21,6 +21,8 @@ class QueryFilters:
     feature: str | None = None
     pr: int | None = None
     has_outcome: bool | None = None
+    # F027: Tag filter
+    tags: list[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "QueryFilters":
@@ -40,6 +42,8 @@ class QueryFilters:
             feature=data.get("feature"),
             pr=data.get("pr"),
             has_outcome=data.get("hasOutcome"),
+            # F027: Tag filter
+            tags=data.get("tags"),
         )
 
 
@@ -120,6 +124,9 @@ class DecisionSummary:
     date: str
     distance: float
     reasons: list[str] | None = None
+    # F027: Tags and pattern in results
+    tags: list[str] | None = None
+    pattern: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON response."""
@@ -137,6 +144,10 @@ class DecisionSummary:
             result["outcome"] = self.outcome
         if self.reasons:
             result["reasons"] = self.reasons
+        if self.tags:
+            result["tags"] = self.tags
+        if self.pattern:
+            result["pattern"] = self.pattern
         return result
 
 

@@ -421,6 +421,7 @@ class RecordDecisionRequest:
     mental_state: str | None = None
     review_in: str | None = None
     tags: list[str] = field(default_factory=list)
+    pattern: str | None = None  # F027: Abstract pattern this decision represents
     pre_decision: PreDecisionProtocol | None = None
     project_context: ProjectContext | None = None  # F010: Project context
     agent_id: str | None = None  # Set from auth
@@ -478,6 +479,7 @@ class RecordDecisionRequest:
             mental_state=data.get("mentalState") or data.get("mental_state"),
             review_in=data.get("reviewIn") or data.get("review_in"),
             tags=data.get("tags") or [],
+            pattern=data.get("pattern"),
             pre_decision=pre_decision,
             project_context=project_context,
             agent_id=agent_id,
@@ -621,6 +623,10 @@ def build_decision_yaml(request: RecordDecisionRequest, decision_id: str) -> dic
 
     if request.tags:
         decision_data["tags"] = request.tags
+
+    # F027: Pattern field
+    if request.pattern:
+        decision_data["pattern"] = request.pattern
 
     if request.pre_decision:
         decision_data["pre_decision"] = request.pre_decision.to_dict()
@@ -816,6 +822,10 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
     if request.tags:
         parts.append(f"Tags: {', '.join(request.tags)}")
 
+    # F027: Pattern improves embedding quality
+    if request.pattern:
+        parts.append(f"Pattern: {request.pattern}")
+
     # F010: Include project context in embedding text
     if request.project_context:
         pc = request.project_context
@@ -988,6 +998,12 @@ async def record_decision(
             metadata["pr"] = pc.pr
         if pc.file:
             metadata["file"] = pc.file
+
+    # F027: Tags and pattern in metadata
+    if request.tags:
+        metadata["tags"] = ",".join(request.tags)
+    if request.pattern:
+        metadata["pattern"] = request.pattern[:500]
 
     indexed = await index_to_chromadb(decision_id, embedding_text, metadata)
 
