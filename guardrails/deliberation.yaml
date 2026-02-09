@@ -17,3 +17,13 @@
     stakes: high
   action: block
   message: "High-stakes decisions require prior deliberation. Run: cstp.py pre \"what you plan to do\" -s high"
+
+# F028: Reasoning Capture Enforcement
+- id: recommend-reasoning
+  description: Decisions with deliberation should include reasoning steps
+  condition:
+    phase: record
+    has_deliberation: true
+    has_reasoning: false
+  action: warn
+  message: "Deliberation detected but no reasoning captured. Use cstp.py think \"your thought process\" to record chain-of-thought"
