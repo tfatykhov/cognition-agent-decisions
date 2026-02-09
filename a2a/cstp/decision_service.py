@@ -1344,6 +1344,9 @@ async def update_decision(
     applied: list[str] = []
     for key, value in updates.items():
         if key in allowed_fields:
+            # Guard against empty decision text
+            if key == "decision" and (not value or not str(value).strip()):
+                continue
             data[key] = value
             applied.append(key)
             # Keep summary in sync with decision text

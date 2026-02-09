@@ -371,6 +371,7 @@ class UpdateDecisionInput(BaseModel):
     )
     decision: str | None = Field(
         default=None,
+        min_length=1,
         description="Updated decision text (what was actually decided/done)",
     )
     confidence: float | None = Field(
