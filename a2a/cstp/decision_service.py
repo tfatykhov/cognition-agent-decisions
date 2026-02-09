@@ -1340,12 +1340,15 @@ async def update_decision(
     file_path, data = result
 
     # Merge updates
-    allowed_fields = {"tags", "pattern", "context", "reasons", "bridge"}
+    allowed_fields = {"decision", "confidence", "tags", "pattern", "context", "reasons", "bridge"}
     applied: list[str] = []
     for key, value in updates.items():
         if key in allowed_fields:
             data[key] = value
             applied.append(key)
+            # Keep summary in sync with decision text
+            if key == "decision":
+                data["summary"] = value
 
     if not applied:
         return {"success": False, "error": "No valid fields to update"}

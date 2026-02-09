@@ -709,6 +709,12 @@ async def _handle_update_decision_mcp(arguments: dict[str, Any]) -> list[TextCon
     input_data = UpdateDecisionInput(**arguments)
 
     updates: dict[str, Any] = {}
+    if input_data.decision is not None:
+        updates["decision"] = input_data.decision
+    if input_data.confidence is not None:
+        updates["confidence"] = input_data.confidence
+    if input_data.context is not None:
+        updates["context"] = input_data.context
     if input_data.tags is not None:
         updates["tags"] = input_data.tags
     if input_data.pattern is not None:
