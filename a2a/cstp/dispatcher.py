@@ -550,6 +550,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.checkGuardrails", _handle_check_guardrails)
     dispatcher.register("cstp.listGuardrails", _handle_list_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
+    dispatcher.register("cstp.updateDecision", _handle_update_decision)
     dispatcher.register("cstp.getDecision", _handle_get_decision)
 
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
@@ -558,6 +559,31 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.checkDrift", _handle_check_drift)
     dispatcher.register("cstp.reindex", _handle_reindex)
     dispatcher.register("cstp.getReasonStats", _handle_get_reason_stats)
+
+
+async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.updateDecision method (F027 backfill).
+
+    Updates specific fields on an existing decision.
+
+    Args:
+        params: {"id": "abc123", "updates": {"tags": [...], "pattern": "..."}}
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Update result with success status.
+    """
+    from .decision_service import update_decision
+
+    decision_id = params.get("id") or params.get("decision_id", "")
+    if not decision_id:
+        raise ValueError("Missing required parameter: id")
+
+    updates = params.get("updates", {})
+    if not updates:
+        raise ValueError("Missing required parameter: updates")
+
+    return await update_decision(decision_id, updates)
 
 
 async def _handle_get_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:

@@ -1254,6 +1254,16 @@ async def reindex_decision(
         if bridge_data.get("function"):
             parts.append(f"Function: {bridge_data['function']}")
 
+    # F027: Include tags and pattern in embedding
+    if data.get("tags"):
+        tags = data["tags"]
+        if isinstance(tags, list):
+            parts.append(f"Tags: {', '.join(tags)}")
+        elif isinstance(tags, str):
+            parts.append(f"Tags: {tags}")
+    if data.get("pattern"):
+        parts.append(f"Pattern: {data['pattern']}")
+
     embedding_text = "\n".join(parts)
 
     # Build metadata — use fallback chain for title (decision > summary)
@@ -1279,10 +1289,69 @@ async def reindex_decision(
     if data.get("recorded_by"):
         metadata["agent"] = data["recorded_by"]
 
+    # F027: Tags and pattern in metadata
+    if data.get("tags"):
+        tags = data["tags"]
+        if isinstance(tags, list):
+            metadata["tags"] = ",".join(tags)
+        elif isinstance(tags, str):
+            metadata["tags"] = tags
+    if data.get("pattern"):
+        metadata["pattern"] = str(data["pattern"])[:500]
+
     return await index_to_chromadb(decision_id, embedding_text, metadata)
 
 
-async def review_decision(
+async def update_decision(
+    decision_id: str,
+    updates: dict[str, Any],
+    decisions_path: str | None = None,
+) -> dict[str, Any]:
+    """Update specific fields on an existing decision (F027 backfill).
+
+    Finds the YAML file, merges updates, writes back, and re-indexes.
+
+    Args:
+        decision_id: The decision ID to update.
+        updates: Dict of fields to update (e.g. tags, pattern).
+        decisions_path: Override for decisions directory.
+
+    Returns:
+        Dict with success status and updated fields.
+    """
+    result = await find_decision(decision_id, decisions_path)
+    if not result:
+        return {"success": False, "error": f"Decision {decision_id} not found"}
+
+    file_path, data = result
+
+    # Merge updates
+    allowed_fields = {"tags", "pattern", "context", "reasons", "bridge"}
+    applied: list[str] = []
+    for key, value in updates.items():
+        if key in allowed_fields:
+            data[key] = value
+            applied.append(key)
+
+    if not applied:
+        return {"success": False, "error": "No valid fields to update"}
+
+    # Write back
+    try:
+        with open(file_path, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        return {"success": False, "error": f"Failed to write: {e}"}
+
+    # Re-index
+    indexed = await reindex_decision(decision_id, data, str(file_path))
+
+    return {
+        "success": True,
+        "id": decision_id,
+        "updated_fields": applied,
+        "indexed": indexed,
+    }async def review_decision(
     request: ReviewDecisionRequest,
     decisions_path: str | None = None,
 ) -> ReviewDecisionResponse:
