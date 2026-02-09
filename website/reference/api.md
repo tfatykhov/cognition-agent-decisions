@@ -98,7 +98,7 @@ A2A agent discovery card.
   "name": "cognition-engines",
   "description": "Decision Intelligence Service",
   "version": "0.9.0",
-  "url": "http://localhost:8100",
+  "url": "http://localhost:9991",
   "capabilities": ["queryDecisions", "checkGuardrails", "recordDecision", "reviewDecision", "getCalibration"],
   "protocol": "cstp",
   "protocolVersion": "0.9.0"
@@ -618,14 +618,14 @@ Since v0.9.0, CSTP exposes decision intelligence capabilities as **MCP tools** f
 
 | Transport | Endpoint | Use Case |
 |-----------|----------|----------|
-| **Streamable HTTP** | `POST`/`GET` `http://host:8100/mcp` | Remote access from any network-reachable MCP client |
+| **Streamable HTTP** | `POST`/`GET` `http://host:9991/mcp` | Remote access from any network-reachable MCP client |
 | **stdio** | `python -m a2a.mcp_server` | Local access or Docker exec |
 
 ### Connecting
 
 ```bash
 # Claude Code — add as remote MCP server
-claude mcp add --transport http cstp-decisions http://your-server:8100/mcp
+claude mcp add --transport http cstp-decisions http://your-server:9991/mcp
 
 # Claude Desktop — add to claude_desktop_config.json (stdio via Docker)
 {
@@ -755,23 +755,23 @@ Error types:
 
 ```bash
 # Query decisions
-curl -X POST http://localhost:8100/cstp \
+curl -X POST http://localhost:9991/cstp \
   -H "Authorization: Bearer myagent:mytoken" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"cstp.queryDecisions","params":{"query":"authentication approach"},"id":"1"}'
 
 # Check guardrails
-curl -X POST http://localhost:8100/cstp \
+curl -X POST http://localhost:9991/cstp \
   -H "Authorization: Bearer myagent:mytoken" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"cstp.checkGuardrails","params":{"action":{"description":"Deploy to prod","stakes":"high","context":{"affects_production":true}}},"id":"2"}'
 
 # Record decision
-curl -X POST http://localhost:8100/cstp \
+curl -X POST http://localhost:9991/cstp \
   -H "Authorization: Bearer myagent:mytoken" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"cstp.recordDecision","params":{"decision":"Use Redis for caching","confidence":0.8,"category":"architecture"},"id":"3"}'
 
 # Health check (no auth)
-curl http://localhost:8100/health
+curl http://localhost:9991/health
 ```

@@ -166,7 +166,7 @@ Exposes CSTP capabilities as MCP tools for native integration with MCP-compliant
 **Transports:**
 
 - **stdio** — `python -m a2a.mcp_server` (local or `docker exec -i cstp python -m a2a.mcp_server`)
-- **Streamable HTTP** — Mounted at `/mcp` on port 8100 via `StreamableHTTPSessionManager` in `server.py` lifespan
+- **Streamable HTTP** — Mounted at `/mcp` on port 9991 via `StreamableHTTPSessionManager` in `server.py` lifespan
 
 ### 2.3 `mcp_schemas.py` — MCP Input Schemas
 

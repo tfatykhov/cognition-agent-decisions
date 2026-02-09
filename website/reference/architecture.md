@@ -391,7 +391,7 @@ sequenceDiagram
 graph TB
     subgraph Docker["Docker Compose"]
         subgraph CSTP["cstp-server (Python 3.11)"]
-            PORT_8100["Port: 8100"]
+            PORT_9991["Port: 9991"]
             EP_CSTP["/cstp — JSON-RPC 2.0"]
             EP_MCP["/mcp — MCP Streamable HTTP"]
             EP_HEALTH["/health"]
@@ -418,7 +418,7 @@ graph TB
 - **Builder stage:** Installs `uv` and Python dependencies from `pyproject.toml`
 - **Runtime stage:** Copies installed packages, app code, creates non-root user
 - **Security:** Runs as `appuser` (non-root), read-only config mounts
-- **MCP:** Both `/cstp` (JSON-RPC) and `/mcp` (MCP Streamable HTTP) are served on port 8100
+- **MCP:** Both `/cstp` (JSON-RPC) and `/mcp` (MCP Streamable HTTP) are served on port 9991
 
 ---
 
