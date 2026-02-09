@@ -729,37 +729,17 @@ async def _handle_record_thought_mcp(arguments: dict[str, Any]) -> list[TextCont
     input_data = RecordThoughtInput(**arguments)
 
     if input_data.decision_id:
-        # Post-decision: append to existing decision
-        from .cstp.decision_service import find_decision, update_decision
-        from datetime import UTC, datetime
+        # Post-decision: append-only via shared service function
+        from .cstp.decision_service import append_thought
 
-        result = await find_decision(input_data.decision_id)
-        if not result:
-            return [TextContent(type="text", text=json.dumps({"error": f"Decision {input_data.decision_id} not found"}))]
-
-        _, data = result
-        delib = data.get("deliberation", {})
-        if not delib:
-            delib = {"inputs": [], "steps": []}
-
-        steps = delib.get("steps", [])
-        max_step = max((s.get("step", 0) for s in steps), default=0)
-        steps.append({
-            "step": max_step + 1,
-            "thought": input_data.text,
-            "type": "reasoning",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "conclusion": False,
-        })
-        delib["steps"] = steps
-
-        await update_decision(input_data.decision_id, {"deliberation": delib})
-
+        result = await append_thought(input_data.decision_id, input_data.text)
+        if not result.get("success"):
+            return [TextContent(type="text", text=json.dumps({"error": result.get("error", "Unknown error")}))]
         return [TextContent(type="text", text=json.dumps({
             "success": True,
             "mode": "post-decision",
             "decision_id": input_data.decision_id,
-            "step_number": max_step + 1,
+            "step_number": result["step_number"],
         }))]
 
     # Pre-decision: accumulate in tracker (use MCP session key)

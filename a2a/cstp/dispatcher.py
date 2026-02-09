@@ -595,7 +595,7 @@ async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[
     - Pre-decision: no decision_id - thought accumulates in tracker,
       auto-attached when recordDecision is called.
     - Post-decision: decision_id provided - thought is appended to
-      the existing decision's deliberation trace.
+      the existing decision's deliberation trace (append-only).
 
     Args:
         params: {"text": "reasoning...", "decision_id": "optional"}
@@ -613,41 +613,17 @@ async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[
     decision_id = params.get("decision_id") or params.get("id")
 
     if decision_id:
-        # Post-decision: append to existing deliberation
-        from .decision_service import find_decision, update_decision
+        # Post-decision: append-only via shared service function
+        from .decision_service import append_thought
 
-        import time as _time
-
-        from datetime import UTC, datetime
-
-        result = await find_decision(decision_id)
-        if not result:
-            raise ValueError(f"Decision {decision_id} not found")
-
-        _, data = result
-        delib = data.get("deliberation", {})
-        if not delib:
-            delib = {"inputs": [], "steps": []}
-
-        # Append reasoning step
-        steps = delib.get("steps", [])
-        max_step = max((s.get("step", 0) for s in steps), default=0)
-        steps.append({
-            "step": max_step + 1,
-            "thought": text,
-            "type": "reasoning",
-            "timestamp": datetime.now(UTC).isoformat(),
-            "conclusion": False,
-        })
-        delib["steps"] = steps
-
-        await update_decision(decision_id, {"deliberation": delib})
-
+        result = await append_thought(decision_id, text)
+        if not result.get("success"):
+            raise ValueError(result.get("error", "Unknown error"))
         return {
             "success": True,
             "mode": "post-decision",
             "decision_id": decision_id,
-            "step_number": max_step + 1,
+            "step_number": result["step_number"],
         }
 
     # Pre-decision: accumulate in tracker

@@ -1326,7 +1326,7 @@ async def update_decision(
     file_path, data = result
 
     # Merge updates
-    allowed_fields = {"tags", "pattern", "context", "reasons", "bridge", "deliberation"}
+    allowed_fields = {"tags", "pattern", "context", "reasons", "bridge"}
     applied: list[str] = []
     for key, value in updates.items():
         if key in allowed_fields:
@@ -1351,6 +1351,60 @@ async def update_decision(
         "id": decision_id,
         "updated_fields": applied,
         "indexed": indexed,
+    }
+
+
+async def append_thought(
+    decision_id: str,
+    text: str,
+    decisions_path: str | None = None,
+) -> dict[str, Any]:
+    """Append a reasoning step to a decision's deliberation trace (F028).
+
+    Append-only: cannot overwrite or delete existing steps.
+
+    Args:
+        decision_id: The decision to append to.
+        text: Reasoning/chain-of-thought text.
+        decisions_path: Override for decisions directory.
+
+    Returns:
+        Dict with success status and step number.
+    """
+    result = await find_decision(decision_id, decisions_path)
+    if not result:
+        return {"success": False, "error": f"Decision {decision_id} not found"}
+
+    file_path, data = result
+
+    delib = data.get("deliberation", {})
+    if not delib:
+        delib = {"inputs": [], "steps": []}
+
+    steps = delib.get("steps", [])
+    max_step = max((s.get("step", 0) for s in steps), default=0)
+    new_step = {
+        "step": max_step + 1,
+        "thought": text,
+        "type": "reasoning",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "conclusion": False,
+    }
+    steps.append(new_step)
+    delib["steps"] = steps
+    data["deliberation"] = delib
+
+    # Write back
+    try:
+        with open(file_path, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        return {"success": False, "error": f"Failed to write: {e}"}
+
+    return {
+        "success": True,
+        "decision_id": decision_id,
+        "step_number": max_step + 1,
     }
 
 
