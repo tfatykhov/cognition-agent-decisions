@@ -295,6 +295,8 @@ async def _handle_query_decisions(arguments: dict[str, Any]) -> list[TextContent
                 date=r.date or "",
                 distance=r.distance,
                 reasons=None,
+                tags=r.tags,
+                pattern=r.pattern,
             )
         )
 

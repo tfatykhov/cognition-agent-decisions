@@ -124,6 +124,9 @@ class DecisionSummary:
     date: str
     distance: float
     reasons: list[str] | None = None
+    # F027: Tags and pattern in results
+    tags: list[str] | None = None
+    pattern: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON response."""
@@ -141,6 +144,10 @@ class DecisionSummary:
             result["outcome"] = self.outcome
         if self.reasons:
             result["reasons"] = self.reasons
+        if self.tags:
+            result["tags"] = self.tags
+        if self.pattern:
+            result["pattern"] = self.pattern
         return result
 
 
