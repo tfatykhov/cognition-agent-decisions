@@ -80,7 +80,7 @@ Health check with uptime tracking.
 ```json
 {
   "status": "ok",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "agent": "cognition-engines",
   "uptime_seconds": 3600,
   "timestamp": "2026-02-07T12:00:00Z"
@@ -97,11 +97,11 @@ A2A agent discovery card.
 {
   "name": "cognition-engines",
   "description": "Decision Intelligence Service",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "url": "http://localhost:9991",
-  "capabilities": ["queryDecisions", "checkGuardrails", "recordDecision", "reviewDecision", "getCalibration"],
+  "capabilities": ["queryDecisions", "checkGuardrails", "recordDecision", "reviewDecision", "getCalibration", "getDecision", "getReasonStats"],
   "protocol": "cstp",
-  "protocolVersion": "0.9.0"
+  "protocolVersion": "0.10.0"
 }
 ```
 
