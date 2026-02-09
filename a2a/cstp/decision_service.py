@@ -612,9 +612,11 @@ def score_decision_quality(request: "RecordDecisionRequest") -> dict[str, Any]:
         score += 0.1
 
     # Deliberation inputs? (+0.05)
-    if request.deliberation and request.deliberation.has_content():
-        score += 0.05
-    elif request.pre_decision:
+    has_deliberation = (
+        (request.deliberation and request.deliberation.has_content())
+        or request.pre_decision
+    )
+    if has_deliberation:
         score += 0.05
 
     return {
