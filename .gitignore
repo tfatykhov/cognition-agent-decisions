@@ -22,4 +22,6 @@ rad.json
 TestResults.xml__pycache__/
 **/pycache__/
 *.pyc
-.env
+.envwebsite/node_modules/
+website/.vitepress/dist/
+website/.vitepress/cache/
