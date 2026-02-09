@@ -1,4 +1,4 @@
-# Golden Path — End-to-End Walkthrough
+# Golden Path - End-to-End Walkthrough
 
 Follow these steps to verify your Cognition Engines installation and explore the full decision lifecycle. Every command is copy-paste ready.
 
@@ -34,9 +34,129 @@ If you see `"status": "healthy"`, you're good to go.
 
 ---
 
-## 2. Record a Decision
+## 2. Query Before Deciding
 
-Log your first decision — an agent choosing a caching strategy.
+Always search for similar past decisions before making a new one. This builds your deliberation trace automatically.
+
+```bash
+curl -s -X POST $CSTP_URL/cstp \
+  -H "Authorization: Bearer $CSTP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "cstp.queryDecisions",
+    "params": {
+      "query": "caching strategy for web application",
+      "retrievalMode": "hybrid",
+      "limit": 5
+    },
+    "id": 1
+  }' | python3 -m json.tool
+```
+
+**Expected output (first run, no decisions yet):**
+
+```json
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "decisions": [],
+        "total": 0,
+        "query": "caching strategy for web application",
+        "queryTimeMs": 245,
+        "agent": "your-agent-id",
+        "retrievalMode": "hybrid",
+        "scores": {}
+    },
+    "id": 1
+}
+```
+
+**With existing decisions**, results include hybrid scoring (semantic + keyword):
+
+```json
+{
+    "decisions": [
+        {
+            "id": "d44d6de0",
+            "title": "Use Redis for session caching",
+            "category": "architecture",
+            "confidence": 0.85,
+            "stakes": "medium",
+            "status": "pending",
+            "date": "2026-02-09",
+            "distance": 0.3
+        }
+    ],
+    "scores": {
+        "d44d6de0": {
+            "semantic": 1.0,
+            "keyword": 0.0,
+            "combined": 0.7
+        }
+    }
+}
+```
+
+> **Key:** The server auto-captures this query as a **deliberation input** for whatever decision you record next.
+
+---
+
+## 3. Check Guardrails
+
+Before acting, verify the guardrails allow it. Try a high-stakes action with low confidence - the guardrails should block it.
+
+```bash
+curl -s -X POST $CSTP_URL/cstp \
+  -H "Authorization: Bearer $CSTP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "cstp.checkGuardrails",
+    "params": {
+      "action": {
+        "description": "Deploy untested model to production",
+        "category": "architecture",
+        "stakes": "high",
+        "confidence": 0.3
+      }
+    },
+    "id": 2
+  }' | python3 -m json.tool
+```
+
+**Expected output (blocked):**
+
+```json
+{
+    "jsonrpc": "2.0",
+    "result": {
+        "allowed": false,
+        "violations": [
+            {
+                "rule": "no-high-stakes-low-confidence",
+                "message": "High-stakes actions require confidence >= 0.5",
+                "stakes": "high",
+                "confidence": 0.3
+            }
+        ]
+    },
+    "id": 2
+}
+```
+
+`"allowed": false` means the guardrail fired. An agent receiving this should pause and gather more information.
+
+> **Key:** This check is also auto-captured as a **deliberation input** - the server tracks that you checked before deciding.
+
+---
+
+## 4. Record a Decision
+
+Now log the decision. The server automatically attaches:
+- **Deliberation trace** from your query (step 2) and guardrail check (step 3)
+- **Bridge-definition** extracted from your decision text (structure + function)
+- **Related decisions** linked from query results
 
 ```bash
 curl -s -X POST $CSTP_URL/cstp \
@@ -56,7 +176,7 @@ curl -s -X POST $CSTP_URL/cstp \
         {"type": "pattern", "text": "Previous projects had cache-loss bugs with in-memory stores"}
       ]
     },
-    "id": 1
+    "id": 3
   }' | python3 -m json.tool
 ```
 
@@ -66,119 +186,32 @@ curl -s -X POST $CSTP_URL/cstp \
 {
     "jsonrpc": "2.0",
     "result": {
+        "success": true,
         "id": "dec_abc12345",
-        "decision": "Use Redis for session caching instead of in-memory store",
-        "confidence": 0.85,
-        "category": "architecture",
-        "stakes": "medium",
-        "timestamp": "2026-02-09T12:00:00Z",
-        "status": "recorded"
-    },
-    "id": 1
-}
-```
-
-> Save the `id` value — you'll need it in step 6.
-
----
-
-## 3. Query Similar Decisions
-
-Search for decisions related to "caching" to see what's been recorded.
-
-```bash
-curl -s -X POST $CSTP_URL/cstp \
-  -H "Authorization: Bearer $CSTP_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "cstp.queryDecisions",
-    "params": {
-      "query": "caching strategy for web application",
-      "retrievalMode": "hybrid",
-      "limit": 5
-    },
-    "id": 2
-  }' | python3 -m json.tool
-```
-
-**Expected output:**
-
-```json
-{
-    "jsonrpc": "2.0",
-    "result": {
-        "decisions": [
-            {
-                "id": "dec_abc12345",
-                "decision": "Use Redis for session caching instead of in-memory store",
-                "confidence": 0.85,
-                "category": "architecture",
-                "similarity": 0.92,
-                "timestamp": "2026-02-09T12:00:00Z"
-            }
-        ],
-        "total": 1,
-        "retrievalMode": "hybrid"
-    },
-    "id": 2
-}
-```
-
-The decision you just recorded appears with a high similarity score.
-
----
-
-## 4. Check Guardrails (See a Block)
-
-Try a high-stakes action with low confidence — the guardrails should block it.
-
-```bash
-curl -s -X POST $CSTP_URL/cstp \
-  -H "Authorization: Bearer $CSTP_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "cstp.checkGuardrails",
-    "params": {
-      "action": {
-        "description": "Deploy untested model to production",
-        "category": "architecture",
-        "stakes": "high",
-        "confidence": 0.3
-      }
-    },
-    "id": 3
-  }' | python3 -m json.tool
-```
-
-**Expected output:**
-
-```json
-{
-    "jsonrpc": "2.0",
-    "result": {
-        "allowed": false,
-        "violations": [
-            {
-                "rule": "no-high-stakes-low-confidence",
-                "message": "High-stakes actions require confidence >= 0.5",
-                "stakes": "high",
-                "confidence": 0.3
-            }
-        ]
+        "path": "/app/decisions/2026/02/2026-02-09-decision-dec_abc12345.yaml",
+        "indexed": true,
+        "timestamp": "2026-02-09T12:00:00.000000+00:00",
+        "deliberation_auto": true,
+        "deliberation_inputs_count": 2,
+        "bridge_auto": true
     },
     "id": 3
 }
 ```
 
-The `"allowed": false` response means the guardrail fired correctly. An agent receiving this should pause and gather more information before proceeding.
+Notice the auto-captured fields:
+- **`deliberation_auto: true`** - The server built a deliberation trace automatically
+- **`deliberation_inputs_count: 2`** - It captured your query (step 2) and guardrail check (step 3) as inputs
+- **`bridge_auto: true`** - A bridge-definition (structure + function) was extracted from your decision text
+- **`indexed: true`** - The decision is searchable in ChromaDB immediately
+
+> Save the `id` value - you'll need it in step 6.
 
 ---
 
-## 5. Record Another Decision
+## 5. Inspect the Full Decision
 
-Add a second decision so there's enough data for calibration.
+Retrieve the decision to see everything the server captured, including the bridge-definition and reasons with strength scores.
 
 ```bash
 curl -s -X POST $CSTP_URL/cstp \
@@ -186,17 +219,9 @@ curl -s -X POST $CSTP_URL/cstp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "cstp.recordDecision",
+    "method": "cstp.getDecision",
     "params": {
-      "decision": "Use PostgreSQL full-text search instead of Elasticsearch for v1",
-      "confidence": 0.70,
-      "category": "architecture",
-      "stakes": "medium",
-      "context": "Need search functionality but want to avoid operational overhead of a separate Elasticsearch cluster for initial launch.",
-      "reasons": [
-        {"type": "analysis", "text": "PostgreSQL FTS handles our current scale (< 100k docs) without extra infra"},
-        {"type": "elimination", "text": "Elasticsearch adds operational complexity we cannot staff for at launch"}
-      ]
+      "id": "dec_abc12345"
     },
     "id": 4
   }' | python3 -m json.tool
@@ -208,23 +233,49 @@ curl -s -X POST $CSTP_URL/cstp \
 {
     "jsonrpc": "2.0",
     "result": {
-        "id": "dec_def67890",
-        "decision": "Use PostgreSQL full-text search instead of Elasticsearch for v1",
-        "confidence": 0.70,
-        "category": "architecture",
-        "stakes": "medium",
-        "timestamp": "2026-02-09T12:05:00Z",
-        "status": "recorded"
+        "found": true,
+        "decision": {
+            "id": "dec_abc12345",
+            "summary": "Use Redis for session caching instead of in-memory store",
+            "decision": "Use Redis for session caching instead of in-memory store",
+            "category": "architecture",
+            "confidence": 0.85,
+            "stakes": "medium",
+            "status": "pending",
+            "date": "2026-02-09T12:00:00.000000+00:00",
+            "context": "Evaluating caching strategies for multi-instance deployment. In-memory fails on restart; Redis provides persistence and shared state across instances.",
+            "reasons": [
+                {
+                    "type": "analysis",
+                    "text": "Redis survives process restarts and supports multi-instance deployments",
+                    "strength": 0.8
+                },
+                {
+                    "type": "pattern",
+                    "text": "Previous projects had cache-loss bugs with in-memory stores",
+                    "strength": 0.8
+                }
+            ],
+            "bridge": {
+                "structure": "Use Redis for session caching instead of in-memory store",
+                "function": "Redis survives process restarts and supports multi-instance deployments"
+            },
+            "recorded_by": "your-agent-id"
+        }
     },
     "id": 4
 }
 ```
+
+The **bridge-definition** (Minsky Ch 12) connects what the decision *looks like* (structure) to what it *solves* (function). This enables two independent search paths:
+- `--bridge-side structure`: "Where else did we use this pattern?"
+- `--bridge-side function`: "What solved problems like this?"
 
 ---
 
 ## 6. Review an Outcome
 
-Go back to the first decision and record what actually happened. Replace `dec_abc12345` with the ID from step 2.
+Close the feedback loop by recording what actually happened. Replace `dec_abc12345` with your ID from step 4.
 
 ```bash
 curl -s -X POST $CSTP_URL/cstp \
@@ -232,11 +283,11 @@ curl -s -X POST $CSTP_URL/cstp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "cstp.reviewOutcome",
+    "method": "cstp.reviewDecision",
     "params": {
       "id": "dec_abc12345",
       "outcome": "success",
-      "result": "Redis caching reduced p99 latency from 450ms to 80ms. Shared state works correctly across 3 instances. No cache-loss incidents in 2 weeks of production use."
+      "result": "Redis caching reduced p99 latency from 450ms to 80ms. Shared state works correctly across 3 instances."
     },
     "id": 5
   }' | python3 -m json.tool
@@ -248,16 +299,18 @@ curl -s -X POST $CSTP_URL/cstp \
 {
     "jsonrpc": "2.0",
     "result": {
+        "success": true,
         "id": "dec_abc12345",
-        "outcome": "success",
-        "result": "Redis caching reduced p99 latency from 450ms to 80ms. Shared state works correctly across 3 instances. No cache-loss incidents in 2 weeks of production use.",
-        "reviewedAt": "2026-02-09T12:10:00Z"
+        "path": "/app/decisions/2026/02/2026-02-09-decision-dec_abc12345.yaml",
+        "status": "reviewed",
+        "reviewedAt": "2026-02-09T12:10:00.000000+00:00",
+        "reindexed": true
     },
     "id": 5
 }
 ```
 
-This closes the feedback loop — the system now knows this 0.85-confidence decision turned out well.
+The system now knows this 0.85-confidence decision succeeded. This data feeds directly into calibration.
 
 ---
 
@@ -271,7 +324,7 @@ curl -s -X POST $CSTP_URL/cstp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "cstp.getStats",
+    "method": "cstp.getCalibration",
     "params": {},
     "id": 6
   }' | python3 -m json.tool
@@ -283,38 +336,62 @@ curl -s -X POST $CSTP_URL/cstp \
 {
     "jsonrpc": "2.0",
     "result": {
-        "totalDecisions": 2,
-        "reviewedDecisions": 1,
-        "calibration": {
-            "buckets": [
-                {
-                    "range": "0.8-0.9",
-                    "count": 1,
-                    "successRate": 1.0,
-                    "avgConfidence": 0.85
-                }
-            ],
+        "overall": {
             "brierScore": 0.02,
-            "overconfidenceIndex": 0.0
+            "accuracy": 0.989,
+            "totalDecisions": 44,
+            "reviewedDecisions": 44,
+            "calibrationGap": 0.103,
+            "interpretation": "underconfident"
         },
-        "byCategory": {
-            "architecture": 2
-        },
-        "byStakes": {
-            "medium": 2
+        "byConfidenceBucket": [
+            {
+                "bucket": "0.9-1.0",
+                "decisions": 27,
+                "successRate": 1.0,
+                "expectedRate": 0.95,
+                "gap": 0.05,
+                "interpretation": "well_calibrated"
+            },
+            {
+                "bucket": "0.7-0.9",
+                "decisions": 17,
+                "successRate": 0.97,
+                "expectedRate": 0.8,
+                "gap": 0.17,
+                "interpretation": "underconfident"
+            }
+        ],
+        "recommendations": [
+            {
+                "type": "brier_score",
+                "message": "Excellent Brier score (0.02). Your predictions are very accurate.",
+                "severity": "info"
+            }
+        ],
+        "confidenceStats": {
+            "mean": 0.886,
+            "stdDev": 0.062,
+            "min": 0.72,
+            "max": 1.0,
+            "count": 44
         }
     },
     "id": 6
 }
 ```
 
-With more reviewed decisions, the calibration data becomes meaningful. A `brierScore` closer to 0 means your confidence scores are well-calibrated.
+Key metrics:
+- **Brier score** closer to 0 = better calibrated predictions
+- **calibrationGap** shows systematic over/underconfidence
+- **recommendations** provide actionable advice
+- **confidenceStats** tracks variance (low stdDev = you're not varying enough)
 
 ---
 
-## 8. Check Drift
+## 8. Check Reason Stats
 
-Monitor whether decision patterns are shifting over time.
+See which reasoning patterns predict success, and whether your reasoning is diverse enough.
 
 ```bash
 curl -s -X POST $CSTP_URL/cstp \
@@ -334,35 +411,105 @@ curl -s -X POST $CSTP_URL/cstp \
 {
     "jsonrpc": "2.0",
     "result": {
-        "reasonTypes": {
-            "analysis": {
-                "count": 3,
-                "percentage": 0.60
+        "byReasonType": [
+            {
+                "reasonType": "analysis",
+                "totalUses": 93,
+                "reviewedUses": 34,
+                "successCount": 33,
+                "successRate": 0.985,
+                "avgConfidence": 0.901,
+                "avgStrength": 0.767,
+                "brierScore": 0.0226
             },
-            "pattern": {
-                "count": 1,
-                "percentage": 0.20
+            {
+                "reasonType": "pattern",
+                "totalUses": 70,
+                "reviewedUses": 26,
+                "successCount": 25,
+                "successRate": 0.981,
+                "avgConfidence": 0.876,
+                "avgStrength": 0.71,
+                "brierScore": 0.0252
             },
-            "elimination": {
-                "count": 1,
-                "percentage": 0.20
+            {
+                "reasonType": "empirical",
+                "totalUses": 28,
+                "reviewedUses": 17,
+                "successCount": 16,
+                "successRate": 0.971,
+                "avgConfidence": 0.906,
+                "avgStrength": 0.736,
+                "brierScore": 0.0178
             }
+        ],
+        "diversity": {
+            "avgTypesPerDecision": 1.98,
+            "avgReasonsPerDecision": 2.05,
+            "diversityBuckets": [
+                {
+                    "distinctReasonTypes": 1,
+                    "totalDecisions": 29,
+                    "successRate": 1.0,
+                    "avgConfidence": 0.9
+                },
+                {
+                    "distinctReasonTypes": 2,
+                    "totalDecisions": 60,
+                    "successRate": 1.0,
+                    "avgConfidence": 0.899
+                },
+                {
+                    "distinctReasonTypes": 3,
+                    "totalDecisions": 25,
+                    "successRate": 0.962,
+                    "avgConfidence": 0.848
+                }
+            ]
         },
-        "totalReasons": 5,
-        "avgReasonsPerDecision": 2.0,
-        "diversityScore": 0.72
+        "recommendations": [
+            {
+                "type": "unused_types",
+                "message": "Never-used reason types: elimination, intuition. Consider whether these perspectives could strengthen decisions.",
+                "severity": "info"
+            }
+        ],
+        "totalDecisions": 115,
+        "reviewedDecisions": 43
     },
     "id": 7
 }
 ```
 
-A healthy system shows diverse reason types. If every decision relies on a single reason type, the agent may be operating on brittle logic — the `diversityScore` helps surface this.
+A healthy system shows:
+- **Diverse reason types** - not everything relying on `analysis` alone
+- **Multiple reasons per decision** (parallel bundles > serial chains, per Minsky Ch 18)
+- **Per-type Brier scores** - which reasoning patterns predict outcomes best
+
+---
+
+## The Full Lifecycle
+
+What you just walked through:
+
+```
+Query  →  "What solved problems like this?"        (auto-captured as deliberation input)
+Check  →  "Am I allowed to do this?"                (auto-captured as deliberation input)
+Record →  "Here's what I decided and why"           (auto: deliberation trace + bridge + related)
+Inspect → "Show me everything about this decision"  (bridge, reasons, recorded_by)
+Review →  "Here's what actually happened"           (closes the feedback loop)
+Stats  →  "How well am I calibrated?"               (Brier score, recommendations)
+Reason →  "Which reasoning patterns work best?"     (per-type success rates, diversity)
+```
+
+Zero client-side work needed for deliberation traces, bridge-definitions, or related decisions - the server handles it all.
 
 ---
 
 ## What's Next?
 
-- **[Decision Protocol](/guide/decision-protocol)** — Understand the full query → check → record → review lifecycle
-- **[Guardrails](/guide/guardrails)** — Configure rules that protect against bad decisions
-- **[MCP Integration](/guide/mcp-integration)** — Connect your AI agent via Model Context Protocol
-- **[Bridge-Definitions](/guide/bridge-definitions)** — Link structure to purpose for richer recall
+- **[Decision Protocol](/guide/decision-protocol)** - Understand the full query → check → record → review lifecycle
+- **[Deliberation Traces](/guide/deliberation-traces)** - How automatic trace capture works
+- **[Bridge-Definitions](/guide/bridge-definitions)** - Two-path search via structure and function (Minsky Ch 12)
+- **[Guardrails](/guide/guardrails)** - Configure rules that protect against bad decisions
+- **[MCP Integration](/guide/mcp-integration)** - Connect your AI agent via Model Context Protocol
