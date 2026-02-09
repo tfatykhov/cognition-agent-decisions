@@ -658,6 +658,12 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
 
+    # F026: Run guardrails against record context (supports deliberation checks)
+    from .guardrails_service import evaluate_record_guardrails
+    record_warnings = await evaluate_record_guardrails(request)
+    if record_warnings:
+        result["guardrail_warnings"] = record_warnings
+
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True
 
