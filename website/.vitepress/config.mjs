@@ -4,6 +4,7 @@ export default defineConfig({
   title: 'Cognition Engines',
   description: 'Decision Intelligence for AI Agents',
   base: '/cognition-agent-decisions/',
+  appearance: 'dark',
 
   head: [
     ['meta', { name: 'theme-color', content: '#6366f1' }],
@@ -18,7 +19,7 @@ export default defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/what-is-cognition-engines' },
-      { text: 'Reference', link: '/reference/api' },
+      { text: 'Reference', link: '/reference/product-overview' },
       { text: 'Specs', link: '/specs/' },
       {
         text: 'v0.10.0',
@@ -59,14 +60,28 @@ export default defineConfig({
       ],
       '/reference/': [
         {
-          text: 'Reference',
+          text: 'Product Documentation',
+          items: [
+            { text: 'Product Overview', link: '/reference/product-overview' },
+            { text: 'Architecture', link: '/reference/architecture' },
+            { text: 'Module Reference', link: '/reference/modules' },
+          ]
+        },
+        {
+          text: 'API & CLI',
           items: [
             { text: 'API Reference', link: '/reference/api' },
             { text: 'CLI Reference', link: '/reference/cli' },
-            { text: 'Architecture', link: '/reference/architecture' },
-            { text: 'Module Reference', link: '/reference/modules' },
-            { text: 'Configuration', link: '/reference/configuration' },
+            { text: 'MCP Quick Start', link: '/reference/mcp-quickstart' },
+          ]
+        },
+        {
+          text: 'Setup',
+          items: [
             { text: 'Installation', link: '/reference/installation' },
+            { text: 'Configuration', link: '/reference/configuration' },
+            { text: 'Dashboard Guide', link: '/reference/dashboard-guide' },
+            { text: 'Guardrails Authoring', link: '/reference/guardrails-authoring' },
           ]
         }
       ],
