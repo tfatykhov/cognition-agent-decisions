@@ -42,14 +42,16 @@ cp .env.example .env
 docker compose up -d
 
 # 5. Verify
-curl http://localhost:8100/health
+curl http://localhost:9991/health
 ```
+
+> **Note:** Port 9991 is the default. Override it with the `CSTP_PORT` environment variable.
 
 ### What Gets Started
 
 | Service | Port | Description |
 |---------|------|-------------|
-| `cstp-server` | 8100 | CSTP API server |
+| `cstp-server` | 9991 | CSTP API server |
 | `chromadb` | 8000 | ChromaDB vector database |
 
 ### Docker Compose Details
@@ -59,7 +61,7 @@ services:
   cstp-server:
     build: .
     ports:
-      - "8100:8100"
+      - "9991:9991"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - CSTP_AUTH_TOKENS=${CSTP_AUTH_TOKENS}
@@ -190,23 +192,23 @@ $env:CHROMA_URL = "http://localhost:8000"
 cstp-server --config config/server.yaml
 
 # Or directly with Python
-python -m uvicorn a2a.server:app --host 0.0.0.0 --port 8100
+python -m uvicorn a2a.server:app --host 0.0.0.0 --port 9991
 
 # Or with the entry point
-python a2a/server.py --config config/server.yaml --port 8100
+python a2a/server.py --config config/server.yaml --port 9991
 ```
 
 ### Step 6: Verify
 
 ```bash
 # Health check
-curl http://localhost:8100/health
+curl http://localhost:9991/health
 
 # Agent card
-curl http://localhost:8100/.well-known/agent.json
+curl http://localhost:9991/.well-known/agent.json
 
 # Query decisions (requires auth)
-curl -X POST http://localhost:8100/cstp `
+curl -X POST http://localhost:9991/cstp `
   -H "Authorization: Bearer myagent:mysecrettoken" `
   -H "Content-Type: application/json" `
   -d '{"jsonrpc":"2.0","method":"cstp.queryDecisions","params":{"query":"test"},"id":"1"}'
@@ -293,7 +295,7 @@ cp -r skills/cognition-engines /path/to/openclaw/workspace/skills/
 cp scripts/cstp.py /path/to/openclaw/workspace/scripts/
 
 # Configure credentials
-echo 'CSTP_URL=http://your-server:8100' >> /path/to/openclaw/workspace/.secrets/cstp.env
+echo 'CSTP_URL=http://your-server:9991' >> /path/to/openclaw/workspace/.secrets/cstp.env
 echo 'CSTP_TOKEN=your-token' >> /path/to/openclaw/workspace/.secrets/cstp.env
 ```
 
@@ -307,14 +309,14 @@ Connect any MCP-compliant agent to CSTP decision intelligence. The MCP server ex
 
 ### Streamable HTTP (Remote)
 
-The CSTP server exposes MCP at `/mcp` on the same port (8100):
+The CSTP server exposes MCP at `/mcp` on the same port (9991):
 
 ```bash
 # Claude Code
-claude mcp add --transport http cstp-decisions http://your-server:8100/mcp
+claude mcp add --transport http cstp-decisions http://your-server:9991/mcp
 
 # Any MCP client — point to:
-http://your-server:8100/mcp
+http://your-server:9991/mcp
 ```
 
 ### stdio (Local / Docker)
@@ -368,7 +370,7 @@ Default ports:
 
 | Service | Default Port | Environment Variable |
 |---------|-------------|---------------------|
-| CSTP Server | 8100 | `CSTP_PORT` |
+| CSTP Server | 9991 | `CSTP_PORT` |
 | ChromaDB | 8000 | `CHROMA_URL` (full URL) |
 | Dashboard | 5001 | `DASHBOARD_PORT` |
 

@@ -48,7 +48,7 @@ Dashboard starts on `http://localhost:5001` by default.
 Set environment variables before starting:
 
 ```bash
-$env:DASHBOARD_CSTP_URL = "http://localhost:8100"
+$env:DASHBOARD_CSTP_URL = "http://localhost:9991"
 $env:DASHBOARD_CSTP_TOKEN = "myagent:mysecrettoken"
 $env:DASHBOARD_SECRET_KEY = "your-flask-secret-key"
 $env:DASHBOARD_PORT = "5001"
@@ -61,7 +61,7 @@ python dashboard/app.py
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DASHBOARD_CSTP_URL` | `http://localhost:8100` | CSTP server URL |
+| `DASHBOARD_CSTP_URL` | `http://localhost:9991` | CSTP server URL |
 | `DASHBOARD_CSTP_TOKEN` | — | Bearer token for CSTP API |
 | `DASHBOARD_SECRET_KEY` | (random) | Flask session secret key |
 | `DASHBOARD_PORT` | `5001` | Dashboard HTTP port |
@@ -136,7 +136,7 @@ Displays calibration metrics computed from reviewed decisions:
 ┌──────────────┐     HTTP/JSON-RPC     ┌──────────────────┐
 │   Dashboard  │  ──────────────────▶  │   CSTP Server    │
 │   (Flask)    │                        │   (FastAPI)      │
-│   Port 5001  │  ◀──────────────────  │   Port 8100      │
+│   Port 5001  │  ◀──────────────────  │   Port 9991      │
 │              │     JSON responses     │                  │
 └──────────────┘                        └──────────────────┘
 ```

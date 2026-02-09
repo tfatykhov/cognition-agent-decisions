@@ -21,7 +21,7 @@ graph TB
     end
 
     subgraph Transport["Transport Layer"]
-        HTTP["Streamable HTTP<br/>POST/GET :8100/mcp"]
+        HTTP["Streamable HTTP<br/>POST/GET :9991/mcp"]
         STDIO["stdio<br/>python -m a2a.mcp_server"]
     end
 
@@ -65,10 +65,10 @@ Key design principles:
 
 ### Streamable HTTP (Remote)
 
-The CSTP FastAPI server mounts the MCP handler at `/mcp` on port 8100. The endpoint handles both `POST` (tool calls) and `GET` (event streams) on the same path.
+The CSTP FastAPI server mounts the MCP handler at `/mcp` on port 9991. The endpoint handles both `POST` (tool calls) and `GET` (event streams) on the same path.
 
 ```
-http://your-server:8100/mcp
+http://your-server:9991/mcp
 ```
 
 **Requirements:** The CSTP server must be running (Docker or local).
@@ -94,7 +94,7 @@ docker exec -i cstp python -m a2a.mcp_server
 ### Claude Code
 
 ```bash
-claude mcp add --transport http cstp-decisions http://your-server:8100/mcp
+claude mcp add --transport http cstp-decisions http://your-server:9991/mcp
 ```
 
 After adding, CSTP tools appear in Claude Code's tool list automatically.
@@ -122,14 +122,14 @@ Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
 Point OpenClaw's MCP client configuration to the Streamable HTTP endpoint:
 
 ```
-http://your-server:8100/mcp
+http://your-server:9991/mcp
 ```
 
 Or configure stdio transport to launch the MCP server process directly.
 
 ### Generic MCP Client
 
-Any client implementing the [MCP specification](https://modelcontextprotocol.io/) can connect via either transport. The server advertises itself as `cstp-decisions` and exposes 5 tools via the standard `tools/list` method.
+Any client implementing the [MCP specification](https://modelcontextprotocol.io/) can connect via either transport. The server advertises itself as `cstp-decisions` and exposes 7 tools via the standard `tools/list` method.
 
 ---
 
@@ -369,7 +369,7 @@ export DECISIONS_PATH=./decisions
 python -m a2a.mcp_server
 
 # 4. Or start the full server (includes /mcp endpoint)
-python -m uvicorn a2a.server:app --host 0.0.0.0 --port 8100
+python -m uvicorn a2a.server:app --host 0.0.0.0 --port 9991
 ```
 
 ---

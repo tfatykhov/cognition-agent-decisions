@@ -22,7 +22,7 @@ Cognition Engines supports configuration through three sources (in order of prec
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CSTP_HOST` | `0.0.0.0` | Server bind address |
-| `CSTP_PORT` | `8100` | Server port |
+| `CSTP_PORT` | `9991` | Server port |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 
 ### ChromaDB
@@ -60,7 +60,7 @@ Cognition Engines supports configuration through three sources (in order of prec
 ```yaml
 # Server settings
 host: 0.0.0.0
-port: 8100
+port: 9991
 
 # CORS (comma-separated or list)
 cors_origins:

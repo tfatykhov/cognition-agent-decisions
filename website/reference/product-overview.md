@@ -55,7 +55,7 @@ The **Cognition State Transfer Protocol** (CSTP v0.9.0) exposes all capabilities
 
 Since v0.9.0, Cognition Engines exposes all decision intelligence capabilities as **MCP tools**, enabling native integration with Claude Desktop, Claude Code, OpenClaw, and any MCP-compliant client. Two transports are supported:
 
-- **Streamable HTTP** — `POST`/`GET` to `/mcp` on the existing CSTP server (port 8100)
+- **Streamable HTTP** — `POST`/`GET` to `/mcp` on the existing CSTP server (port 9991)
 - **stdio** — `python -m a2a.mcp_server` for local or Docker-based access
 
 The MCP layer is a **zero-duplication bridge** — each MCP tool maps 1:1 to an existing CSTP service method.
@@ -77,7 +77,7 @@ The MCP layer is a **zero-duplication bridge** — each MCP tool maps 1:1 to an 
 | Rolling Calibration & Drift Alerts | ✅ Shipped | v0.9.0 |
 | Confidence Variance Detection | ✅ Shipped | v0.9.0 |
 | Hybrid Retrieval (BM25 + Semantic) | ✅ Shipped | v0.9.0 |
-| MCP Server (5 tools, stdio + Streamable HTTP) | ✅ Shipped | v0.9.0 |
+| MCP Server (7 tools, stdio + Streamable HTTP) | ✅ Shipped | v0.9.0 |
 | Bridge-Definitions (F024) | ✅ Shipped | v0.9.1 |
 | Related Decisions (F025) | ✅ Shipped | v0.9.4 |
 | Deliberation Traces (F023) | ✅ Shipped | v0.9.1 |

@@ -36,7 +36,9 @@ export default defineConfig({
           text: 'Introduction',
           items: [
             { text: 'What is Cognition Engines?', link: '/guide/what-is-cognition-engines' },
+            { text: 'Why Cognition Engines?', link: '/guide/why-cognition-engines' },
             { text: 'Getting Started', link: '/guide/getting-started' },
+            { text: 'Golden Path Walkthrough', link: '/guide/golden-path' },
             { text: 'Agent Quick Start', link: '/guide/agent-quickstart' },
           ]
         },
