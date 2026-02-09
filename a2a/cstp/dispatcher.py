@@ -658,6 +658,33 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)
 
+    # F026: Run guardrails against record context (supports deliberation checks)
+    delib_input_count = len(request.deliberation.inputs) if request.deliberation else 0
+    record_context = {
+        "description": request.decision,
+        "category": request.category,
+        "stakes": request.stakes,
+        "confidence": request.confidence,
+        "deliberation_inputs_count": delib_input_count,
+        "has_deliberation": delib_input_count > 0,
+        "phase": "record",  # Distinguish from pre-action checks
+    }
+    record_eval = await evaluate_guardrails(record_context)
+    record_warnings = []
+    for v in record_eval.violations:
+        record_warnings.append({
+            "guardrail_id": v.guardrail_id,
+            "message": v.message,
+            "severity": "block",
+        })
+    for w in record_eval.warnings:
+        record_warnings.append({
+            "guardrail_id": w.guardrail_id,
+            "message": w.message,
+        })
+    if record_warnings:
+        result["guardrail_warnings"] = record_warnings
+
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True
 

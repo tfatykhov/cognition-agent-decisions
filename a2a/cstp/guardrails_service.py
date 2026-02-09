@@ -180,6 +180,17 @@ def _parse_guardrail(data: dict[str, Any]) -> Guardrail:
     requirements = []
     scope: list[str] = []
 
+    # Support nested format: condition: {field: value, ...}
+    if "condition" in data and isinstance(data["condition"], dict):
+        for field_name, value in data["condition"].items():
+            conditions.append(_parse_condition(field_name, value))
+
+    # Support nested format: requires: {field: value, ...}
+    if "requires" in data and isinstance(data["requires"], dict):
+        for field_name, value in data["requires"].items():
+            requirements.append(GuardrailRequirement(field_name, value))
+
+    # Support flat format: condition_field, requires_field
     for key, value in data.items():
         if key.startswith("condition_"):
             conditions.append(_parse_condition(key[10:], value))
