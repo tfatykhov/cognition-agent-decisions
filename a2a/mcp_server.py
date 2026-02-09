@@ -501,10 +501,10 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
         deliberation=request.deliberation,
     )
 
-    # F024 Phase 3: Auto-extract bridge if not explicitly provided
-    from .cstp.bridge_hook import maybe_auto_extract_bridge
+    # F027 P2: Smart bridge extraction
+    from .cstp.bridge_hook import maybe_smart_extract_bridge
 
-    bridge_auto = maybe_auto_extract_bridge(request)
+    bridge_auto, bridge_method = await maybe_smart_extract_bridge(request)
 
     response = await record_decision(request)
 
@@ -522,6 +522,7 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
     if bridge_auto and request.bridge:
         result["bridge_auto"] = True
+        result["bridge_method"] = bridge_method
 
     if request.related_to:
         result["related_count"] = len(request.related_to)
