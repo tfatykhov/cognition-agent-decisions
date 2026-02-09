@@ -184,8 +184,8 @@ async def llm_bridge(request: RecordDecisionRequest) -> BridgeDefinition | None:
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/"
             f"models/{GEMINI_MODEL}:generateContent"
-            f"?key={GEMINI_API_KEY}"
         )
+        headers = {"x-goog-api-key": GEMINI_API_KEY}
         payload: dict[str, Any] = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
@@ -195,13 +195,17 @@ async def llm_bridge(request: RecordDecisionRequest) -> BridgeDefinition | None:
         }
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
 
         # Parse response
+        candidates = data.get("candidates")
+        if not candidates:
+            logger.debug("LLM returned no candidates (safety filter?)")
+            return None
         text = (
-            data.get("candidates", [{}])[0]
+            candidates[0]
             .get("content", {})
             .get("parts", [{}])[0]
             .get("text", "")
@@ -255,13 +259,13 @@ async def smart_extract_bridge(
         rule_result = rule_based_bridge(request)
 
         if llm_result:
-            # LLM is primary, store rule-based in enforcement/prevention
-            # fields as comparison data
+            # LLM is primary; log rule-based for comparison
             if rule_result:
-                if not llm_result.enforcement:
-                    llm_result.enforcement = f"[rule] {rule_result.structure}"
-                if not llm_result.prevention:
-                    llm_result.prevention = f"[rule] {rule_result.function}"
+                logger.info(
+                    "Bridge comparison - LLM: %s | Rule: %s",
+                    llm_result.structure[:80],
+                    rule_result.structure[:80],
+                )
             return (llm_result, "both")
         if rule_result:
             return (rule_result, "rule")
