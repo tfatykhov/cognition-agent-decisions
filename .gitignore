@@ -21,5 +21,9 @@ rad.json
 #Test results file
 TestResults.xml__pycache__/
 **/pycache__/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+/src/cognition_engines/__pycache__
 *.pyc
 .env
