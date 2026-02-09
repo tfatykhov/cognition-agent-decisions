@@ -191,6 +191,7 @@ def _input_type_to_step_type(input_type: str) -> str:
         "guardrail": "constraint",
         "lookup": "analysis",
         "stats": "empirical",
+        "reasoning": "reasoning",
     }
     return mapping.get(input_type, "analysis")
 
@@ -340,6 +341,42 @@ def track_stats(
         )
     except Exception:
         logger.debug("Failed to track stats", exc_info=True)
+
+
+def track_reasoning(
+    key: str,
+    text: str,
+    decision_id: str | None = None,
+) -> None:
+    """Track a reasoning/chain-of-thought step. Fail-open.
+
+    Captures the agent's internal reasoning process as a deliberation
+    step. Can be used pre-decision (accumulated in tracker) or
+    post-decision (appended to existing deliberation via update).
+
+    Args:
+        key: Agent or session ID.
+        text: The reasoning/thought text.
+        decision_id: Optional decision ID if reasoning is for an existing decision.
+    """
+    try:
+        tracker = get_tracker()
+        raw_data: dict[str, Any] = {"text": text}
+        if decision_id:
+            raw_data["decision_id"] = decision_id
+        tracker.track(
+            key,
+            TrackedInput(
+                id=f"r-{uuid4().hex[:8]}",
+                type="reasoning",
+                text=text,
+                source="cstp:recordThought",
+                timestamp=time.time(),
+                raw_data=raw_data,
+            ),
+        )
+    except Exception:
+        logger.debug("Failed to track reasoning", exc_info=True)
 
 
 def auto_attach_deliberation(

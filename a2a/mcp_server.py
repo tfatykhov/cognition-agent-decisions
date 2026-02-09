@@ -33,6 +33,7 @@ from .mcp_schemas import (
     GetStatsInput,
     LogDecisionInput,
     QueryDecisionsInput,
+    RecordThoughtInput,
     ReviewOutcomeInput,
     UpdateDecisionInput,
 )
@@ -189,6 +190,17 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=UpdateDecisionInput.model_json_schema(),
         ),
+        Tool(
+            name="record_thought",
+            description=(
+                "Record a reasoning/chain-of-thought step in the deliberation "
+                "trace. In pre-decision mode (no decision_id), thoughts "
+                "accumulate and auto-attach to the next recorded decision. "
+                "In post-decision mode (with decision_id), appends to the "
+                "existing decision's deliberation trace."
+            ),
+            inputSchema=RecordThoughtInput.model_json_schema(),
+        ),
     ]
 
 
@@ -221,6 +233,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "update_decision":
             return await _handle_update_decision_mcp(arguments)
+
+        if name == "record_thought":
+            return await _handle_record_thought_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -705,6 +720,34 @@ async def _handle_update_decision_mcp(arguments: dict[str, Any]) -> list[TextCon
     result = await update_decision(input_data.id, updates)
 
     return [TextContent(type="text", text=json.dumps(result))]
+
+
+async def _handle_record_thought_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle record_thought tool call (F028)."""
+    from .cstp.deliberation_tracker import track_reasoning
+
+    input_data = RecordThoughtInput(**arguments)
+
+    if input_data.decision_id:
+        # Post-decision: append-only via shared service function
+        from .cstp.decision_service import append_thought
+
+        result = await append_thought(input_data.decision_id, input_data.text)
+        if not result.get("success"):
+            return [TextContent(type="text", text=json.dumps({"error": result.get("error", "Unknown error")}))]
+        return [TextContent(type="text", text=json.dumps({
+            "success": True,
+            "mode": "post-decision",
+            "decision_id": input_data.decision_id,
+            "step_number": result["step_number"],
+        }))]
+
+    # Pre-decision: accumulate in tracker (use MCP session key)
+    track_reasoning("mcp-session", input_data.text)
+    return [TextContent(type="text", text=json.dumps({
+        "success": True,
+        "mode": "pre-decision",
+    }))]
 
 
 async def run_stdio() -> None:

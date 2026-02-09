@@ -551,6 +551,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.listGuardrails", _handle_list_guardrails)
     dispatcher.register("cstp.recordDecision", _handle_record_decision)
     dispatcher.register("cstp.updateDecision", _handle_update_decision)
+    dispatcher.register("cstp.recordThought", _handle_record_thought)
     dispatcher.register("cstp.getDecision", _handle_get_decision)
 
     dispatcher.register("cstp.reviewDecision", _handle_review_decision)
@@ -584,6 +585,54 @@ async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict
         raise ValueError("Missing required parameter: updates")
 
     return await update_decision(decision_id, updates)
+
+
+async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.recordThought method (F028).
+
+    Records a reasoning/chain-of-thought step in the deliberation tracker.
+    Two modes:
+    - Pre-decision: no decision_id - thought accumulates in tracker,
+      auto-attached when recordDecision is called.
+    - Post-decision: decision_id provided - thought is appended to
+      the existing decision's deliberation trace (append-only).
+
+    Args:
+        params: {"text": "reasoning...", "decision_id": "optional"}
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Acknowledgment with tracked input ID.
+    """
+    from .deliberation_tracker import track_reasoning
+
+    text = params.get("text", "")
+    if not text:
+        raise ValueError("Missing required parameter: text")
+
+    decision_id = params.get("decision_id") or params.get("id")
+
+    if decision_id:
+        # Post-decision: append-only via shared service function
+        from .decision_service import append_thought
+
+        result = await append_thought(decision_id, text)
+        if not result.get("success"):
+            raise ValueError(result.get("error", "Unknown error"))
+        return {
+            "success": True,
+            "mode": "post-decision",
+            "decision_id": decision_id,
+            "step_number": result["step_number"],
+        }
+
+    # Pre-decision: accumulate in tracker
+    track_reasoning(agent_id, text)
+    return {
+        "success": True,
+        "mode": "pre-decision",
+        "agent_id": agent_id,
+    }
 
 
 async def _handle_get_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
