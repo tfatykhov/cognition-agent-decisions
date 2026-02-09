@@ -3,7 +3,7 @@ name = "cognition-agent-decisions"
 version = "0.7.0"
 description = "Decision intelligence for AI agents - semantic search, guardrails, and pattern detection"
 readme = "README.md"
-license = { text = "Apache 2.0" }
+license = { text = "Apache Software License" }
 requires-python = ">=3.11"
 authors = [
     { name = "Timur Fatykhov", email = "tfatykhov@gmail.com" }
