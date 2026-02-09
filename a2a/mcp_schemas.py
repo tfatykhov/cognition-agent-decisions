@@ -369,6 +369,21 @@ class UpdateDecisionInput(BaseModel):
         min_length=1,
         description="Decision ID to update (8-char hex, e.g. 'b02d10ba')",
     )
+    decision: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Updated decision text (what was actually decided/done)",
+    )
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Updated confidence level (0.0-1.0)",
+    )
+    context: str | None = Field(
+        default=None,
+        description="Updated context (situation + what was done)",
+    )
     tags: list[str] | None = Field(
         default=None,
         description="Tags to set on the decision (replaces existing)",
