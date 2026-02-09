@@ -1351,7 +1351,10 @@ async def update_decision(
         "id": decision_id,
         "updated_fields": applied,
         "indexed": indexed,
-    }async def review_decision(
+    }
+
+
+async def review_decision(
     request: ReviewDecisionRequest,
     decisions_path: str | None = None,
 ) -> ReviewDecisionResponse:
