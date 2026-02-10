@@ -69,12 +69,11 @@ def index() -> str:
     """Overview dashboard with aggregated stats."""
     # Fetch calibration stats
     cal_data = run_async(cstp.get_calibration())
-    stats = CalibrationStats.from_dict(cal_data) if cal_data else None
+    stats = cal_data if cal_data else None
 
     # Fetch all decisions for aggregation
-    raw = run_async(cstp.query_decisions("all", limit=200))
-    all_decisions_data = raw.get("decisions", []) if raw else []
-    all_decisions = [Decision.from_dict(d) for d in all_decisions_data]
+    all_decisions, total_count = run_async(cstp.list_decisions(limit=200, search="all"))
+    total = total_count if total_count > len(all_decisions) else len(all_decisions)
 
     # Recent decisions (last 10)
     recent = sorted(all_decisions, key=lambda d: d.created_at, reverse=True)[:10]
