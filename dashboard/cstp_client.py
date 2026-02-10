@@ -1,4 +1,4 @@
-"""Async client for CSTP JSON-RPC API."""
+"""Sync client for CSTP JSON-RPC API."""
 from typing import Any
 
 import httpx
@@ -15,16 +15,14 @@ class CSTPError(Exception):
 
 
 class CSTPClient:
-    """Async client for CSTP server.
+    """Sync client for CSTP server.
     
-    Provides methods to interact with CSTP JSON-RPC API for decision
-    intelligence operations. Uses a shared httpx.AsyncClient for
-    connection pooling.
+    Uses a shared httpx.Client for connection pooling and keep-alive.
+    Create once at module level, reuse across requests.
     
     Example:
         client = CSTPClient("http://localhost:9991", "token")
-        async with client:
-            decisions, total = await client.list_decisions(limit=10)
+        decisions, total = client.list_decisions(limit=10)
     """
     
     def __init__(self, base_url: str, token: str) -> None:
@@ -40,35 +38,18 @@ class CSTPClient:
             "Content-Type": "application/json",
         }
         self._request_id = 0
-        self._http_client: httpx.AsyncClient | None = None
+        self._http_client = httpx.Client(timeout=30.0, headers=self.headers)
     
-    async def __aenter__(self) -> "CSTPClient":
-        """Enter async context manager."""
-        self._http_client = httpx.AsyncClient(timeout=30.0, headers=self.headers)
-        return self
-    
-    async def __aexit__(self, *args: Any) -> None:
-        """Exit async context manager."""
-        if self._http_client:
-            await self._http_client.aclose()
-            self._http_client = None
-    
-    def _get_client(self) -> httpx.AsyncClient:
-        """Get or create HTTP client.
-        
-        Returns shared client if in context manager, otherwise creates new one.
-        """
-        if self._http_client:
-            return self._http_client
-        # Fallback for non-context-manager usage (creates new client per call)
-        return httpx.AsyncClient(timeout=30.0, headers=self.headers)
+    def close(self) -> None:
+        """Close the HTTP client."""
+        self._http_client.close()
     
     def _next_id(self) -> int:
         """Generate next JSON-RPC request ID."""
         self._request_id += 1
         return self._request_id
     
-    async def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _call(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         """Make JSON-RPC call to CSTP server.
         
         Args:
@@ -82,35 +63,28 @@ class CSTPClient:
             CSTPError: If API returns an error
             httpx.HTTPError: If HTTP request fails
         """
-        client = self._get_client()
-        should_close = self._http_client is None
+        response = self._http_client.post(
+            f"{self.base_url}/cstp",
+            json={
+                "jsonrpc": "2.0",
+                "method": method,
+                "params": params,
+                "id": self._next_id(),
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
         
-        try:
-            response = await client.post(
-                f"{self.base_url}/cstp",
-                json={
-                    "jsonrpc": "2.0",
-                    "method": method,
-                    "params": params,
-                    "id": self._next_id(),
-                },
+        if "error" in data:
+            error = data["error"]
+            raise CSTPError(
+                error.get("message", "Unknown error"),
+                error.get("code"),
             )
-            response.raise_for_status()
-            data = response.json()
-            
-            if "error" in data:
-                error = data["error"]
-                raise CSTPError(
-                    error.get("message", "Unknown error"),
-                    error.get("code"),
-                )
-            
-            return data.get("result", {})
-        finally:
-            if should_close:
-                await client.aclose()
+        
+        return data.get("result", {})
     
-    async def list_decisions(
+    def list_decisions(
         self,
         limit: int = 50,
         offset: int = 0,
@@ -143,14 +117,14 @@ class CSTPClient:
         if project:
             params["project"] = project
         
-        result = await self._call("cstp.queryDecisions", params)
+        result = self._call("cstp.queryDecisions", params)
         
         decisions = [Decision.from_dict(d) for d in result.get("decisions", [])]
         total = result.get("total", len(decisions))
         
         return decisions, total
     
-    async def get_decision(self, decision_id: str) -> Decision | None:
+    def get_decision(self, decision_id: str) -> Decision | None:
         """Get single decision by ID using getDecision API.
         
         Args:
@@ -159,14 +133,14 @@ class CSTPClient:
         Returns:
             Decision object if found, None otherwise
         """
-        result = await self._call("cstp.getDecision", {"id": decision_id})
+        result = self._call("cstp.getDecision", {"id": decision_id})
         
         if result.get("found") and result.get("decision"):
             return Decision.from_dict(result["decision"])
         
         return None
     
-    async def review_decision(
+    def review_decision(
         self,
         decision_id: str,
         outcome: str,
@@ -192,10 +166,10 @@ class CSTPClient:
         if lessons:
             params["lessons"] = lessons
         
-        result = await self._call("cstp.reviewDecision", params)
+        result = self._call("cstp.reviewDecision", params)
         return result.get("status") == "reviewed"
     
-    async def get_calibration(
+    def get_calibration(
         self,
         project: str | None = None,
         category: str | None = None,
@@ -219,10 +193,10 @@ class CSTPClient:
         if window:
             params["window"] = window
         
-        result = await self._call("cstp.getCalibration", params)
+        result = self._call("cstp.getCalibration", params)
         return CalibrationStats.from_dict(result)
     
-    async def check_drift(
+    def check_drift(
         self,
         threshold_brier: float = 0.20,
         threshold_accuracy: float = 0.15,
@@ -249,17 +223,16 @@ class CSTPClient:
         if project:
             params["project"] = project
         
-        return await self._call("cstp.checkDrift", params)
+        return self._call("cstp.checkDrift", params)
     
-    async def health_check(self) -> bool:
+    def health_check(self) -> bool:
         """Check if CSTP server is reachable.
         
         Returns:
             True if server responds to health check
         """
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{self.base_url}/health")
-                return response.status_code == 200
+            response = self._http_client.get(f"{self.base_url}/health")
+            return response.status_code == 200
         except Exception:
             return False
