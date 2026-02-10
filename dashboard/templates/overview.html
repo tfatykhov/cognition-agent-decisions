@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Overview - CSTP Dashboard{% endblock %}
+
+{% block head_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-subtitle">Decision intelligence at a glance</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Top-Level Stats -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Decisions</div>
+        <div class="stat-value stat-value--accent">{{ total }}</div>
+    </div>
+    {% if stats %}
+    <div class="stat-card">
+        <div class="stat-label">Reviewed</div>
+        <div class="stat-value stat-value--success">{{ stats.reviewed_decisions }}</div>
+        <div class="stat-detail">{{ stats.pending_decisions }} pending</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Accuracy</div>
+        <div class="stat-value {% if stats.accuracy >= 0.9 %}stat-value--success{% elif stats.accuracy >= 0.7 %}stat-value--warning{% else %}stat-value--danger{% endif %}">{{ stats.accuracy_pct }}%</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Brier Score</div>
+        <div class="stat-value {% if stats.brier_score <= 0.05 %}stat-value--success{% elif stats.brier_score <= 0.15 %}stat-value--warning{% else %}stat-value--danger{% endif %}">{{ "%.3f"|format(stats.brier_score) }}</div>
+        <div class="stat-detail">Lower is better</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Calibration</div>
+        <div class="stat-value stat-value--sm">{{ stats.calibration_icon }}</div>
+        <div class="stat-detail">{{ stats.interpretation|replace('_', ' ')|title }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Charts Row -->
+<div class="chart-row">
+    <!-- Category Breakdown (Doughnut) -->
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">By Category</h2>
+        </div>
+        <div class="card-body">
+            <div class="chart-container chart-container--sm">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Outcome Breakdown (Doughnut) -->
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">Outcomes</h2>
+        </div>
+        <div class="card-body">
+            <div class="chart-container chart-container--sm">
+                <canvas id="outcomeChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quality Distribution (Bar) -->
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">Quality</h2>
+        </div>
+        <div class="card-body">
+            <div class="chart-container chart-container--sm">
+                <canvas id="qualityChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tag Cloud + Recent Decisions -->
+<div class="detail-row">
+    <!-- Tag Cloud -->
+    {% if top_tags %}
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">Top Tags</h2>
+            <span class="text-muted text-sm">Most used</span>
+        </div>
+        <div class="card-body">
+            <div class="tag-cloud">
+                {% for tag, count in top_tags %}
+                <a href="{{ url_for('decisions', search=tag) }}" class="tag-cloud-item tag-cloud-item--size-{{ [1, ((count / top_tags[0][1] * 3)|round|int)]|max }}">
+                    {{ tag }}
+                    <span class="tag-cloud-count">{{ count }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stakes Breakdown -->
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">By Stakes</h2>
+        </div>
+        <div class="card-body">
+            {% for level in ['critical', 'high', 'medium', 'low'] %}
+            {% if stakes_counts.get(level, 0) > 0 %}
+            <div class="overview-bar-row">
+                <span class="overview-bar-label"><span class="badge badge--stakes-{{ level }}">{{ level }}</span></span>
+                <div class="overview-bar-track">
+                    <div class="overview-bar-fill overview-bar-fill--{{ level }}" style="width: {{ (stakes_counts[level] / total * 100)|round|int }}%"></div>
+                </div>
+                <span class="overview-bar-count">{{ stakes_counts[level] }}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Recent Decisions -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Recent Decisions</h2>
+        <a href="{{ url_for('decisions') }}" class="btn btn--ghost btn--sm">View All</a>
+    </div>
+    <div class="card-body" style="padding: 0">
+        {% for d in recent %}
+        <a href="{{ url_for('decision_detail', decision_id=d.id[:8]) }}" class="related-card">
+            <div class="related-card-main">
+                <code class="related-card-id">{{ d.id[:8] }}</code>
+                <span class="badge badge--category" style="font-size: 0.5625rem">{{ d.category }}</span>
+                <span class="related-card-summary">{{ d.summary[:60] }}{% if d.summary|length > 60 %}...{% endif %}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0">
+                <span class="text-muted" style="font-size: 0.6875rem">{{ d.created_at.strftime('%b %d') }}</span>
+                <span>{{ d.outcome_icon }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Charts Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const gridColor = 'rgba(46, 51, 72, 0.6)';
+    const textColor = '#9498b0';
+
+    Chart.defaults.color = textColor;
+    Chart.defaults.borderColor = gridColor;
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.font.size = 12;
+
+    const palette = ['#6c8aff', '#a78bfa', '#34d399', '#fbbf24', '#f87171', '#38bdf8', '#fb923c', '#f472b6'];
+
+    // --- Category Doughnut ---
+    const catCtx = document.getElementById('categoryChart');
+    if (catCtx) {
+        const catLabels = [{% for k, v in cat_counts.items() %}{{ k|tojson }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const catValues = [{% for k, v in cat_counts.items() %}{{ v }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(catCtx, {
+            type: 'doughnut',
+            data: {
+                labels: catLabels,
+                datasets: [{
+                    data: catValues,
+                    backgroundColor: palette.slice(0, catLabels.length),
+                    borderColor: '#151825',
+                    borderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, padding: 12 }
+                    }
+                }
+            }
+        });
+    }
+
+    // --- Outcome Doughnut ---
+    const outCtx = document.getElementById('outcomeChart');
+    if (outCtx) {
+        const outLabels = [{% for k, v in outcome_counts.items() %}{{ k|tojson }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const outValues = [{% for k, v in outcome_counts.items() %}{{ v }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const outcomeColors = {
+            'success': '#34d399',
+            'partial': '#fbbf24',
+            'failure': '#f87171',
+            'pending': '#4a4f6a',
+            'abandoned': '#9498b0',
+        };
+        const outColors = outLabels.map(l => outcomeColors[l] || '#6c8aff');
+
+        new Chart(outCtx, {
+            type: 'doughnut',
+            data: {
+                labels: outLabels,
+                datasets: [{
+                    data: outValues,
+                    backgroundColor: outColors,
+                    borderColor: '#151825',
+                    borderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, padding: 12 }
+                    }
+                }
+            }
+        });
+    }
+
+    // --- Quality Bar ---
+    const qualCtx = document.getElementById('qualityChart');
+    if (qualCtx) {
+        new Chart(qualCtx, {
+            type: 'bar',
+            data: {
+                labels: ['High (70%+)', 'Medium (40-70%)', 'Low (<40%)', 'No Score'],
+                datasets: [{
+                    data: [{{ quality_buckets.high }}, {{ quality_buckets.medium }}, {{ quality_buckets.low }}, {{ quality_buckets.none }}],
+                    backgroundColor: ['#34d399', '#fbbf24', '#f87171', '#4a4f6a'],
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: gridColor }
+                    },
+                    y: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,6 +1,7 @@
 """CSTP Dashboard Flask application."""
 import asyncio
 import contextlib
+from collections import Counter
 from typing import Any
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
@@ -10,6 +11,7 @@ from flask_wtf.csrf import CSRFError
 from auth import requires_auth
 from config import config
 from cstp_client import CSTPClient, CSTPError
+from models import CalibrationStats, Decision
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -63,9 +65,62 @@ def health() -> Response:
 
 @app.route("/")
 @auth
-def index() -> Response:
-    """Redirect root to decisions list."""
-    return redirect(url_for("decisions"))
+def index() -> str:
+    """Overview dashboard with aggregated stats."""
+    # Fetch calibration stats
+    cal_data = run_async(cstp.get_calibration())
+    stats = CalibrationStats.from_dict(cal_data) if cal_data else None
+
+    # Fetch all decisions for aggregation
+    raw = run_async(cstp.query_decisions("all", limit=200))
+    all_decisions_data = raw.get("decisions", []) if raw else []
+    all_decisions = [Decision.from_dict(d) for d in all_decisions_data]
+
+    # Recent decisions (last 10)
+    recent = sorted(all_decisions, key=lambda d: d.created_at, reverse=True)[:10]
+
+    # Category breakdown
+    cat_counts: dict[str, int] = Counter(d.category for d in all_decisions)
+
+    # Stakes breakdown
+    stakes_counts: dict[str, int] = Counter(d.stakes for d in all_decisions)
+
+    # Outcome breakdown
+    outcome_counts: dict[str, int] = Counter(
+        d.outcome if d.outcome else "pending" for d in all_decisions
+    )
+
+    # Tag cloud (top 20)
+    tag_counter: Counter[str] = Counter()
+    for d in all_decisions:
+        for t in d.tags:
+            tag_counter[t] += 1
+    top_tags = tag_counter.most_common(20)
+
+    # Quality distribution
+    quality_buckets = {"high": 0, "medium": 0, "low": 0, "none": 0}
+    for d in all_decisions:
+        if d.quality and d.quality.score is not None:
+            if d.quality.score >= 0.7:
+                quality_buckets["high"] += 1
+            elif d.quality.score >= 0.4:
+                quality_buckets["medium"] += 1
+            else:
+                quality_buckets["low"] += 1
+        else:
+            quality_buckets["none"] += 1
+
+    return render_template(
+        "overview.html",
+        stats=stats,
+        recent=recent,
+        total=len(all_decisions),
+        cat_counts=cat_counts,
+        stakes_counts=stakes_counts,
+        outcome_counts=outcome_counts,
+        top_tags=top_tags,
+        quality_buckets=quality_buckets,
+    )
 
 
 def _get_decisions(
