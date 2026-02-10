@@ -303,6 +303,30 @@ class ConfidenceDistribution:
 
 
 @dataclass
+class CalibrationBucket:
+    """Calibration data for a confidence bucket."""
+    
+    bucket: str
+    decisions: int
+    success_rate: float
+    expected_rate: float
+    gap: float
+    interpretation: str = ""
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CalibrationBucket":
+        """Create from API response."""
+        return cls(
+            bucket=data.get("bucket", ""),
+            decisions=int(data.get("decisions", 0)),
+            success_rate=float(data.get("successRate", 0.0)),
+            expected_rate=float(data.get("expectedRate", 0.0)),
+            gap=float(data.get("gap", 0.0)),
+            interpretation=data.get("interpretation", ""),
+        )
+
+
+@dataclass
 class CalibrationStats:
     """Overall calibration statistics from CSTP."""
     
@@ -319,6 +343,8 @@ class CalibrationStats:
     period_end: str | None = None
     # F016: Confidence variance
     confidence_stats: ConfidenceDistribution | None = None
+    # Calibration buckets (actual vs expected)
+    calibration_buckets: list[CalibrationBucket] = field(default_factory=list)
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CalibrationStats":
@@ -371,6 +397,10 @@ class CalibrationStats:
             period_end=overall.get("period_end", overall.get("periodEnd")),
             # F016: Confidence stats
             confidence_stats=conf_stats,
+            # Calibration buckets
+            calibration_buckets=[
+                CalibrationBucket.from_dict(b) for b in data.get("byConfidenceBucket", [])
+            ],
         )
     
     @property
