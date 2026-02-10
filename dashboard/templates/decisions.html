@@ -1,70 +1,108 @@
 {% extends "base.html" %}
 
-{% block title %}Decisions • CSTP Dashboard{% endblock %}
+{% block title %}Decisions - CSTP Dashboard{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">Decisions</h1>
+            <p class="page-subtitle">{{ total }} total decisions</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
-<hgroup>
-    <h1>Decisions</h1>
-    <p>{{ total }} total decisions</p>
-</hgroup>
-
-<form method="get" class="grid">
-    <select name="category" aria-label="Category filter">
-        <option value="">All Categories</option>
-        <option value="architecture" {% if category == 'architecture' %}selected{% endif %}>Architecture</option>
-        <option value="process" {% if category == 'process' %}selected{% endif %}>Process</option>
-        <option value="integration" {% if category == 'integration' %}selected{% endif %}>Integration</option>
-        <option value="tooling" {% if category == 'tooling' %}selected{% endif %}>Tooling</option>
-        <option value="security" {% if category == 'security' %}selected{% endif %}>Security</option>
-    </select>
-    <select name="status" aria-label="Status filter">
-        <option value="">All Status</option>
-        <option value="pending" {% if status == 'pending' %}selected{% endif %}>⏳ Pending</option>
-        <option value="reviewed" {% if status == 'reviewed' %}selected{% endif %}>✅ Reviewed</option>
-    </select>
-    <button type="submit">🔍 Filter</button>
+<!-- Filters -->
+<form method="get" class="mb-6">
+    <div class="form-row">
+        <div class="form-group" style="margin-bottom:0">
+            <select name="category" class="form-select" aria-label="Category filter">
+                <option value="">All Categories</option>
+                <option value="architecture" {% if category == 'architecture' %}selected{% endif %}>Architecture</option>
+                <option value="process" {% if category == 'process' %}selected{% endif %}>Process</option>
+                <option value="integration" {% if category == 'integration' %}selected{% endif %}>Integration</option>
+                <option value="tooling" {% if category == 'tooling' %}selected{% endif %}>Tooling</option>
+                <option value="security" {% if category == 'security' %}selected{% endif %}>Security</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+            <select name="status" class="form-select" aria-label="Status filter">
+                <option value="">All Status</option>
+                <option value="pending" {% if status == 'pending' %}selected{% endif %}>⏳ Pending</option>
+                <option value="reviewed" {% if status == 'reviewed' %}selected{% endif %}>✅ Reviewed</option>
+            </select>
+        </div>
+        <div style="flex:0">
+            <button type="submit" class="btn btn--primary">Filter</button>
+        </div>
+    </div>
 </form>
 
-<figure>
+<!-- Decision Table -->
+<div class="table-wrapper">
     <table>
         <thead>
             <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Decision</th>
-                <th scope="col">Category</th>
-                <th scope="col">Conf</th>
-                <th scope="col">Status</th>
+                <th>ID</th>
+                <th>Decision</th>
+                <th>Category</th>
+                <th>Stakes</th>
+                <th>Confidence</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for decision in decisions %}
             <tr>
-                <td><a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}"><code>{{ decision.id[:8] }}</code></a></td>
-                <td>{{ decision.summary[:60] }}{% if decision.summary|length > 60 %}...{% endif %}</td>
-                <td><kbd>{{ decision.category }}</kbd></td>
-                <td>{{ decision.confidence_pct }}%</td>
+                <td>
+                    <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}">
+                        <code>{{ decision.id[:8] }}</code>
+                    </a>
+                </td>
+                <td>
+                    <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}" style="color: var(--c-text-secondary)">
+                        {{ decision.summary[:70] }}{% if decision.summary|length > 70 %}...{% endif %}
+                    </a>
+                </td>
+                <td><span class="badge badge--category">{{ decision.category }}</span></td>
+                <td><span class="badge badge--stakes-{{ decision.stakes }}">{{ decision.stakes }}</span></td>
+                <td>
+                    <div class="confidence-bar">
+                        <div class="confidence-bar-track">
+                            <div class="confidence-bar-fill {% if decision.confidence >= 0.9 %}confidence-bar-fill--high{% elif decision.confidence >= 0.7 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
+                                 style="width: {{ decision.confidence_pct }}%"></div>
+                        </div>
+                        <span class="confidence-bar-label">{{ decision.confidence_pct }}%</span>
+                    </div>
+                </td>
                 <td>{{ decision.outcome_icon }}</td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="5">No decisions found.</td>
+                <td colspan="6">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p class="empty-state-text">No decisions found.</p>
+                    </div>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
-</figure>
+</div>
 
+<!-- Pagination -->
 {% if total_pages > 1 %}
-<nav aria-label="Pagination">
-    <ul>
-        {% if page > 1 %}
-        <li><a href="{{ url_for('decisions', page=page-1, category=category, status=status) }}">◀ Previous</a></li>
-        {% endif %}
-        <li>Page {{ page }} of {{ total_pages }}</li>
-        {% if page < total_pages %}
-        <li><a href="{{ url_for('decisions', page=page+1, category=category, status=status) }}">Next ▶</a></li>
-        {% endif %}
-    </ul>
-</nav>
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('decisions', page=page-1, category=category, status=status) }}" class="btn btn--ghost btn--sm">← Previous</a>
+    {% endif %}
+    <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('decisions', page=page+1, category=category, status=status) }}" class="btn btn--ghost btn--sm">Next →</a>
+    {% endif %}
+</div>
 {% endif %}
 {% endblock %}
