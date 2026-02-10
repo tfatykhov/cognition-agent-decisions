@@ -1,55 +1,76 @@
 {% extends "base.html" %}
 
-{% block title %}Review {{ decision.id[:8] }} • CSTP Dashboard{% endblock %}
+{% block title %}Review {{ decision.id[:8] }} - CSTP Dashboard{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-breadcrumb">
+        <a href="{{ url_for('decisions') }}">Decisions</a>
+        <span class="page-breadcrumb-sep"></span>
+        <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}">{{ decision.id[:8] }}</a>
+        <span class="page-breadcrumb-sep"></span>
+        <span>Review</span>
+    </div>
+    <h1 class="page-title">Review Outcome</h1>
+    <p class="page-subtitle">{{ decision.summary[:80] }}</p>
+</div>
+{% endblock %}
 
 {% block content %}
-<p><a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}">◀ Back to decision</a></p>
-
-<hgroup>
-    <h1>Review Outcome</h1>
-    <p>Decision: <code>{{ decision.id[:8] }}</code></p>
-</hgroup>
-
-<article>
-    <p><strong>{{ decision.summary }}</strong></p>
-    <p>Original confidence: {{ decision.confidence_pct }}%</p>
-</article>
-
-<form method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <fieldset>
-        <legend>Outcome *</legend>
-        <label>
-            <input type="radio" name="outcome" value="success" required>
-            ✅ Success — Decision worked as expected
-        </label>
-        <label>
-            <input type="radio" name="outcome" value="partial">
-            ⚠️ Partial — Partially worked, some adjustments needed
-        </label>
-        <label>
-            <input type="radio" name="outcome" value="failure">
-            ❌ Failure — Did not work, had to change approach
-        </label>
-        <label>
-            <input type="radio" name="outcome" value="abandoned">
-            🚫 Abandoned — Never implemented or tested
-        </label>
-    </fieldset>
-
-    <label for="actual_result">
-        What actually happened? *
-        <textarea id="actual_result" name="actual_result" required placeholder="Describe the actual outcome..."></textarea>
-    </label>
-
-    <label for="lessons">
-        Lessons learned (optional)
-        <textarea id="lessons" name="lessons" placeholder="What did you learn from this decision?"></textarea>
-    </label>
-
-    <div class="grid">
-        <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}" role="button" class="secondary">Cancel</a>
-        <button type="submit">Submit Review</button>
+<!-- Decision Summary Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <p style="margin:0; color: var(--c-text-primary); font-weight: var(--fw-medium)">{{ decision.summary }}</p>
+        <p class="mt-2 text-sm text-muted" style="margin-bottom:0">Original confidence: {{ decision.confidence_pct }}%</p>
     </div>
-</form>
+</div>
+
+<!-- Review Form -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Record Outcome</h2>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group">
+                <label class="form-label">Outcome *</label>
+                <div class="form-radio-group">
+                    <label class="form-radio-label">
+                        <input type="radio" name="outcome" value="success" required>
+                        ✅ Success - Decision worked as expected
+                    </label>
+                    <label class="form-radio-label">
+                        <input type="radio" name="outcome" value="partial">
+                        ⚠️ Partial - Partially worked, adjustments needed
+                    </label>
+                    <label class="form-radio-label">
+                        <input type="radio" name="outcome" value="failure">
+                        ❌ Failure - Did not work, changed approach
+                    </label>
+                    <label class="form-radio-label">
+                        <input type="radio" name="outcome" value="abandoned">
+                        🚫 Abandoned - Never implemented
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="actual_result">What actually happened? *</label>
+                <textarea id="actual_result" name="actual_result" class="form-textarea" required placeholder="Describe the actual outcome..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="lessons">Lessons learned (optional)</label>
+                <textarea id="lessons" name="lessons" class="form-textarea" style="min-height: 80px" placeholder="What did you learn from this decision?"></textarea>
+            </div>
+
+            <div class="flex gap-3">
+                <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}" class="btn btn--secondary">Cancel</a>
+                <button type="submit" class="btn btn--primary">Submit Review</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}

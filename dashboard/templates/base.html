@@ -1,42 +1,60 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="CSTP Decision Intelligence Dashboard">
     <title>{% block title %}CSTP Dashboard{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🧠</text></svg>">
 </head>
 <body>
-    <header class="container">
-        <nav>
-            <ul>
-                <li><strong>🧠 CSTP Dashboard</strong></li>
-            </ul>
-            <ul>
-                <li><a href="{{ url_for('decisions') }}" {% if request.endpoint == 'decisions' or request.endpoint == 'decision_detail' or request.endpoint == 'review' %}aria-current="page"{% endif %}>Decisions</a></li>
-                <li><a href="{{ url_for('calibration') }}" {% if request.endpoint == 'calibration' %}aria-current="page"{% endif %}>Calibration</a></li>
-            </ul>
-        </nav>
-    </header>
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <span class="sidebar-brand-icon">🧠</span>
+                <div class="sidebar-brand-text">
+                    <span class="sidebar-brand-name">CSTP</span>
+                    <span class="sidebar-brand-sub">Decision Intelligence</span>
+                </div>
+            </div>
 
-    <main class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <article class="flash flash-{{ category }}">
-                        {{ message }}
-                    </article>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+            <nav class="sidebar-nav">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-label">Navigation</div>
+                </div>
+                <a href="{{ url_for('decisions') }}" class="sidebar-link {% if request.endpoint in ('decisions', 'decision_detail', 'review') %}active{% endif %}">
+                    <span class="sidebar-link-icon">📋</span>
+                    Decisions
+                </a>
+                <a href="{{ url_for('calibration') }}" class="sidebar-link {% if request.endpoint == 'calibration' %}active{% endif %}">
+                    <span class="sidebar-link-icon">📊</span>
+                    Calibration
+                </a>
+            </nav>
 
-        {% block content %}{% endblock %}
-    </main>
+            <div class="sidebar-footer">
+                <div class="sidebar-footer-text">CSTP v0.10 - Stage 0</div>
+            </div>
+        </aside>
 
-    <footer class="container">
-        <small>CSTP v0.8.0 • Decision Intelligence for AI Agents</small>
-    </footer>
+        <!-- Main -->
+        <div class="main-content">
+            {% block header %}{% endblock %}
+
+            <div class="content">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="flash flash--{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
 </body>
 </html>

@@ -1,115 +1,170 @@
 {% extends "base.html" %}
 
-{% block title %}{{ decision.id[:8] }} • CSTP Dashboard{% endblock %}
+{% block title %}{{ decision.id[:8] }} - CSTP Dashboard{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-breadcrumb">
+        <a href="{{ url_for('decisions') }}">Decisions</a>
+        <span class="page-breadcrumb-sep"></span>
+        <span>{{ decision.id[:8] }}</span>
+    </div>
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">{{ decision.summary[:80] }}{% if decision.summary|length > 80 %}...{% endif %}</h1>
+            <p class="page-subtitle">
+                {{ decision.outcome_icon }}
+                {% if decision.outcome %}{{ decision.outcome|title }}{% else %}Pending Review{% endif %}
+                - Created {{ decision.created_at.strftime('%Y-%m-%d %H:%M UTC') }}
+            </p>
+        </div>
+        {% if not decision.outcome %}
+        <a href="{{ url_for('review', decision_id=decision.id[:8]) }}" class="btn btn--primary">Review Outcome</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
-<p><a href="{{ url_for('decisions') }}">◀ Back to list</a></p>
+<!-- Details Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Details</h2>
+    </div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div class="detail-key">ID</div>
+            <div class="detail-value"><code>{{ decision.id }}</code></div>
 
-<hgroup>
-    <h1>Decision: <code>{{ decision.id[:8] }}</code></h1>
-    <p>{{ decision.outcome_icon }} {% if decision.outcome %}{{ decision.outcome|title }}{% else %}Pending Review{% endif %}</p>
-</hgroup>
+            <div class="detail-key">Category</div>
+            <div class="detail-value"><span class="badge badge--category">{{ decision.category }}</span></div>
 
-<article>
-    <p>{{ decision.summary }}</p>
-</article>
+            <div class="detail-key">Stakes</div>
+            <div class="detail-value"><span class="badge badge--stakes-{{ decision.stakes }}">{{ decision.stakes }}</span></div>
 
-<h2>Details</h2>
-<table>
-    <tbody>
-        <tr>
-            <th scope="row">Category</th>
-            <td><kbd>{{ decision.category }}</kbd></td>
-        </tr>
-        <tr>
-            <th scope="row">Stakes</th>
-            <td>{{ decision.stakes }}</td>
-        </tr>
-        <tr>
-            <th scope="row">Confidence</th>
-            <td>{{ decision.confidence_pct }}%</td>
-        </tr>
-        <tr>
-            <th scope="row">Created</th>
-            <td>{{ decision.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
-        </tr>
-        {% if decision.agent_id %}
-        <tr>
-            <th scope="row">Agent</th>
-            <td>{{ decision.agent_id }}</td>
-        </tr>
-        {% endif %}
-    </tbody>
-</table>
+            <div class="detail-key">Confidence</div>
+            <div class="detail-value">
+                <div class="confidence-bar">
+                    <div class="confidence-bar-track" style="max-width: 80px">
+                        <div class="confidence-bar-fill {% if decision.confidence >= 0.9 %}confidence-bar-fill--high{% elif decision.confidence >= 0.7 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
+                             style="width: {{ decision.confidence_pct }}%"></div>
+                    </div>
+                    <span class="confidence-bar-label">{{ decision.confidence_pct }}%</span>
+                </div>
+            </div>
 
+            {% if decision.agent_id %}
+            <div class="detail-key">Agent</div>
+            <div class="detail-value"><span class="badge badge--neutral">{{ decision.agent_id }}</span></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Context -->
 {% if decision.context %}
-<h2>Context</h2>
-<article>
-    <p>{{ decision.context }}</p>
-</article>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Context</h2>
+    </div>
+    <div class="card-body">
+        <p style="margin:0; color: var(--c-text-secondary)">{{ decision.context }}</p>
+    </div>
+</div>
 {% endif %}
 
+<!-- Reasons -->
 {% if decision.reasons %}
-<h2>Reasons</h2>
-<ul>
-    {% for reason in decision.reasons %}
-    <li><strong>[{{ reason.type }}]</strong> {{ reason.text }}</li>
-    {% endfor %}
-</ul>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Reasons</h2>
+        <span class="text-muted text-sm">{{ decision.reasons|length }} reason{{ 's' if decision.reasons|length != 1 }}</span>
+    </div>
+    <div class="card-body">
+        <ul class="reason-list">
+            {% for reason in decision.reasons %}
+            <li class="reason-item">
+                <span class="reason-type">{{ reason.type }}</span>
+                <span class="reason-text">{{ reason.text }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
 {% endif %}
 
+<!-- Project Context -->
 {% if decision.project_context %}
-<h2>Project Context</h2>
-<ul>
-    {% if decision.project_context.project %}
-    <li><strong>Project:</strong> {{ decision.project_context.project }}</li>
-    {% endif %}
-    {% if decision.project_context.feature %}
-    <li><strong>Feature:</strong> {{ decision.project_context.feature }}</li>
-    {% endif %}
-    {% if decision.project_context.pr %}
-    <li><strong>PR:</strong> #{{ decision.project_context.pr }}</li>
-    {% endif %}
-    {% if decision.project_context.file %}
-    <li><strong>File:</strong> {{ decision.project_context.file }}{% if decision.project_context.line %}:{{ decision.project_context.line }}{% endif %}</li>
-    {% endif %}
-    {% if decision.project_context.commit %}
-    <li><strong>Commit:</strong> <code>{{ decision.project_context.commit[:8] }}</code></li>
-    {% endif %}
-</ul>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Project</h2>
+    </div>
+    <div class="card-body">
+        <div class="project-context">
+            {% if decision.project_context.project %}
+            <span class="project-context-item">
+                <span class="project-context-label">repo</span>
+                {{ decision.project_context.project }}
+            </span>
+            {% endif %}
+            {% if decision.project_context.feature %}
+            <span class="project-context-item">
+                <span class="project-context-label">feature</span>
+                {{ decision.project_context.feature }}
+            </span>
+            {% endif %}
+            {% if decision.project_context.pr %}
+            <span class="project-context-item">
+                <span class="project-context-label">PR</span>
+                #{{ decision.project_context.pr }}
+            </span>
+            {% endif %}
+            {% if decision.project_context.file %}
+            <span class="project-context-item">
+                <span class="project-context-label">file</span>
+                {{ decision.project_context.file }}{% if decision.project_context.line %}:{{ decision.project_context.line }}{% endif %}
+            </span>
+            {% endif %}
+            {% if decision.project_context.commit %}
+            <span class="project-context-item">
+                <span class="project-context-label">commit</span>
+                <code>{{ decision.project_context.commit[:8] }}</code>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endif %}
 
+<!-- Outcome -->
 {% if decision.outcome %}
-<h2>Outcome</h2>
-<table>
-    <tbody>
-        <tr>
-            <th scope="row">Result</th>
-            <td>{{ decision.outcome_icon }} {{ decision.outcome|title }}</td>
-        </tr>
-        {% if decision.actual_result %}
-        <tr>
-            <th scope="row">What happened</th>
-            <td>{{ decision.actual_result }}</td>
-        </tr>
-        {% endif %}
-        {% if decision.lessons %}
-        <tr>
-            <th scope="row">Lessons</th>
-            <td>{{ decision.lessons }}</td>
-        </tr>
-        {% endif %}
-        {% if decision.reviewed_at %}
-        <tr>
-            <th scope="row">Reviewed</th>
-            <td>{{ decision.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
-        </tr>
-        {% endif %}
-    </tbody>
-</table>
-{% else %}
-<p>
-    <a href="{{ url_for('review', decision_id=decision.id[:8]) }}" role="button">Review Outcome</a>
-</p>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Outcome</h2>
+    </div>
+    <div class="card-body">
+        <div class="outcome-card outcome-card--{{ decision.outcome }}">
+            <div class="detail-grid">
+                <div class="detail-key">Result</div>
+                <div class="detail-value">{{ decision.outcome_icon }} {{ decision.outcome|title }}</div>
+
+                {% if decision.actual_result %}
+                <div class="detail-key">What happened</div>
+                <div class="detail-value">{{ decision.actual_result }}</div>
+                {% endif %}
+
+                {% if decision.lessons %}
+                <div class="detail-key">Lessons</div>
+                <div class="detail-value">{{ decision.lessons }}</div>
+                {% endif %}
+
+                {% if decision.reviewed_at %}
+                <div class="detail-key">Reviewed</div>
+                <div class="detail-value">{{ decision.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endif %}
 {% endblock %}

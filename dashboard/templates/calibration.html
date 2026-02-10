@@ -1,202 +1,247 @@
 {% extends "base.html" %}
 
-{% block title %}Calibration • CSTP Dashboard{% endblock %}
+{% block title %}Calibration - CSTP Dashboard{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">Calibration</h1>
+            <p class="page-subtitle">How well-calibrated are your confidence estimates?</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
-<hgroup>
-    <h1>Calibration Dashboard</h1>
-    <p>How well-calibrated are your confidence estimates?</p>
-</hgroup>
-
-<form method="get" class="grid">
-    <select name="window" aria-label="Time window">
-        <option value="">All Time</option>
-        <option value="30d" {% if window == '30d' %}selected{% endif %}>Last 30 Days</option>
-        <option value="60d" {% if window == '60d' %}selected{% endif %}>Last 60 Days</option>
-        <option value="90d" {% if window == '90d' %}selected{% endif %}>Last 90 Days</option>
-    </select>
-    <button type="submit">Apply</button>
+<!-- Time Window Filter -->
+<form method="get" class="mb-6">
+    <div class="form-row">
+        <div class="form-group" style="margin-bottom:0">
+            <select name="window" class="form-select" aria-label="Time window">
+                <option value="">All Time</option>
+                <option value="30d" {% if window == '30d' %}selected{% endif %}>Last 30 Days</option>
+                <option value="60d" {% if window == '60d' %}selected{% endif %}>Last 60 Days</option>
+                <option value="90d" {% if window == '90d' %}selected{% endif %}>Last 90 Days</option>
+            </select>
+        </div>
+        <div style="flex:0">
+            <button type="submit" class="btn btn--primary">Apply</button>
+        </div>
+    </div>
 </form>
 
 {% if stats %}
 {% if stats.period_start and stats.period_end %}
-<p><small>Period: {{ stats.period_start }} to {{ stats.period_end }}</small></p>
+<p class="text-sm text-muted mb-4">Period: {{ stats.period_start }} to {{ stats.period_end }}</p>
 {% endif %}
 
-<h2>Overall Stats</h2>
-<div class="grid">
-    <article>
-        <header>Total</header>
-        <p class="stat-number">{{ stats.total_decisions }}</p>
-    </article>
-    <article>
-        <header>Reviewed</header>
-        <p class="stat-number">{{ stats.reviewed_decisions }}</p>
-    </article>
-    <article>
-        <header>Pending</header>
-        <p class="stat-number">{{ stats.pending_decisions }}</p>
-    </article>
+<!-- Stat Cards - Top Row -->
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Decisions</div>
+        <div class="stat-value stat-value--accent">{{ stats.total_decisions }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Reviewed</div>
+        <div class="stat-value stat-value--success">{{ stats.reviewed_decisions }}</div>
+        <div class="stat-detail">{{ stats.pending_decisions }} pending</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Accuracy</div>
+        <div class="stat-value {% if stats.accuracy >= 0.9 %}stat-value--success{% elif stats.accuracy >= 0.7 %}stat-value--warning{% else %}stat-value--danger{% endif %}">{{ stats.accuracy_pct }}%</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Brier Score</div>
+        <div class="stat-value {% if stats.brier_score <= 0.05 %}stat-value--success{% elif stats.brier_score <= 0.15 %}stat-value--warning{% else %}stat-value--danger{% endif %}">{{ "%.3f"|format(stats.brier_score) }}</div>
+        <div class="stat-detail">Lower is better</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Calibration</div>
+        <div class="stat-value stat-value--sm">{{ stats.calibration_icon }}</div>
+        <div class="stat-detail">{{ stats.interpretation|replace('_', ' ')|title }}</div>
+    </div>
 </div>
 
-<div class="grid">
-    <article>
-        <header>Accuracy</header>
-        <p class="stat-number">{{ stats.accuracy_pct }}%</p>
-    </article>
-    <article>
-        <header>Brier Score</header>
-        <p class="stat-number">{{ "%.2f"|format(stats.brier_score) }}</p>
-    </article>
-    <article>
-        <header>Calibration</header>
-        <p class="stat-number">{{ stats.calibration_icon }} {{ stats.interpretation|replace('_', ' ')|title }}</p>
-    </article>
-</div>
-
+<!-- Confidence Distribution -->
 {% if stats.confidence_stats %}
-<h2>Confidence Distribution</h2>
-<div class="grid">
-    <article>
-        <header>Mean</header>
-        <p class="stat-number">{{ stats.confidence_stats.mean_pct }}%</p>
-    </article>
-    <article>
-        <header>Std Dev</header>
-        <p class="stat-number">{{ "%.2f"|format(stats.confidence_stats.std_dev) }}</p>
-    </article>
-    <article>
-        <header>Range</header>
-        <p class="stat-number">{{ (stats.confidence_stats.min_conf * 100)|int }}-{{ (stats.confidence_stats.max_conf * 100)|int }}%</p>
-    </article>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Confidence Distribution</h2>
+    </div>
+    <div class="card-body">
+        <div class="stat-grid" style="margin-bottom: var(--sp-4)">
+            <div class="stat-card">
+                <div class="stat-label">Mean</div>
+                <div class="stat-value stat-value--sm">{{ stats.confidence_stats.mean_pct }}%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Std Dev</div>
+                <div class="stat-value stat-value--sm">{{ "%.3f"|format(stats.confidence_stats.std_dev) }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Range</div>
+                <div class="stat-value stat-value--sm">{{ (stats.confidence_stats.min_conf * 100)|int }}-{{ (stats.confidence_stats.max_conf * 100)|int }}%</div>
+            </div>
+        </div>
+
+        <details>
+            <summary>Distribution by Bucket</summary>
+            <div class="table-wrapper" style="margin-top: var(--sp-3)">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Confidence Range</th>
+                            <th>Count</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bucket, count in stats.confidence_stats.bucket_counts.items() %}
+                        <tr>
+                            <td>{{ bucket }}</td>
+                            <td>{{ count }}</td>
+                            <td>{% if stats.confidence_stats.count > 0 %}{{ (count / stats.confidence_stats.count * 100)|round|int }}%{% else %}--{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </div>
 </div>
-
-<details>
-    <summary>Distribution by Bucket</summary>
-    <table>
-        <thead>
-            <tr>
-                <th>Confidence Range</th>
-                <th>Count</th>
-                <th>Percentage</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for bucket, count in stats.confidence_stats.bucket_counts.items() %}
-            <tr>
-                <td>{{ bucket }}</td>
-                <td>{{ count }}</td>
-                <td>{% if stats.confidence_stats.count > 0 %}{{ (count / stats.confidence_stats.count * 100)|round|int }}%{% else %}--{% endif %}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</details>
 {% endif %}
 
+<!-- By Category -->
 {% if stats.by_category %}
-<h2>By Category</h2>
-<figure>
-    <table>
-        <thead>
-            <tr>
-                <th scope="col">Category</th>
-                <th scope="col">Total</th>
-                <th scope="col">Reviewed</th>
-                <th scope="col">Accuracy</th>
-                <th scope="col">Brier</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for cat in stats.by_category %}
-            <tr>
-                <td><kbd>{{ cat.category }}</kbd></td>
-                <td>{{ cat.total }}</td>
-                <td>{{ cat.reviewed }}</td>
-                <td>{% if cat.reviewed > 0 %}{{ cat.accuracy_pct }}%{% else %}--{% endif %}</td>
-                <td>{% if cat.reviewed > 0 %}{{ "%.2f"|format(cat.brier_score) }}{% else %}--{% endif %}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</figure>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">By Category</h2>
+    </div>
+    <div class="card-body" style="padding:0">
+        <div class="table-wrapper" style="border:0; border-radius:0">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Total</th>
+                        <th>Reviewed</th>
+                        <th>Accuracy</th>
+                        <th>Brier</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat in stats.by_category %}
+                    <tr>
+                        <td><span class="badge badge--category">{{ cat.category }}</span></td>
+                        <td>{{ cat.total }}</td>
+                        <td>{{ cat.reviewed }}</td>
+                        <td>{% if cat.reviewed > 0 %}{{ cat.accuracy_pct }}%{% else %}<span class="text-muted">--</span>{% endif %}</td>
+                        <td>{% if cat.reviewed > 0 %}{{ "%.3f"|format(cat.brier_score) }}{% else %}<span class="text-muted">--</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {% endif %}
 
+<!-- Recommendations -->
 {% if stats.recommendations %}
-<h2>Recommendations</h2>
-<article>
-    <ul>
-        {% for rec in stats.recommendations %}
-        <li>💡 {{ rec }}</li>
-        {% endfor %}
-    </ul>
-</article>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Recommendations</h2>
+    </div>
+    <div class="card-body">
+        <ul class="reason-list">
+            {% for rec in stats.recommendations %}
+            <li class="reason-item">
+                <span class="reason-type" style="color: var(--c-warning)">💡</span>
+                <span class="reason-text">{{ rec }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
 {% endif %}
 
+<!-- Drift Analysis -->
 {% if drift %}
-<h2>Drift Analysis</h2>
 {% if drift.driftDetected %}
-<article class="drift-warning">
-    <header>⚠️ Calibration Drift Detected</header>
-    <p>Recent performance (30d) differs from historical baseline (90d+).</p>
-    
+<div class="drift-warning">
+    <h3>⚠️ Calibration Drift Detected</h3>
+    <p class="text-sm" style="color: var(--c-text-secondary)">Recent performance differs from historical baseline.</p>
+
     {% if drift.alerts %}
-    <ul>
+    <ul class="reason-list mt-4">
         {% for alert in drift.alerts %}
-        <li class="drift-alert-{{ alert.severity }}">
-            <strong>{{ alert.type | replace('_', ' ') | title }}:</strong> {{ alert.message }}
+        <li class="reason-item">
+            <span class="reason-type" style="color: var(--c-warning)">{{ alert.type|replace('_', ' ')|title }}</span>
+            <span class="reason-text">{{ alert.message }}</span>
         </li>
         {% endfor %}
     </ul>
     {% endif %}
-    
+
     {% if drift.recent and drift.historical %}
-    <details>
-        <summary>Details</summary>
-        <table>
-            <thead>
-                <tr>
-                    <th>Period</th>
-                    <th>Decisions</th>
-                    <th>Accuracy</th>
-                    <th>Brier</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Recent ({{ drift.recent.window }})</td>
-                    <td>{{ drift.recent.decisions }}</td>
-                    <td>{{ (drift.recent.accuracy * 100) | round | int }}%</td>
-                    <td>{{ "%.2f" | format(drift.recent.brierScore) }}</td>
-                </tr>
-                <tr>
-                    <td>Historical ({{ drift.historical.window }})</td>
-                    <td>{{ drift.historical.decisions }}</td>
-                    <td>{{ (drift.historical.accuracy * 100) | round | int }}%</td>
-                    <td>{{ "%.2f" | format(drift.historical.brierScore) }}</td>
-                </tr>
-            </tbody>
-        </table>
+    <details class="mt-4">
+        <summary>Comparison Details</summary>
+        <div class="table-wrapper" style="margin-top: var(--sp-3)">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Period</th>
+                        <th>Decisions</th>
+                        <th>Accuracy</th>
+                        <th>Brier</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Recent ({{ drift.recent.window }})</td>
+                        <td>{{ drift.recent.decisions }}</td>
+                        <td>{{ (drift.recent.accuracy * 100)|round|int }}%</td>
+                        <td>{{ "%.3f"|format(drift.recent.brierScore) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Historical ({{ drift.historical.window }})</td>
+                        <td>{{ drift.historical.decisions }}</td>
+                        <td>{{ (drift.historical.accuracy * 100)|round|int }}%</td>
+                        <td>{{ "%.3f"|format(drift.historical.brierScore) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </details>
     {% endif %}
-</article>
+</div>
 {% else %}
-<article>
-    <p>✅ No drift detected. Recent calibration is consistent with historical baseline.</p>
-    {% if drift.recommendations %}
-    <ul>
-        {% for rec in drift.recommendations %}
-        <li>ℹ️ {{ rec.message }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-</article>
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title" style="margin:0">Drift Analysis</h2>
+    </div>
+    <div class="card-body">
+        <p style="margin:0; color: var(--c-success)">✅ No drift detected. Recent calibration is consistent with historical baseline.</p>
+        {% if drift.recommendations %}
+        <ul class="reason-list mt-4">
+            {% for rec in drift.recommendations %}
+            <li class="reason-item">
+                <span class="reason-type" style="color: var(--c-info)">ℹ️</span>
+                <span class="reason-text">{{ rec.message }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
 {% endif %}
 {% endif %}
 
 {% else %}
-<article>
-    <p>Unable to load calibration data.</p>
-</article>
+<div class="empty-state">
+    <div class="empty-state-icon">📊</div>
+    <p class="empty-state-text">Unable to load calibration data.</p>
+</div>
 {% endif %}
 {% endblock %}
