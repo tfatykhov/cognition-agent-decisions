@@ -61,7 +61,11 @@
                         <code>{{ decision.id[:8] }}</code>
                     </a>
                 </td>
-                <td>{{ decision.summary[:70] }}{% if decision.summary|length > 70 %}...{% endif %}</td>
+                <td>
+                    <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}" style="color: var(--c-text-secondary)">
+                        {{ decision.summary[:70] }}{% if decision.summary|length > 70 %}...{% endif %}
+                    </a>
+                </td>
                 <td><span class="badge badge--category">{{ decision.category }}</span></td>
                 <td><span class="badge badge--stakes-{{ decision.stakes }}">{{ decision.stakes }}</span></td>
                 <td>

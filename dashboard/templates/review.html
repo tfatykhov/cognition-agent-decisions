@@ -35,8 +35,9 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
             <div class="form-group">
-                <label class="form-label">Outcome *</label>
-                <div class="form-radio-group">
+                <fieldset style="border:0; padding:0; margin:0">
+                    <legend class="form-label">Outcome *</legend>
+                    <div class="form-radio-group">
                     <label class="form-radio-label">
                         <input type="radio" name="outcome" value="success" required>
                         ✅ Success - Decision worked as expected
@@ -53,7 +54,8 @@
                         <input type="radio" name="outcome" value="abandoned">
                         🚫 Abandoned - Never implemented
                     </label>
-                </div>
+                    </div>
+                </fieldset>
             </div>
 
             <div class="form-group">

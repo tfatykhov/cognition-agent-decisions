@@ -9,7 +9,12 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🧠</text></svg>">
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Skip to content</a>
     <div class="app-layout">
+        <!-- Mobile Nav Toggle -->
+        <button class="mobile-nav-toggle" aria-label="Toggle navigation" onclick="document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.sidebar-overlay').classList.toggle('open')">☰</button>
+        <div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('open');this.classList.remove('open')"></div>
+
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-brand">
@@ -43,7 +48,7 @@
         <div class="main-content">
             {% block header %}{% endblock %}
 
-            <div class="content">
+            <div class="content" id="main-content">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
                         {% for category, message in messages %}
