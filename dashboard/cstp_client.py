@@ -108,7 +108,7 @@ class CSTPClient:
         """
         params: dict[str, Any] = {
             "query": search or "",
-            "top_k": limit,
+            "limit": limit,
         }
         if category:
             params["category"] = category

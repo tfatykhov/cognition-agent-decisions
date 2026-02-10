@@ -96,7 +96,7 @@ def index() -> str:
     stats = cstp.get_calibration()
 
     # Fetch all decisions for aggregation
-    all_decisions, total_count = cstp.list_decisions(limit=200, search="all")
+    all_decisions, total_count = cstp.list_decisions(limit=500)
 
     # Apply date filter
     if date_from is not None:

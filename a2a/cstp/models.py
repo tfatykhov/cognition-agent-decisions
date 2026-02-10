@@ -82,9 +82,11 @@ class QueryDecisionsRequest:
         query = params.get("query", "")
         # Allow empty query for listing all decisions
 
-        limit = params.get("limit", 10)
-        if not 1 <= limit <= 50:
-            limit = max(1, min(50, limit))
+        limit = params.get("limit", params.get("top_k", 10))
+        # Higher limit allowed for empty queries (list-all mode)
+        max_limit = 500 if not query.strip() else 50
+        if not 1 <= limit <= max_limit:
+            limit = max(1, min(max_limit, limit))
 
         # F017: Parse retrieval mode
         retrieval_mode = params.get("retrievalMode", params.get("retrieval_mode", "semantic"))
