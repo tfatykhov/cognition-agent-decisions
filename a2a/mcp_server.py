@@ -38,6 +38,34 @@ from .mcp_schemas import (
     UpdateDecisionInput,
 )
 
+
+def _deref_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Dereference $ref/$defs in a JSON Schema for LLM API compatibility.
+
+    Many LLM APIs (OpenAI, Anthropic, etc.) don't support $ref references
+    in tool schemas. This function inlines all $ref references and removes
+    the $defs block, producing a flat schema.
+    """
+    defs = schema.pop("$defs", {})
+    if not defs:
+        return schema
+
+    def _resolve(node: Any) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node:
+                ref_path = node["$ref"]  # e.g., "#/$defs/ReasonInput"
+                ref_name = ref_path.rsplit("/", 1)[-1]
+                if ref_name in defs:
+                    # Recursively resolve the referenced definition
+                    return _resolve(dict(defs[ref_name]))
+                return node
+            return {k: _resolve(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [_resolve(item) for item in node]
+        return node
+
+    return _resolve(schema)
+
 # Configure logging to stderr (stdout is reserved for MCP protocol)
 logging.basicConfig(
     level=logging.INFO,
@@ -122,7 +150,7 @@ async def list_tools() -> list[Tool]:
                 "categories, and outcomes. Use before making new decisions to learn from "
                 "history."
             ),
-            inputSchema=QueryDecisionsInput.model_json_schema(),
+            inputSchema=_deref_schema(QueryDecisionsInput.model_json_schema()),
         ),
         Tool(
             name="check_action",
@@ -131,7 +159,7 @@ async def list_tools() -> list[Tool]:
                 "Returns whether the action is allowed, any violations (blocking), and "
                 "warnings. Always check before high-stakes actions."
             ),
-            inputSchema=CheckActionInput.model_json_schema(),
+            inputSchema=_deref_schema(CheckActionInput.model_json_schema()),
         ),
         Tool(
             name="log_decision",
@@ -140,7 +168,7 @@ async def list_tools() -> list[Tool]:
                 "decided, your confidence level, category, and supporting reasons. "
                 "Use after making a decision to build calibration history."
             ),
-            inputSchema=LogDecisionInput.model_json_schema(),
+            inputSchema=_deref_schema(LogDecisionInput.model_json_schema()),
         ),
         Tool(
             name="review_outcome",
@@ -149,7 +177,7 @@ async def list_tools() -> list[Tool]:
                 "whether it succeeded or failed, what actually happened, and lessons "
                 "learned. Builds calibration data over time."
             ),
-            inputSchema=ReviewOutcomeInput.model_json_schema(),
+            inputSchema=_deref_schema(ReviewOutcomeInput.model_json_schema()),
         ),
         Tool(
             name="get_stats",
@@ -158,7 +186,7 @@ async def list_tools() -> list[Tool]:
                 "distribution, and decision counts. Optionally filter by category, "
                 "project, or time window. Use to check decision-making quality."
             ),
-            inputSchema=GetStatsInput.model_json_schema(),
+            inputSchema=_deref_schema(GetStatsInput.model_json_schema()),
         ),
         Tool(
             name="get_decision",
@@ -168,7 +196,7 @@ async def list_tools() -> list[Tool]:
                 "outcome, and review information. Use when you need the full "
                 "decision content beyond what query_decisions returns."
             ),
-            inputSchema=GetDecisionInput.model_json_schema(),
+            inputSchema=_deref_schema(GetDecisionInput.model_json_schema()),
         ),
         Tool(
             name="get_reason_stats",
@@ -179,7 +207,7 @@ async def list_tools() -> list[Tool]:
                 "more diverse reasoning perform better?). Use to improve "
                 "decision-making by understanding which reasoning approaches work."
             ),
-            inputSchema=GetReasonStatsInput.model_json_schema(),
+            inputSchema=_deref_schema(GetReasonStatsInput.model_json_schema()),
         ),
         Tool(
             name="update_decision",
@@ -188,7 +216,7 @@ async def list_tools() -> list[Tool]:
                 "supports updating tags and pattern. Use for backfilling "
                 "decisions with missing metadata."
             ),
-            inputSchema=UpdateDecisionInput.model_json_schema(),
+            inputSchema=_deref_schema(UpdateDecisionInput.model_json_schema()),
         ),
         Tool(
             name="record_thought",
@@ -199,7 +227,7 @@ async def list_tools() -> list[Tool]:
                 "In post-decision mode (with decision_id), appends to the "
                 "existing decision's deliberation trace."
             ),
-            inputSchema=RecordThoughtInput.model_json_schema(),
+            inputSchema=_deref_schema(RecordThoughtInput.model_json_schema()),
         ),
     ]
 
