@@ -2,21 +2,12 @@
 # Ensures agents follow the pre-decision protocol (query + check before recording)
 
 - id: require-deliberation
-  description: Decisions should have prior deliberation (query + check before recording)
+  description: All decisions MUST have prior deliberation (query + check before recording)
   condition:
     phase: record
     has_deliberation: false
-  action: warn
-  message: "No deliberation inputs detected. Run pre-decision protocol: cstp.py pre \"what you plan to do\""
-
-- id: require-deliberation-high-stakes
-  description: High-stakes decisions MUST have prior deliberation
-  condition:
-    phase: record
-    has_deliberation: false
-    stakes: high
   action: block
-  message: "High-stakes decisions require prior deliberation. Run: cstp.py pre \"what you plan to do\" -s high"
+  message: "No deliberation inputs detected. Run pre-decision protocol: cstp.py pre \"what you plan to do\" BEFORE recording."
 
 # F028: Reasoning Capture Enforcement
 - id: recommend-reasoning
