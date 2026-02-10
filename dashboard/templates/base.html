@@ -32,6 +32,10 @@
                 <div class="sidebar-section">
                     <div class="sidebar-section-label">Navigation</div>
                 </div>
+                <a href="{{ url_for('index') }}" class="sidebar-link {% if request.endpoint == 'index' %}active{% endif %}">
+                    <span class="sidebar-link-icon">🏠</span>
+                    Overview
+                </a>
                 <a href="{{ url_for('decisions') }}" class="sidebar-link {% if request.endpoint in ('decisions', 'decision_detail', 'review') %}active{% endif %}">
                     <span class="sidebar-link-icon">📋</span>
                     Decisions
@@ -43,7 +47,7 @@
             </nav>
 
             <div class="sidebar-footer">
-                <div class="sidebar-footer-text">CSTP v0.10 - Stage 0</div>
+                <div class="sidebar-footer-text">CSTP v0.10</div>
             </div>
         </aside>
 
