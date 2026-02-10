@@ -223,9 +223,13 @@ async def query_decisions(
     if min_confidence is not None:
         where["confidence"] = {"$gte": min_confidence}
     if stakes:
-        where["stakes"] = {"$in": stakes}
+        # Ensure stakes is a list for $in operator
+        stakes_list = [stakes] if isinstance(stakes, str) else stakes
+        where["stakes"] = {"$in": stakes_list}
     if status_filter:
-        where["status"] = {"$in": status_filter}
+        # Ensure status is a list for $in operator
+        status_list = [status_filter] if isinstance(status_filter, str) else status_filter
+        where["status"] = {"$in": status_list}
 
     # F010: Project context filters
     if project:
