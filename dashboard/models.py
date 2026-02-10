@@ -26,6 +26,88 @@ class ProjectContext:
 
 
 @dataclass
+class DeliberationStep:
+    """A step in the deliberation trace."""
+    
+    step: int
+    thought: str
+    type: str | None = None
+    timestamp: str | None = None
+    conclusion: bool = False
+
+
+@dataclass
+class Deliberation:
+    """Full deliberation trace for a decision."""
+    
+    steps: list[DeliberationStep] = field(default_factory=list)
+    total_duration_ms: int | None = None
+    convergence_score: float | None = None
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Deliberation":
+        """Create from API response."""
+        steps = []
+        for s in data.get("steps", []):
+            steps.append(DeliberationStep(
+                step=s.get("step", 0),
+                thought=s.get("thought", ""),
+                type=s.get("type"),
+                timestamp=s.get("timestamp"),
+                conclusion=s.get("conclusion", False),
+            ))
+        return cls(
+            steps=steps,
+            total_duration_ms=data.get("total_duration_ms"),
+            convergence_score=data.get("convergence_score"),
+        )
+
+
+@dataclass
+class Bridge:
+    """Bridge definition (structure + function)."""
+    
+    structure: str | None = None
+    function: str | None = None
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Bridge":
+        """Create from API response."""
+        return cls(
+            structure=data.get("structure"),
+            function=data.get("function"),
+        )
+
+
+@dataclass
+class RelatedDecision:
+    """A related decision reference."""
+    
+    id: str
+    summary: str
+    relationship: str = ""
+    distance: float = 0.0
+
+
+@dataclass
+class QualityBreakdown:
+    """Quality score with component breakdown."""
+    
+    score: float = 0.0
+    components: dict[str, float] = field(default_factory=dict)
+    suggestions: list[str] = field(default_factory=list)
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "QualityBreakdown":
+        """Create from API response."""
+        return cls(
+            score=float(data.get("score", 0.0)),
+            components=data.get("components", {}),
+            suggestions=data.get("suggestions", []),
+        )
+
+
+@dataclass
 class Decision:
     """A decision record from CSTP."""
     
@@ -46,6 +128,10 @@ class Decision:
     tags: list[str] = field(default_factory=list)
     pattern: str | None = None
     quality_score: float | None = None
+    deliberation: Deliberation | None = None
+    bridge: Bridge | None = None
+    related: list[RelatedDecision] = field(default_factory=list)
+    quality: QualityBreakdown | None = None
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Decision":
@@ -70,36 +156,55 @@ class Decision:
         # Parse project context
         project_context: ProjectContext | None = None
         if pc := data.get("project_context"):
+            pr_val: int | None = None
+            if pc.get("pr"):
+                try:
+                    pr_val = int(pc["pr"])
+                except (ValueError, TypeError):
+                    pr_val = None
+            line_val: int | None = None
+            if pc.get("line"):
+                try:
+                    line_val = int(pc["line"])
+                except (ValueError, TypeError):
+                    line_val = None
             project_context = ProjectContext(
                 project=pc.get("project"),
                 feature=pc.get("feature"),
-                pr=int(pc["pr"]) if pc.get("pr") else None,
+                pr=pr_val,
                 file=pc.get("file"),
-                line=int(pc["line"]) if pc.get("line") else None,
+                line=line_val,
                 commit=pc.get("commit"),
             )
         
         # Parse timestamps - handle both 'created_at' and 'date' field names
         created_str = data.get("created_at") or data.get("date") or ""
+        created_at: datetime
         if created_str:
-            # Handle date-only format (YYYY-MM-DD) vs full ISO format
-            if len(created_str) == 10:
-                created_at = datetime.fromisoformat(created_str + "T00:00:00+00:00")
-            else:
-                # Ensure timezone-aware: replace Z with +00:00, add +00:00 if missing
-                ts = created_str.replace("Z", "+00:00")
-                if "+" not in ts and ts.count("-") <= 2:
-                    ts = ts + "+00:00"
-                created_at = datetime.fromisoformat(ts)
+            try:
+                # Handle date-only format (YYYY-MM-DD) vs full ISO format
+                if len(created_str) == 10:
+                    created_at = datetime.fromisoformat(created_str + "T00:00:00+00:00")
+                else:
+                    # Ensure timezone-aware: replace Z with +00:00, add +00:00 if missing
+                    ts = created_str.replace("Z", "+00:00")
+                    if "+" not in ts and ts.count("-") <= 2:
+                        ts = ts + "+00:00"
+                    created_at = datetime.fromisoformat(ts)
+            except (ValueError, TypeError):
+                created_at = datetime.now(UTC)
         else:
             created_at = datetime.now(UTC)
         
         reviewed_at: datetime | None = None
         if data.get("reviewed_at"):
-            ts = data["reviewed_at"].replace("Z", "+00:00")
-            if "+" not in ts and ts.count("-") <= 2:
-                ts = ts + "+00:00"
-            reviewed_at = datetime.fromisoformat(ts)
+            try:
+                ts = data["reviewed_at"].replace("Z", "+00:00")
+                if "+" not in ts and ts.count("-") <= 2:
+                    ts = ts + "+00:00"
+                reviewed_at = datetime.fromisoformat(ts)
+            except (ValueError, TypeError):
+                reviewed_at = None
         
         return cls(
             id=data["id"],
@@ -119,6 +224,18 @@ class Decision:
             tags=data.get("tags", []),
             pattern=data.get("pattern"),
             quality_score=float(data["quality"]["score"]) if data.get("quality", {}).get("score") else None,
+            deliberation=Deliberation.from_dict(data["deliberation"]) if data.get("deliberation") else None,
+            bridge=Bridge.from_dict(data["bridge"]) if data.get("bridge") else None,
+            related=[
+                RelatedDecision(
+                    id=r.get("id", ""),
+                    summary=r.get("title", r.get("summary", "")),
+                    relationship=r.get("relationship", ""),
+                    distance=float(r.get("distance", 0.0)),
+                )
+                for r in data.get("related", [])
+            ] or [],
+            quality=QualityBreakdown.from_dict(data["quality"]) if data.get("quality") else None,
         )
     
     @property
