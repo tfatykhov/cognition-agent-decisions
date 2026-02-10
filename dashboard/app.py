@@ -198,16 +198,18 @@ def _get_decisions(
     if stakes:
         all_decisions = [d for d in all_decisions if d.stakes == stakes]
 
-    # Client-side sorting
-    if sort:
-        if sort == "confidence":
-            all_decisions.sort(key=lambda d: d.confidence, reverse=True)
-        elif sort == "-confidence":
-            all_decisions.sort(key=lambda d: d.confidence)
-        elif sort == "category":
-            all_decisions.sort(key=lambda d: d.category)
-        elif sort == "-date":
-            all_decisions.sort(key=lambda d: d.created_at)
+    # Client-side sorting (default: newest first)
+    if sort == "confidence":
+        all_decisions.sort(key=lambda d: d.confidence, reverse=True)
+    elif sort == "-confidence":
+        all_decisions.sort(key=lambda d: d.confidence)
+    elif sort == "category":
+        all_decisions.sort(key=lambda d: d.category)
+    elif sort == "-date":
+        all_decisions.sort(key=lambda d: d.created_at)
+    else:
+        # Default: newest first
+        all_decisions.sort(key=lambda d: d.created_at, reverse=True)
 
     total = len(all_decisions)
     total_pages = max(1, (total + per_page - 1) // per_page)
