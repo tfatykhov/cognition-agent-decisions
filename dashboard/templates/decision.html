@@ -57,7 +57,38 @@
             <div class="detail-key">Agent</div>
             <div class="detail-value"><span class="badge badge--neutral">{{ decision.agent_id }}</span></div>
             {% endif %}
+
+            {% if decision.quality_score is not none %}
+            <div class="detail-key">Quality</div>
+            <div class="detail-value">
+                <div class="confidence-bar">
+                    <div class="confidence-bar-track" style="max-width: 80px">
+                        <div class="confidence-bar-fill {% if decision.quality_score >= 0.7 %}confidence-bar-fill--high{% elif decision.quality_score >= 0.4 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
+                             style="width: {{ (decision.quality_score * 100)|int }}%"></div>
+                    </div>
+                    <span class="confidence-bar-label">{{ (decision.quality_score * 100)|int }}%</span>
+                </div>
+            </div>
+            {% endif %}
         </div>
+
+        {% if decision.tags %}
+        <div class="mt-4">
+            <div class="detail-key mb-2" style="display:block">Tags</div>
+            <div class="tag-list">
+                {% for tag in decision.tags %}
+                <span class="tag">{{ tag }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if decision.pattern %}
+        <div class="mt-4">
+            <div class="detail-key mb-2" style="display:block">Pattern</div>
+            <p style="margin:0; color: var(--c-text-secondary); font-style: italic; font-size: var(--fs-sm)">{{ decision.pattern }}</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 

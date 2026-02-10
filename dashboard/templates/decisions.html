@@ -7,7 +7,7 @@
     <div class="page-header-row">
         <div>
             <h1 class="page-title">Decisions</h1>
-            <p class="page-subtitle">{{ total }} total decisions</p>
+            <p class="page-subtitle" id="decisions-info">{{ total }} decision{{ 's' if total != 1 }} found</p>
         </div>
     </div>
 </div>
@@ -15,10 +15,24 @@
 
 {% block content %}
 <!-- Filters -->
-<form method="get" class="mb-6">
-    <div class="form-row">
-        <div class="form-group" style="margin-bottom:0">
-            <select name="category" class="form-select" aria-label="Category filter">
+<form class="mb-6"
+      hx-get="{{ url_for('decisions_partial') }}"
+      hx-target="#decisions-tbody"
+      hx-swap="innerHTML"
+      hx-trigger="change from:select, input[name='search'] keyup changed delay:300ms"
+      hx-include="[name='category'],[name='status'],[name='stakes'],[name='search'],[name='sort']">
+
+    <div class="form-row" style="flex-wrap: wrap">
+        <div class="form-group" style="margin-bottom:0; min-width: 180px">
+            <label class="form-label" for="filter-search">Search</label>
+            <input type="text" name="search" id="filter-search" class="form-input"
+                   placeholder="Search decisions..."
+                   value="{{ search or '' }}"
+                   autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width: 150px">
+            <label class="form-label" for="filter-category">Category</label>
+            <select name="category" id="filter-category" class="form-select">
                 <option value="">All Categories</option>
                 <option value="architecture" {% if category == 'architecture' %}selected{% endif %}>Architecture</option>
                 <option value="process" {% if category == 'process' %}selected{% endif %}>Process</option>
@@ -27,15 +41,33 @@
                 <option value="security" {% if category == 'security' %}selected{% endif %}>Security</option>
             </select>
         </div>
-        <div class="form-group" style="margin-bottom:0">
-            <select name="status" class="form-select" aria-label="Status filter">
-                <option value="">All Status</option>
-                <option value="pending" {% if status == 'pending' %}selected{% endif %}>⏳ Pending</option>
-                <option value="reviewed" {% if status == 'reviewed' %}selected{% endif %}>✅ Reviewed</option>
+        <div class="form-group" style="margin-bottom:0; min-width: 130px">
+            <label class="form-label" for="filter-stakes">Stakes</label>
+            <select name="stakes" id="filter-stakes" class="form-select">
+                <option value="">All Stakes</option>
+                <option value="low" {% if stakes == 'low' %}selected{% endif %}>Low</option>
+                <option value="medium" {% if stakes == 'medium' %}selected{% endif %}>Medium</option>
+                <option value="high" {% if stakes == 'high' %}selected{% endif %}>High</option>
+                <option value="critical" {% if stakes == 'critical' %}selected{% endif %}>Critical</option>
             </select>
         </div>
-        <div style="flex:0">
-            <button type="submit" class="btn btn--primary">Filter</button>
+        <div class="form-group" style="margin-bottom:0; min-width: 130px">
+            <label class="form-label" for="filter-status">Status</label>
+            <select name="status" id="filter-status" class="form-select">
+                <option value="">All Status</option>
+                <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="reviewed" {% if status == 'reviewed' %}selected{% endif %}>Reviewed</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom:0; min-width: 140px">
+            <label class="form-label" for="filter-sort">Sort</label>
+            <select name="sort" id="filter-sort" class="form-select">
+                <option value="">Newest First</option>
+                <option value="-date" {% if sort == '-date' %}selected{% endif %}>Oldest First</option>
+                <option value="confidence" {% if sort == 'confidence' %}selected{% endif %}>Highest Confidence</option>
+                <option value="-confidence" {% if sort == '-confidence' %}selected{% endif %}>Lowest Confidence</option>
+                <option value="category" {% if sort == 'category' %}selected{% endif %}>By Category</option>
+            </select>
         </div>
     </div>
 </form>
@@ -51,9 +83,10 @@
                 <th>Stakes</th>
                 <th>Confidence</th>
                 <th>Status</th>
+                <th>Tags</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="decisions-tbody">
             {% for decision in decisions %}
             <tr>
                 <td>
@@ -78,10 +111,22 @@
                     </div>
                 </td>
                 <td>{{ decision.outcome_icon }}</td>
+                <td>
+                    {% if decision.tags %}
+                    <div class="tag-list">
+                        {% for tag in decision.tags[:3] %}
+                        <span class="tag">{{ tag }}</span>
+                        {% endfor %}
+                        {% if decision.tags|length > 3 %}
+                        <span class="tag tag--more">+{{ decision.tags|length - 3 }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="6">
+                <td colspan="7">
                     <div class="empty-state">
                         <div class="empty-state-icon">📭</div>
                         <p class="empty-state-text">No decisions found.</p>
@@ -94,15 +139,29 @@
 </div>
 
 <!-- Pagination -->
+<div class="pagination" id="decisions-pagination-target">
 {% if total_pages > 1 %}
-<div class="pagination">
     {% if page > 1 %}
-    <a href="{{ url_for('decisions', page=page-1, category=category, status=status) }}" class="btn btn--ghost btn--sm">← Previous</a>
+    <a href="#" class="btn btn--ghost btn--sm"
+       hx-get="{{ url_for('decisions_partial', page=page-1, category=category, status=status, stakes=stakes, search=search, sort=sort) }}"
+       hx-target="#decisions-tbody"
+       hx-swap="innerHTML">← Previous</a>
     {% endif %}
     <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="{{ url_for('decisions', page=page+1, category=category, status=status) }}" class="btn btn--ghost btn--sm">Next →</a>
+    <a href="#" class="btn btn--ghost btn--sm"
+       hx-get="{{ url_for('decisions_partial', page=page+1, category=category, status=status, stakes=stakes, search=search, sort=sort) }}"
+       hx-target="#decisions-tbody"
+       hx-swap="innerHTML">Next →</a>
     {% endif %}
-</div>
 {% endif %}
+</div>
+
+<!-- HTMX Loading Indicator -->
+<style>
+    #decisions-tbody.htmx-request {
+        opacity: 0.5;
+        transition: opacity 200ms;
+    }
+</style>
 {% endblock %}

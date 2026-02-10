@@ -77,11 +77,17 @@ def decisions() -> str:
         page: Page number (default 1)
         category: Filter by category
         status: Filter by status (pending/reviewed)
+        stakes: Filter by stakes level
+        search: Search query
+        sort: Sort field (date, confidence, category)
     """
     page = request.args.get("page", 1, type=int)
     per_page = 20
     category = request.args.get("category") or None
     status = request.args.get("status") or None
+    stakes = request.args.get("stakes") or None
+    search = request.args.get("search") or None
+    sort = request.args.get("sort") or None
     
     # Convert status to has_outcome boolean
     has_outcome: bool | None = None
@@ -96,10 +102,28 @@ def decisions() -> str:
             offset=(page - 1) * per_page,
             category=category,
             has_outcome=has_outcome,
+            search=search,
         ))
     except CSTPError as e:
         flash(f"Error loading decisions: {e}", "error")
         decision_list, total = [], 0
+    
+    # Client-side filtering for stakes (API may not support it)
+    if stakes and decision_list:
+        decision_list = [d for d in decision_list if d.stakes == stakes]
+        total = len(decision_list)
+    
+    # Client-side sorting
+    if sort and decision_list:
+        if sort == "confidence":
+            decision_list.sort(key=lambda d: d.confidence, reverse=True)
+        elif sort == "-confidence":
+            decision_list.sort(key=lambda d: d.confidence)
+        elif sort == "category":
+            decision_list.sort(key=lambda d: d.category)
+        elif sort == "-date":
+            decision_list.sort(key=lambda d: d.created_at)
+        # default is newest first (already from API)
     
     total_pages = (total + per_page - 1) // per_page if total > 0 else 1
     
@@ -111,6 +135,71 @@ def decisions() -> str:
         total=total,
         category=category,
         status=status,
+        stakes=stakes,
+        search=search,
+        sort=sort,
+    )
+
+
+@app.route("/decisions/partial")
+@auth
+def decisions_partial() -> str:
+    """Return just the table rows for HTMX partial swap.
+    
+    Same params as decisions(), but returns only the tbody content.
+    """
+    page = request.args.get("page", 1, type=int)
+    per_page = 20
+    category = request.args.get("category") or None
+    status = request.args.get("status") or None
+    stakes = request.args.get("stakes") or None
+    search = request.args.get("search") or None
+    sort = request.args.get("sort") or None
+    
+    has_outcome: bool | None = None
+    if status == "pending":
+        has_outcome = False
+    elif status == "reviewed":
+        has_outcome = True
+    
+    try:
+        decision_list, total = run_async(cstp.list_decisions(
+            limit=per_page,
+            offset=(page - 1) * per_page,
+            category=category,
+            has_outcome=has_outcome,
+            search=search,
+        ))
+    except CSTPError as e:
+        decision_list, total = [], 0
+    
+    if stakes and decision_list:
+        decision_list = [d for d in decision_list if d.stakes == stakes]
+        total = len(decision_list)
+    
+    if sort and decision_list:
+        if sort == "confidence":
+            decision_list.sort(key=lambda d: d.confidence, reverse=True)
+        elif sort == "-confidence":
+            decision_list.sort(key=lambda d: d.confidence)
+        elif sort == "category":
+            decision_list.sort(key=lambda d: d.category)
+        elif sort == "-date":
+            decision_list.sort(key=lambda d: d.created_at)
+    
+    total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+    
+    return render_template(
+        "decisions_partial.html",
+        decisions=decision_list,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        category=category,
+        status=status,
+        stakes=stakes,
+        search=search,
+        sort=sort,
     )
 
 
