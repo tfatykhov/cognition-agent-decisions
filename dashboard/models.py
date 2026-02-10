@@ -26,6 +26,88 @@ class ProjectContext:
 
 
 @dataclass
+class DeliberationStep:
+    """A step in the deliberation trace."""
+    
+    step: int
+    thought: str
+    type: str | None = None
+    timestamp: str | None = None
+    conclusion: bool = False
+
+
+@dataclass
+class Deliberation:
+    """Full deliberation trace for a decision."""
+    
+    steps: list[DeliberationStep] = field(default_factory=list)
+    total_duration_ms: int | None = None
+    convergence_score: float | None = None
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Deliberation":
+        """Create from API response."""
+        steps = []
+        for s in data.get("steps", []):
+            steps.append(DeliberationStep(
+                step=s.get("step", 0),
+                thought=s.get("thought", ""),
+                type=s.get("type"),
+                timestamp=s.get("timestamp"),
+                conclusion=s.get("conclusion", False),
+            ))
+        return cls(
+            steps=steps,
+            total_duration_ms=data.get("total_duration_ms"),
+            convergence_score=data.get("convergence_score"),
+        )
+
+
+@dataclass
+class Bridge:
+    """Bridge definition (structure + function)."""
+    
+    structure: str | None = None
+    function: str | None = None
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Bridge":
+        """Create from API response."""
+        return cls(
+            structure=data.get("structure"),
+            function=data.get("function"),
+        )
+
+
+@dataclass
+class RelatedDecision:
+    """A related decision reference."""
+    
+    id: str
+    summary: str
+    relationship: str = ""
+    distance: float = 0.0
+
+
+@dataclass
+class QualityBreakdown:
+    """Quality score with component breakdown."""
+    
+    score: float = 0.0
+    components: dict[str, float] = field(default_factory=dict)
+    suggestions: list[str] = field(default_factory=list)
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "QualityBreakdown":
+        """Create from API response."""
+        return cls(
+            score=float(data.get("score", 0.0)),
+            components=data.get("components", {}),
+            suggestions=data.get("suggestions", []),
+        )
+
+
+@dataclass
 class Decision:
     """A decision record from CSTP."""
     
@@ -46,6 +128,10 @@ class Decision:
     tags: list[str] = field(default_factory=list)
     pattern: str | None = None
     quality_score: float | None = None
+    deliberation: Deliberation | None = None
+    bridge: Bridge | None = None
+    related: list[RelatedDecision] = field(default_factory=list)
+    quality: QualityBreakdown | None = None
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Decision":
@@ -119,6 +205,18 @@ class Decision:
             tags=data.get("tags", []),
             pattern=data.get("pattern"),
             quality_score=float(data["quality"]["score"]) if data.get("quality", {}).get("score") else None,
+            deliberation=Deliberation.from_dict(data["deliberation"]) if data.get("deliberation") else None,
+            bridge=Bridge.from_dict(data["bridge"]) if data.get("bridge") else None,
+            related=[
+                RelatedDecision(
+                    id=r.get("id", ""),
+                    summary=r.get("title", r.get("summary", "")),
+                    relationship=r.get("relationship", ""),
+                    distance=float(r.get("distance", 0.0)),
+                )
+                for r in data.get("related", [])
+            ] or [],
+            quality=QualityBreakdown.from_dict(data["quality"]) if data.get("quality") else None,
         )
     
     @property

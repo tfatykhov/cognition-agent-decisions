@@ -151,7 +151,7 @@ class CSTPClient:
         return decisions, total
     
     async def get_decision(self, decision_id: str) -> Decision | None:
-        """Get single decision by ID.
+        """Get single decision by ID using getDecision API.
         
         Args:
             decision_id: Decision ID (full or prefix)
@@ -159,14 +159,10 @@ class CSTPClient:
         Returns:
             Decision object if found, None otherwise
         """
-        result = await self._call("cstp.queryDecisions", {
-            "query": decision_id,
-            "top_k": 10,
-        })
+        result = await self._call("cstp.getDecision", {"id": decision_id})
         
-        for d in result.get("decisions", []):
-            if d["id"].startswith(decision_id):
-                return Decision.from_dict(d)
+        if result.get("found") and result.get("decision"):
+            return Decision.from_dict(result["decision"])
         
         return None
     
