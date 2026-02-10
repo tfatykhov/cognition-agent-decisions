@@ -46,25 +46,30 @@ def _deref_schema(schema: dict[str, Any]) -> dict[str, Any]:
     in tool schemas. This function inlines all $ref references and removes
     the $defs block, producing a flat schema.
     """
-    defs = schema.pop("$defs", {})
+    defs = schema.get("$defs", {})
     if not defs:
         return schema
 
-    def _resolve(node: Any) -> Any:
+    # Work on a copy to avoid mutating the input
+    result = {k: v for k, v in schema.items() if k != "$defs"}
+
+    def _resolve(node: Any, seen: frozenset[str] = frozenset()) -> Any:
         if isinstance(node, dict):
             if "$ref" in node:
                 ref_path = node["$ref"]  # e.g., "#/$defs/ReasonInput"
                 ref_name = ref_path.rsplit("/", 1)[-1]
+                if ref_name in seen:
+                    # Circular reference - return empty object to break loop
+                    return {"type": "object"}
                 if ref_name in defs:
-                    # Recursively resolve the referenced definition
-                    return _resolve(dict(defs[ref_name]))
+                    return _resolve(dict(defs[ref_name]), seen | {ref_name})
                 return node
-            return {k: _resolve(v) for k, v in node.items()}
+            return {k: _resolve(v, seen) for k, v in node.items()}
         if isinstance(node, list):
-            return [_resolve(item) for item in node]
+            return [_resolve(item, seen) for item in node]
         return node
 
-    return _resolve(schema)
+    return _resolve(result)
 
 # Configure logging to stderr (stdout is reserved for MCP protocol)
 logging.basicConfig(
