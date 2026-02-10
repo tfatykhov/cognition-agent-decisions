@@ -3,6 +3,7 @@ import contextlib
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
 from flask_wtf import CSRFProtect
@@ -53,31 +54,43 @@ def index() -> str:
     # Parse date filter
     period = request.args.get("period", "today")
     custom_date = request.args.get("date")
+    tz_name = request.args.get("tz") or request.cookies.get("tz") or "America/New_York"
 
-    now = datetime.now(UTC)
-    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        user_tz = ZoneInfo(tz_name)
+    except (KeyError, ValueError):
+        user_tz = ZoneInfo("America/New_York")
+
+    # Calculate "now" and "today" in the user's timezone
+    now_utc = datetime.now(UTC)
+    now_local = now_utc.astimezone(user_tz)
+    today_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
 
     if period == "custom" and custom_date:
         try:
-            date_from = datetime.fromisoformat(custom_date + "T00:00:00+00:00")
-            date_to = date_from + timedelta(days=1)
+            # Parse as local date, convert to UTC
+            local_dt = datetime.strptime(custom_date, "%Y-%m-%d").replace(tzinfo=user_tz)
+            date_from = local_dt.astimezone(UTC)
+            date_to = (local_dt + timedelta(days=1)).astimezone(UTC)
         except ValueError:
-            date_from = today
-            date_to = today + timedelta(days=1)
+            date_from = today_local.astimezone(UTC)
+            date_to = (today_local + timedelta(days=1)).astimezone(UTC)
     elif period == "week":
-        date_from = today - timedelta(days=today.weekday())
-        date_to = now + timedelta(seconds=1)
+        week_start = today_local - timedelta(days=today_local.weekday())
+        date_from = week_start.astimezone(UTC)
+        date_to = now_utc + timedelta(seconds=1)
     elif period == "month":
-        date_from = today.replace(day=1)
-        date_to = now + timedelta(seconds=1)
+        month_start = today_local.replace(day=1)
+        date_from = month_start.astimezone(UTC)
+        date_to = now_utc + timedelta(seconds=1)
     elif period == "all":
         date_from = None
         date_to = None
     else:
-        # Default: today
+        # Default: today in user's timezone
         period = "today"
-        date_from = today
-        date_to = today + timedelta(days=1)
+        date_from = today_local.astimezone(UTC)
+        date_to = (today_local + timedelta(days=1)).astimezone(UTC)
 
     # Fetch calibration stats (always all-time)
     stats = cstp.get_calibration()
@@ -140,8 +153,9 @@ def index() -> str:
         top_tags=top_tags,
         quality_buckets=quality_buckets,
         period=period,
-        custom_date=custom_date or today.strftime("%Y-%m-%d"),
-        today_str=today.strftime("%Y-%m-%d"),
+        custom_date=custom_date or today_local.strftime("%Y-%m-%d"),
+        today_str=today_local.strftime("%Y-%m-%d"),
+        tz_name=tz_name,
     )
 
 

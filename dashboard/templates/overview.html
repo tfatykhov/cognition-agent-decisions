@@ -4,6 +4,22 @@
 
 {% block head_scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+// Auto-detect browser timezone and store as cookie
+(function() {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz && document.cookie.indexOf('tz=' + tz) === -1) {
+        document.cookie = 'tz=' + tz + ';path=/;max-age=31536000;SameSite=Lax';
+        // Reload on first visit to apply correct timezone
+        if (document.cookie.indexOf('tz=') === -1 || document.cookie.indexOf('tz=' + tz) !== -1) {
+            const url = new URL(window.location);
+            if (!url.searchParams.has('tz')) {
+                window.location.reload();
+            }
+        }
+    }
+})();
+</script>
 {% endblock %}
 
 {% block header %}
@@ -40,6 +56,7 @@
                            class="input input--sm"
                            onchange="this.form.submit()">
                 </form>
+                <span class="text-muted text-sm" style="margin-left: var(--sp-2)">{{ tz_name.split('/')[-1] | replace('_', ' ') }}</span>
             </div>
         </div>
     </div>
