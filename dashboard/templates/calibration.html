@@ -2,6 +2,10 @@
 
 {% block title %}Calibration - CSTP Dashboard{% endblock %}
 
+{% block head_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+{% endblock %}
+
 {% block header %}
 <div class="page-header">
     <div class="page-header-row">
@@ -253,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Calibration Plot ---
     const calCtx = document.getElementById('calibrationChart');
     if (calCtx) {
-        const bucketLabels = [{% for b in stats.calibration_buckets %}'{{ b.bucket }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const bucketLabels = [{% for b in stats.calibration_buckets %}{{ b.bucket|tojson }}{% if not loop.last %}, {% endif %}{% endfor %}];
         const actualRates = [{% for b in stats.calibration_buckets %}{{ (b.success_rate * 100)|round(1) }}{% if not loop.last %}, {% endif %}{% endfor %}];
         const expectedRates = [{% for b in stats.calibration_buckets %}{{ (b.expected_rate * 100)|round(1) }}{% if not loop.last %}, {% endif %}{% endfor %}];
         const bucketCounts = [{% for b in stats.calibration_buckets %}{{ b.decisions }}{% if not loop.last %}, {% endif %}{% endfor %}];
@@ -318,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // --- Confidence Distribution ---
     const distCtx = document.getElementById('distributionChart');
     if (distCtx) {
-        const distLabels = [{% for bucket, count in stats.confidence_stats.bucket_counts.items() %}'{{ bucket }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const distLabels = [{% for bucket, count in stats.confidence_stats.bucket_counts.items() %}{{ bucket|tojson }}{% if not loop.last %}, {% endif %}{% endfor %}];
         const distCounts = [{% for bucket, count in stats.confidence_stats.bucket_counts.items() %}{{ count }}{% if not loop.last %}, {% endif %}{% endfor %}];
 
         // Color based on count density
