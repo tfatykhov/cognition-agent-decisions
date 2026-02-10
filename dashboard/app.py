@@ -1,6 +1,7 @@
 """CSTP Dashboard Flask application."""
 import contextlib
 from collections import Counter
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
@@ -48,38 +49,75 @@ def health() -> Response:
 @app.route("/")
 @auth
 def index() -> str:
-    """Overview dashboard with aggregated stats."""
-    # Fetch calibration stats
+    """Overview dashboard with aggregated stats and date filtering."""
+    # Parse date filter
+    period = request.args.get("period", "today")
+    custom_date = request.args.get("date")
+
+    now = datetime.now(UTC)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if period == "custom" and custom_date:
+        try:
+            date_from = datetime.fromisoformat(custom_date + "T00:00:00+00:00")
+            date_to = date_from + timedelta(days=1)
+        except ValueError:
+            date_from = today
+            date_to = today + timedelta(days=1)
+    elif period == "week":
+        date_from = today - timedelta(days=today.weekday())
+        date_to = now + timedelta(seconds=1)
+    elif period == "month":
+        date_from = today.replace(day=1)
+        date_to = now + timedelta(seconds=1)
+    elif period == "all":
+        date_from = None
+        date_to = None
+    else:
+        # Default: today
+        period = "today"
+        date_from = today
+        date_to = today + timedelta(days=1)
+
+    # Fetch calibration stats (always all-time)
     stats = cstp.get_calibration()
 
     # Fetch all decisions for aggregation
     all_decisions, total_count = cstp.list_decisions(limit=200, search="all")
-    total = total_count if total_count > len(all_decisions) else len(all_decisions)
 
-    # Recent decisions (last 10)
-    recent = sorted(all_decisions, key=lambda d: d.created_at, reverse=True)[:10]
+    # Apply date filter
+    if date_from is not None:
+        filtered = [
+            d for d in all_decisions
+            if d.created_at >= date_from and (date_to is None or d.created_at < date_to)
+        ]
+    else:
+        filtered = all_decisions
+
+    # All decisions shown (no 10-item cap)
+    decisions_list = sorted(filtered, key=lambda d: d.created_at, reverse=True)
 
     # Category breakdown
-    cat_counts: dict[str, int] = Counter(d.category for d in all_decisions)
+    cat_counts: dict[str, int] = Counter(d.category for d in filtered)
 
     # Stakes breakdown
-    stakes_counts: dict[str, int] = Counter(d.stakes for d in all_decisions)
+    stakes_counts: dict[str, int] = Counter(d.stakes for d in filtered)
 
     # Outcome breakdown
     outcome_counts: dict[str, int] = Counter(
-        d.outcome if d.outcome else "pending" for d in all_decisions
+        d.outcome if d.outcome else "pending" for d in filtered
     )
 
     # Tag cloud (top 20)
     tag_counter: Counter[str] = Counter()
-    for d in all_decisions:
+    for d in filtered:
         for t in d.tags:
             tag_counter[t] += 1
     top_tags = tag_counter.most_common(20)
 
     # Quality distribution
     quality_buckets = {"high": 0, "medium": 0, "low": 0, "none": 0}
-    for d in all_decisions:
+    for d in filtered:
         if d.quality and d.quality.score is not None:
             if d.quality.score >= 0.7:
                 quality_buckets["high"] += 1
@@ -93,13 +131,17 @@ def index() -> str:
     return render_template(
         "overview.html",
         stats=stats,
-        recent=recent,
-        total=len(all_decisions),
+        decisions_list=decisions_list,
+        total=len(filtered),
+        total_all=len(all_decisions),
         cat_counts=cat_counts,
         stakes_counts=stakes_counts,
         outcome_counts=outcome_counts,
         top_tags=top_tags,
         quality_buckets=quality_buckets,
+        period=period,
+        custom_date=custom_date or today.strftime("%Y-%m-%d"),
+        today_str=today.strftime("%Y-%m-%d"),
     )
 
 

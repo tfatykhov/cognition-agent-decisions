@@ -18,11 +18,41 @@
 {% endblock %}
 
 {% block content %}
+<!-- Date Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body" style="padding: var(--sp-3) var(--sp-4)">
+        <div class="date-filter-bar">
+            <div class="date-filter-presets">
+                <a href="{{ url_for('index', period='today') }}"
+                   class="btn btn--sm {% if period == 'today' %}btn--primary{% else %}btn--ghost{% endif %}">Today</a>
+                <a href="{{ url_for('index', period='week') }}"
+                   class="btn btn--sm {% if period == 'week' %}btn--primary{% else %}btn--ghost{% endif %}">This Week</a>
+                <a href="{{ url_for('index', period='month') }}"
+                   class="btn btn--sm {% if period == 'month' %}btn--primary{% else %}btn--ghost{% endif %}">This Month</a>
+                <a href="{{ url_for('index', period='all') }}"
+                   class="btn btn--sm {% if period == 'all' %}btn--primary{% else %}btn--ghost{% endif %}">All Time</a>
+            </div>
+            <div class="date-filter-custom">
+                <form method="get" action="{{ url_for('index') }}" style="display: flex; align-items: center; gap: var(--sp-2)">
+                    <input type="hidden" name="period" value="custom">
+                    <input type="date" name="date" value="{{ custom_date }}"
+                           max="{{ today_str }}"
+                           class="input input--sm"
+                           onchange="this.form.submit()">
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Top-Level Stats -->
 <div class="stat-grid">
     <div class="stat-card">
-        <div class="stat-label">Total Decisions</div>
+        <div class="stat-label">Decisions</div>
         <div class="stat-value stat-value--accent">{{ total }}</div>
+        {% if period != 'all' %}
+        <div class="stat-detail">of {{ total_all }} total</div>
+        {% endif %}
     </div>
     {% if stats %}
     <div class="stat-card">
@@ -47,6 +77,7 @@
     {% endif %}
 </div>
 
+{% if total > 0 %}
 <!-- Charts Row -->
 <div class="chart-row">
     <!-- Category Breakdown (Doughnut) -->
@@ -86,7 +117,7 @@
     </div>
 </div>
 
-<!-- Tag Cloud + Recent Decisions -->
+<!-- Tag Cloud + Stakes -->
 <div class="detail-row">
     <!-- Tag Cloud -->
     {% if top_tags %}
@@ -128,30 +159,59 @@
         </div>
     </div>
 </div>
+{% else %}
+<!-- Empty State -->
+<div class="card mb-6">
+    <div class="card-body" style="text-align: center; padding: var(--sp-8)">
+        <p class="text-muted" style="font-size: 1.125rem; margin-bottom: var(--sp-2)">No decisions for this period</p>
+        <p class="text-muted text-sm">Try a different date range or view <a href="{{ url_for('index', period='all') }}">all time</a></p>
+    </div>
+</div>
+{% endif %}
 
-<!-- Recent Decisions -->
+<!-- Decisions List -->
 <div class="card mb-6">
     <div class="card-header">
-        <h2 class="card-title" style="margin:0">Recent Decisions</h2>
+        <h2 class="card-title" style="margin:0">
+            {% if period == 'today' %}Today's Decisions
+            {% elif period == 'week' %}This Week's Decisions
+            {% elif period == 'month' %}This Month's Decisions
+            {% elif period == 'custom' %}Decisions for {{ custom_date }}
+            {% else %}All Decisions
+            {% endif %}
+        </h2>
+        {% if period != 'all' %}
         <a href="{{ url_for('decisions') }}" class="btn btn--ghost btn--sm">View All</a>
+        {% endif %}
     </div>
     <div class="card-body" style="padding: 0">
-        {% for d in recent %}
+        {% if decisions_list %}
+        {% for d in decisions_list %}
         <a href="{{ url_for('decision_detail', decision_id=d.id[:8]) }}" class="related-card">
             <div class="related-card-main">
                 <code class="related-card-id">{{ d.id[:8] }}</code>
                 <span class="badge badge--category" style="font-size: 0.5625rem">{{ d.category }}</span>
-                <span class="related-card-summary">{{ d.summary[:60] }}{% if d.summary|length > 60 %}...{% endif %}</span>
+                <span class="badge badge--stakes-{{ d.stakes }}" style="font-size: 0.5625rem">{{ d.stakes }}</span>
+                <span class="related-card-summary">{{ d.summary[:80] }}{% if d.summary|length > 80 %}...{% endif %}</span>
             </div>
             <div style="display: flex; align-items: center; gap: var(--sp-2); flex-shrink: 0">
-                <span class="text-muted" style="font-size: 0.6875rem">{{ d.created_at.strftime('%b %d') }}</span>
+                {% if d.quality and d.quality.score is not none %}
+                <span class="text-muted" style="font-size: 0.6875rem">{{ (d.quality.score * 100)|round|int }}%</span>
+                {% endif %}
+                <span class="text-muted" style="font-size: 0.6875rem">{{ d.created_at.strftime('%b %d %H:%M') }}</span>
                 <span>{{ d.outcome_icon }}</span>
             </div>
         </a>
         {% endfor %}
+        {% else %}
+        <div style="text-align: center; padding: var(--sp-6); color: var(--c-text-muted)">
+            No decisions found for this period
+        </div>
+        {% endif %}
     </div>
 </div>
 
+{% if total > 0 %}
 <!-- Charts Script -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -269,4 +329,5 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+{% endif %}
 {% endblock %}
