@@ -36,7 +36,7 @@
 <p class="text-sm text-muted mb-4">Period: {{ stats.period_start }} to {{ stats.period_end }}</p>
 {% endif %}
 
-<!-- Stat Cards - Top Row -->
+<!-- Stat Cards -->
 <div class="stat-grid">
     <div class="stat-card">
         <div class="stat-label">Total Decisions</div>
@@ -63,81 +63,81 @@
     </div>
 </div>
 
-<!-- Confidence Distribution -->
-{% if stats.confidence_stats %}
-<div class="card mb-6">
-    <div class="card-header">
-        <h2 class="card-title" style="margin:0">Confidence Distribution</h2>
-    </div>
-    <div class="card-body">
-        <div class="stat-grid" style="margin-bottom: var(--sp-4)">
-            <div class="stat-card">
-                <div class="stat-label">Mean</div>
-                <div class="stat-value stat-value--sm">{{ stats.confidence_stats.mean_pct }}%</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Std Dev</div>
-                <div class="stat-value stat-value--sm">{{ "%.3f"|format(stats.confidence_stats.std_dev) }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Range</div>
-                <div class="stat-value stat-value--sm">{{ (stats.confidence_stats.min_conf * 100)|int }}-{{ (stats.confidence_stats.max_conf * 100)|int }}%</div>
+<!-- Charts Row -->
+<div class="chart-row">
+    <!-- Calibration Plot (Expected vs Actual) -->
+    {% if stats.calibration_buckets %}
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">Calibration Plot</h2>
+            <span class="text-muted text-sm">Expected vs Actual success rate</span>
+        </div>
+        <div class="card-body">
+            <div class="chart-container">
+                <canvas id="calibrationChart"></canvas>
             </div>
         </div>
-
-        <details>
-            <summary>Distribution by Bucket</summary>
-            <div class="table-wrapper" style="margin-top: var(--sp-3)">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Confidence Range</th>
-                            <th>Count</th>
-                            <th>Percentage</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for bucket, count in stats.confidence_stats.bucket_counts.items() %}
-                        <tr>
-                            <td>{{ bucket }}</td>
-                            <td>{{ count }}</td>
-                            <td>{% if stats.confidence_stats.count > 0 %}{{ (count / stats.confidence_stats.count * 100)|round|int }}%{% else %}--{% endif %}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </details>
     </div>
-</div>
-{% endif %}
+    {% endif %}
 
-<!-- By Category -->
-{% if stats.by_category %}
+    <!-- Confidence Distribution -->
+    {% if stats.confidence_stats %}
+    <div class="card mb-6" style="flex: 1">
+        <div class="card-header">
+            <h2 class="card-title" style="margin:0">Confidence Distribution</h2>
+            <span class="text-muted text-sm">Mean: {{ stats.confidence_stats.mean_pct }}% | StdDev: {{ "%.3f"|format(stats.confidence_stats.std_dev) }}</span>
+        </div>
+        <div class="card-body">
+            <div class="chart-container">
+                <canvas id="distributionChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Bucket Details Table -->
+{% if stats.calibration_buckets %}
 <div class="card mb-6">
     <div class="card-header">
-        <h2 class="card-title" style="margin:0">By Category</h2>
+        <h2 class="card-title" style="margin:0">Calibration by Bucket</h2>
     </div>
     <div class="card-body" style="padding:0">
         <div class="table-wrapper" style="border:0; border-radius:0">
             <table>
                 <thead>
                     <tr>
-                        <th>Category</th>
-                        <th>Total</th>
-                        <th>Reviewed</th>
-                        <th>Accuracy</th>
-                        <th>Brier</th>
+                        <th>Bucket</th>
+                        <th>Decisions</th>
+                        <th>Actual Success</th>
+                        <th>Expected</th>
+                        <th>Gap</th>
+                        <th>Assessment</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for cat in stats.by_category %}
+                    {% for b in stats.calibration_buckets %}
                     <tr>
-                        <td><span class="badge badge--category">{{ cat.category }}</span></td>
-                        <td>{{ cat.total }}</td>
-                        <td>{{ cat.reviewed }}</td>
-                        <td>{% if cat.reviewed > 0 %}{{ cat.accuracy_pct }}%{% else %}<span class="text-muted">--</span>{% endif %}</td>
-                        <td>{% if cat.reviewed > 0 %}{{ "%.3f"|format(cat.brier_score) }}{% else %}<span class="text-muted">--</span>{% endif %}</td>
+                        <td><span class="badge badge--neutral">{{ b.bucket }}</span></td>
+                        <td>{{ b.decisions }}</td>
+                        <td>{{ (b.success_rate * 100)|round|int }}%</td>
+                        <td>{{ (b.expected_rate * 100)|round|int }}%</td>
+                        <td>
+                            <span class="{% if b.gap|abs <= 0.05 %}text-success{% elif b.gap|abs <= 0.15 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ "%+.1f"|format(b.gap * 100) }}%
+                            </span>
+                        </td>
+                        <td>
+                            {% if b.interpretation == 'well_calibrated' %}
+                            <span class="badge badge--success">Well Calibrated</span>
+                            {% elif b.interpretation == 'underconfident' %}
+                            <span class="badge badge--info">Underconfident</span>
+                            {% elif b.interpretation == 'overconfident' %}
+                            <span class="badge badge--danger">Overconfident</span>
+                            {% else %}
+                            <span class="badge badge--neutral">{{ b.interpretation|replace('_', ' ')|title }}</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -237,6 +237,142 @@
 </div>
 {% endif %}
 {% endif %}
+
+<!-- Chart.js Scripts -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const gridColor = 'rgba(46, 51, 72, 0.6)';
+    const textColor = '#9498b0';
+
+    Chart.defaults.color = textColor;
+    Chart.defaults.borderColor = gridColor;
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.font.size = 12;
+
+    {% if stats.calibration_buckets %}
+    // --- Calibration Plot ---
+    const calCtx = document.getElementById('calibrationChart');
+    if (calCtx) {
+        const bucketLabels = [{% for b in stats.calibration_buckets %}'{{ b.bucket }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const actualRates = [{% for b in stats.calibration_buckets %}{{ (b.success_rate * 100)|round(1) }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const expectedRates = [{% for b in stats.calibration_buckets %}{{ (b.expected_rate * 100)|round(1) }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const bucketCounts = [{% for b in stats.calibration_buckets %}{{ b.decisions }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(calCtx, {
+            type: 'bar',
+            data: {
+                labels: bucketLabels,
+                datasets: [
+                    {
+                        label: 'Actual Success %',
+                        data: actualRates,
+                        backgroundColor: 'rgba(108, 138, 255, 0.7)',
+                        borderColor: '#6c8aff',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Expected %',
+                        data: expectedRates,
+                        backgroundColor: 'rgba(148, 152, 176, 0.3)',
+                        borderColor: '#9498b0',
+                        borderWidth: 1,
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: function(ctx) {
+                                return 'n=' + bucketCounts[ctx.dataIndex];
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 12, padding: 16 }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 105,
+                        title: { display: true, text: 'Success Rate %' },
+                        grid: { color: gridColor }
+                    },
+                    x: {
+                        title: { display: true, text: 'Confidence Bucket' },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
+
+    {% if stats.confidence_stats %}
+    // --- Confidence Distribution ---
+    const distCtx = document.getElementById('distributionChart');
+    if (distCtx) {
+        const distLabels = [{% for bucket, count in stats.confidence_stats.bucket_counts.items() %}'{{ bucket }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const distCounts = [{% for bucket, count in stats.confidence_stats.bucket_counts.items() %}{{ count }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        // Color based on count density
+        const maxCount = Math.max(...distCounts);
+        const distColors = distCounts.map(c => {
+            const intensity = 0.3 + (c / maxCount) * 0.7;
+            return `rgba(108, 138, 255, ${intensity})`;
+        });
+
+        new Chart(distCtx, {
+            type: 'bar',
+            data: {
+                labels: distLabels,
+                datasets: [{
+                    label: 'Decisions',
+                    data: distCounts,
+                    backgroundColor: distColors,
+                    borderColor: '#6c8aff',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            afterLabel: function(ctx) {
+                                const total = distCounts.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((ctx.raw / total) * 100).toFixed(0) : 0;
+                                return pct + '% of total';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Count' },
+                        grid: { color: gridColor }
+                    },
+                    x: {
+                        title: { display: true, text: 'Confidence Range' },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+    {% endif %}
+});
+</script>
 
 {% else %}
 <div class="empty-state">

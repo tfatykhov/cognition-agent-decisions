@@ -1243,6 +1243,29 @@ details > :not(summary) {
   white-space: nowrap;
 }
 
+/* --- Charts --- */
+.chart-row {
+  display: flex;
+  gap: var(--sp-4);
+}
+
+@media (max-width: 768px) {
+  .chart-row {
+    flex-direction: column;
+  }
+}
+
+.chart-container {
+  position: relative;
+  height: 280px;
+  width: 100%;
+}
+
+/* --- Text Colors --- */
+.text-success { color: var(--c-success); }
+.text-warning { color: var(--c-warning); }
+.text-danger { color: var(--c-danger); }
+
 /* --- Utility --- */
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
