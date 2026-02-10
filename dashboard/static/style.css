@@ -1349,6 +1349,54 @@ details > :not(summary) {
 .text-warning { color: var(--c-warning); }
 .text-danger { color: var(--c-danger); }
 
+/* --- Date Filter Bar --- */
+.date-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.date-filter-presets {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.date-filter-custom {
+  display: flex;
+  align-items: center;
+}
+
+/* --- Input --- */
+.input {
+  background: var(--c-bg-primary);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  color: var(--c-text-primary);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--c-accent);
+}
+
+.input--sm {
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+/* Date input color scheme for dark mode */
+.input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
+}
+
 /* --- Utility --- */
 .flex { display: flex; }
 .flex-col { flex-direction: column; }
