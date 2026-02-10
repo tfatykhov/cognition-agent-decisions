@@ -1,5 +1,4 @@
 """CSTP Dashboard Flask application."""
-import asyncio
 import contextlib
 from collections import Counter
 from typing import Any
@@ -20,27 +19,11 @@ app.secret_key = config.secret_key
 # Enable CSRF protection
 csrf = CSRFProtect(app)
 
-# Initialize CSTP client
+# Initialize CSTP client (module-level, reused across requests for connection pooling)
 cstp = CSTPClient(config.cstp_url, config.cstp_token)
 
 # Auth decorator bound to config
 auth = requires_auth(config)
-
-
-def run_async(coro: Any) -> Any:
-    """Run async coroutine in sync Flask context.
-    
-    Note: Flask 2.0+ supports async views natively, but gunicorn
-    with sync workers requires this wrapper. For production with
-    async support, use an ASGI server like uvicorn.
-    
-    Args:
-        coro: Async coroutine to run
-        
-    Returns:
-        Result of the coroutine
-    """
-    return asyncio.run(coro)
 
 
 @app.errorhandler(CSRFError)
@@ -57,8 +40,7 @@ def health() -> Response:
     
     Returns 200 OK if CSTP server is reachable, 503 otherwise.
     """
-    healthy = run_async(cstp.health_check())
-    if healthy:
+    if cstp.health_check():
         return Response("OK", status=200)
     return Response("CSTP unavailable", status=503)
 
@@ -68,11 +50,10 @@ def health() -> Response:
 def index() -> str:
     """Overview dashboard with aggregated stats."""
     # Fetch calibration stats
-    cal_data = run_async(cstp.get_calibration())
-    stats = cal_data if cal_data else None
+    stats = cstp.get_calibration()
 
     # Fetch all decisions for aggregation
-    all_decisions, total_count = run_async(cstp.list_decisions(limit=200, search="all"))
+    all_decisions, total_count = cstp.list_decisions(limit=200, search="all")
     total = total_count if total_count > len(all_decisions) else len(all_decisions)
 
     # Recent decisions (last 10)
@@ -147,14 +128,14 @@ def _get_decisions(
 
     try:
         # Fetch larger batch for client-side filtering/sorting
-        all_decisions, _ = run_async(cstp.list_decisions(
+        all_decisions, _ = cstp.list_decisions(
             limit=200,
             offset=0,
             category=category,
             has_outcome=has_outcome,
             search=search,
-        ))
-    except CSTPError as e:
+        )
+    except CSTPError:
         return [], 0, page, 1
 
     # Client-side filtering for stakes (API doesn't support it)
@@ -250,7 +231,7 @@ def decision_detail(decision_id: str) -> str | Response:
         decision_id: Decision ID (full or prefix)
     """
     try:
-        decision = run_async(cstp.get_decision(decision_id))
+        decision = cstp.get_decision(decision_id)
         if not decision:
             flash("Decision not found", "error")
             return redirect(url_for("decisions"))
@@ -273,7 +254,7 @@ def review(decision_id: str) -> str | Response:
         decision_id: Decision ID to review
     """
     try:
-        decision = run_async(cstp.get_decision(decision_id))
+        decision = cstp.get_decision(decision_id)
         if not decision:
             flash("Decision not found", "error")
             return redirect(url_for("decisions"))
@@ -292,12 +273,12 @@ def review(decision_id: str) -> str | Response:
             flash("Result description is required", "error")
         else:
             try:
-                success = run_async(cstp.review_decision(
+                success = cstp.review_decision(
                     decision_id,
                     outcome,
                     actual_result,
                     lessons,
-                ))
+                )
                 if success:
                     flash("Outcome recorded successfully!", "success")
                     return redirect(url_for("decision_detail", decision_id=decision_id))
@@ -325,14 +306,14 @@ def calibration() -> str:
     drift = None
     
     try:
-        stats = run_async(cstp.get_calibration(project=project, window=window))
+        stats = cstp.get_calibration(project=project, window=window)
     except CSTPError as e:
         flash(f"Error loading calibration: {e}", "error")
     
     # Check for drift (only if not filtering by window)
     if not window:
         with contextlib.suppress(CSTPError):
-            drift = run_async(cstp.check_drift(project=project))
+            drift = cstp.check_drift(project=project)
     
     return render_template(
         "calibration.html",
