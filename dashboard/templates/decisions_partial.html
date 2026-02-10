@@ -46,11 +46,11 @@
 </tr>
 {% endfor %}
 
-<!-- HTMX OOB swap for result count + pagination -->
-<tr id="decisions-meta" hx-swap-oob="innerHTML:#decisions-info">
+<!-- OOB swaps for result count + pagination (valid HTML) -->
+<span id="decisions-info" hx-swap-oob="innerHTML">
     {{ total }} decision{{ 's' if total != 1 }} found
-</tr>
-<tr id="decisions-pagination" hx-swap-oob="innerHTML:#decisions-pagination-target">
+</span>
+<div id="decisions-pagination-target" hx-swap-oob="innerHTML">
     {% if total_pages > 1 %}
     {% if page > 1 %}
     <a href="#" class="btn btn--ghost btn--sm"
@@ -66,4 +66,4 @@
        hx-swap="innerHTML">Next →</a>
     {% endif %}
     {% endif %}
-</tr>
+</div>

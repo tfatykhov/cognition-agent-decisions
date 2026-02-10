@@ -7,7 +7,7 @@
     <div class="page-header-row">
         <div>
             <h1 class="page-title">Decisions</h1>
-            <p class="page-subtitle" id="decisions-info">{{ total }} decision{{ 's' if total != 1 }} found</p>
+            <p class="page-subtitle"><span id="decisions-info">{{ total }} decision{{ 's' if total != 1 }} found</span></p>
         </div>
     </div>
 </div>
@@ -20,7 +20,8 @@
       hx-target="#decisions-tbody"
       hx-swap="innerHTML"
       hx-trigger="change from:select, input[name='search'] keyup changed delay:300ms"
-      hx-include="[name='category'],[name='status'],[name='stakes'],[name='search'],[name='sort']">
+      hx-include="[name='category'],[name='status'],[name='stakes'],[name='search'],[name='sort']"
+      hx-push-url="{{ url_for('decisions') }}">
 
     <div class="form-row" style="flex-wrap: wrap">
         <div class="form-group" style="margin-bottom:0; min-width: 180px">
