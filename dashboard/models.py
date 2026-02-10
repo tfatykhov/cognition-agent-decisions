@@ -156,36 +156,55 @@ class Decision:
         # Parse project context
         project_context: ProjectContext | None = None
         if pc := data.get("project_context"):
+            pr_val: int | None = None
+            if pc.get("pr"):
+                try:
+                    pr_val = int(pc["pr"])
+                except (ValueError, TypeError):
+                    pr_val = None
+            line_val: int | None = None
+            if pc.get("line"):
+                try:
+                    line_val = int(pc["line"])
+                except (ValueError, TypeError):
+                    line_val = None
             project_context = ProjectContext(
                 project=pc.get("project"),
                 feature=pc.get("feature"),
-                pr=int(pc["pr"]) if pc.get("pr") else None,
+                pr=pr_val,
                 file=pc.get("file"),
-                line=int(pc["line"]) if pc.get("line") else None,
+                line=line_val,
                 commit=pc.get("commit"),
             )
         
         # Parse timestamps - handle both 'created_at' and 'date' field names
         created_str = data.get("created_at") or data.get("date") or ""
+        created_at: datetime
         if created_str:
-            # Handle date-only format (YYYY-MM-DD) vs full ISO format
-            if len(created_str) == 10:
-                created_at = datetime.fromisoformat(created_str + "T00:00:00+00:00")
-            else:
-                # Ensure timezone-aware: replace Z with +00:00, add +00:00 if missing
-                ts = created_str.replace("Z", "+00:00")
-                if "+" not in ts and ts.count("-") <= 2:
-                    ts = ts + "+00:00"
-                created_at = datetime.fromisoformat(ts)
+            try:
+                # Handle date-only format (YYYY-MM-DD) vs full ISO format
+                if len(created_str) == 10:
+                    created_at = datetime.fromisoformat(created_str + "T00:00:00+00:00")
+                else:
+                    # Ensure timezone-aware: replace Z with +00:00, add +00:00 if missing
+                    ts = created_str.replace("Z", "+00:00")
+                    if "+" not in ts and ts.count("-") <= 2:
+                        ts = ts + "+00:00"
+                    created_at = datetime.fromisoformat(ts)
+            except (ValueError, TypeError):
+                created_at = datetime.now(UTC)
         else:
             created_at = datetime.now(UTC)
         
         reviewed_at: datetime | None = None
         if data.get("reviewed_at"):
-            ts = data["reviewed_at"].replace("Z", "+00:00")
-            if "+" not in ts and ts.count("-") <= 2:
-                ts = ts + "+00:00"
-            reviewed_at = datetime.fromisoformat(ts)
+            try:
+                ts = data["reviewed_at"].replace("Z", "+00:00")
+                if "+" not in ts and ts.count("-") <= 2:
+                    ts = ts + "+00:00"
+                reviewed_at = datetime.fromisoformat(ts)
+            except (ValueError, TypeError):
+                reviewed_at = None
         
         return cls(
             id=data["id"],

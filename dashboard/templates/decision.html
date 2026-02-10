@@ -28,19 +28,19 @@
 {% block content %}
 <div x-data="{ tab: 'overview' }">
     <!-- Tab Navigation -->
-    <div class="tabs mb-6">
-        <button class="tab-btn" :class="{ 'tab-btn--active': tab === 'overview' }" @click="tab = 'overview'">Overview</button>
+    <div class="tabs mb-6" role="tablist" aria-label="Decision details">
+        <button class="tab-btn" role="tab" :aria-selected="tab === 'overview'" :class="{ 'tab-btn--active': tab === 'overview' }" @click="tab = 'overview'">Overview</button>
         {% if decision.deliberation and decision.deliberation.steps %}
-        <button class="tab-btn" :class="{ 'tab-btn--active': tab === 'deliberation' }" @click="tab = 'deliberation'">
+        <button class="tab-btn" role="tab" :aria-selected="tab === 'deliberation'" :class="{ 'tab-btn--active': tab === 'deliberation' }" @click="tab = 'deliberation'">
             Deliberation
             <span class="tab-badge">{{ decision.deliberation.steps|length }}</span>
         </button>
         {% endif %}
         {% if decision.bridge %}
-        <button class="tab-btn" :class="{ 'tab-btn--active': tab === 'bridge' }" @click="tab = 'bridge'">Bridge</button>
+        <button class="tab-btn" role="tab" :aria-selected="tab === 'bridge'" :class="{ 'tab-btn--active': tab === 'bridge' }" @click="tab = 'bridge'">Bridge</button>
         {% endif %}
         {% if decision.related %}
-        <button class="tab-btn" :class="{ 'tab-btn--active': tab === 'related' }" @click="tab = 'related'">
+        <button class="tab-btn" role="tab" :aria-selected="tab === 'related'" :class="{ 'tab-btn--active': tab === 'related' }" @click="tab = 'related'">
             Related
             <span class="tab-badge">{{ decision.related|length }}</span>
         </button>
@@ -48,7 +48,7 @@
     </div>
 
     <!-- === OVERVIEW TAB === -->
-    <div x-show="tab === 'overview'" x-cloak>
+    <div x-show="tab === 'overview'" x-cloak role="tabpanel">
         <!-- Details + Quality side by side -->
         <div class="detail-row">
             <!-- Details Card -->
@@ -244,7 +244,7 @@
 
     <!-- === DELIBERATION TAB === -->
     {% if decision.deliberation and decision.deliberation.steps %}
-    <div x-show="tab === 'deliberation'" x-cloak>
+    <div x-show="tab === 'deliberation'" x-cloak role="tabpanel">
         <div class="card mb-6">
             <div class="card-header">
                 <h2 class="card-title" style="margin:0">Deliberation Trace</h2>
@@ -266,7 +266,7 @@
                             {% endif %}
                         </div>
                         <div class="trace-step-content"
-                             @click="expanded[{{ step.step }}] = !expanded[{{ step.step }}]"
+                             @click="expanded['s{{ step.step }}'] = !expanded['s{{ step.step }}']"
                              style="cursor: pointer">
                             <div class="trace-step-header">
                                 <span class="trace-step-number">Step {{ step.step }}</span>
@@ -278,7 +278,7 @@
                                 {% endif %}
                             </div>
                             <p class="trace-step-thought"
-                               :class="{ 'trace-step-thought--expanded': expanded[{{ step.step }}] }">
+                               :class="{ 'trace-step-thought--expanded': expanded['s{{ step.step }}'] }">
                                 {{ step.thought }}
                             </p>
                         </div>
@@ -292,7 +292,7 @@
 
     <!-- === BRIDGE TAB === -->
     {% if decision.bridge %}
-    <div x-show="tab === 'bridge'" x-cloak>
+    <div x-show="tab === 'bridge'" x-cloak role="tabpanel">
         <div class="card mb-6">
             <div class="card-header">
                 <h2 class="card-title" style="margin:0">Bridge Definition</h2>
@@ -327,7 +327,7 @@
 
     <!-- === RELATED TAB === -->
     {% if decision.related %}
-    <div x-show="tab === 'related'" x-cloak>
+    <div x-show="tab === 'related'" x-cloak role="tabpanel">
         <div class="card mb-6">
             <div class="card-header">
                 <h2 class="card-title" style="margin:0">Related Decisions</h2>
