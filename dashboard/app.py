@@ -1,6 +1,7 @@
 """CSTP Dashboard Flask application."""
 import asyncio
 import contextlib
+from collections import Counter
 from typing import Any
 
 from flask import Flask, Response, flash, redirect, render_template, request, url_for
@@ -10,6 +11,7 @@ from flask_wtf.csrf import CSRFError
 from auth import requires_auth
 from config import config
 from cstp_client import CSTPClient, CSTPError
+from models import CalibrationStats, Decision
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -65,8 +67,6 @@ def health() -> Response:
 @auth
 def index() -> str:
     """Overview dashboard with aggregated stats."""
-    from collections import Counter
-
     # Fetch calibration stats
     cal_data = run_async(cstp.get_calibration())
     stats = CalibrationStats.from_dict(cal_data) if cal_data else None

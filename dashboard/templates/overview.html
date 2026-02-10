@@ -98,7 +98,7 @@
         <div class="card-body">
             <div class="tag-cloud">
                 {% for tag, count in top_tags %}
-                <a href="{{ url_for('decisions', search=tag) }}" class="tag-cloud-item tag-cloud-item--size-{{ [3, ((count / top_tags[0][1] * 3)|round|int)]|max }}">
+                <a href="{{ url_for('decisions', search=tag) }}" class="tag-cloud-item tag-cloud-item--size-{{ [1, ((count / top_tags[0][1] * 3)|round|int)]|max }}">
                     {{ tag }}
                     <span class="tag-cloud-count">{{ count }}</span>
                 </a>
