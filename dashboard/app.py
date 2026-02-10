@@ -68,41 +68,81 @@ def index() -> Response:
     return redirect(url_for("decisions"))
 
 
-@app.route("/decisions")
-@auth
-def decisions() -> str:
-    """List all decisions with pagination and filters.
-    
-    Query params:
-        page: Page number (default 1)
-        category: Filter by category
-        status: Filter by status (pending/reviewed)
+def _get_decisions(
+    page: int = 1,
+    per_page: int = 20,
+    category: str | None = None,
+    status: str | None = None,
+    stakes: str | None = None,
+    search: str | None = None,
+    sort: str | None = None,
+) -> tuple[list, int, int, int]:
+    """Shared logic for fetching, filtering, sorting, and paginating decisions.
+
+    Fetches a large batch from the API, applies client-side filters
+    (stakes, status) and sorting, then paginates.
+
+    Returns:
+        (page_decisions, total, page, total_pages)
     """
-    page = request.args.get("page", 1, type=int)
-    per_page = 20
-    category = request.args.get("category") or None
-    status = request.args.get("status") or None
-    
-    # Convert status to has_outcome boolean
     has_outcome: bool | None = None
     if status == "pending":
         has_outcome = False
     elif status == "reviewed":
         has_outcome = True
-    
+
     try:
-        decision_list, total = run_async(cstp.list_decisions(
-            limit=per_page,
-            offset=(page - 1) * per_page,
+        # Fetch larger batch for client-side filtering/sorting
+        all_decisions, _ = run_async(cstp.list_decisions(
+            limit=200,
+            offset=0,
             category=category,
             has_outcome=has_outcome,
+            search=search,
         ))
     except CSTPError as e:
-        flash(f"Error loading decisions: {e}", "error")
-        decision_list, total = [], 0
-    
-    total_pages = (total + per_page - 1) // per_page if total > 0 else 1
-    
+        return [], 0, page, 1
+
+    # Client-side filtering for stakes (API doesn't support it)
+    if stakes:
+        all_decisions = [d for d in all_decisions if d.stakes == stakes]
+
+    # Client-side sorting
+    if sort:
+        if sort == "confidence":
+            all_decisions.sort(key=lambda d: d.confidence, reverse=True)
+        elif sort == "-confidence":
+            all_decisions.sort(key=lambda d: d.confidence)
+        elif sort == "category":
+            all_decisions.sort(key=lambda d: d.category)
+        elif sort == "-date":
+            all_decisions.sort(key=lambda d: d.created_at)
+
+    total = len(all_decisions)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    start = (page - 1) * per_page
+    page_decisions = all_decisions[start : start + per_page]
+
+    return page_decisions, total, page, total_pages
+
+
+@app.route("/decisions")
+@auth
+def decisions() -> str:
+    """List all decisions with pagination and filters."""
+    page = request.args.get("page", 1, type=int)
+    category = request.args.get("category") or None
+    status = request.args.get("status") or None
+    stakes = request.args.get("stakes") or None
+    search = request.args.get("search") or None
+    sort = request.args.get("sort") or None
+
+    decision_list, total, page, total_pages = _get_decisions(
+        page=page, category=category, status=status,
+        stakes=stakes, search=search, sort=sort,
+    )
+
     return render_template(
         "decisions.html",
         decisions=decision_list,
@@ -111,6 +151,39 @@ def decisions() -> str:
         total=total,
         category=category,
         status=status,
+        stakes=stakes,
+        search=search,
+        sort=sort,
+    )
+
+
+@app.route("/decisions/partial")
+@auth
+def decisions_partial() -> str:
+    """Return just the table rows for HTMX partial swap."""
+    page = request.args.get("page", 1, type=int)
+    category = request.args.get("category") or None
+    status = request.args.get("status") or None
+    stakes = request.args.get("stakes") or None
+    search = request.args.get("search") or None
+    sort = request.args.get("sort") or None
+
+    decision_list, total, page, total_pages = _get_decisions(
+        page=page, category=category, status=status,
+        stakes=stakes, search=search, sort=sort,
+    )
+
+    return render_template(
+        "decisions_partial.html",
+        decisions=decision_list,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        category=category,
+        status=status,
+        stakes=stakes,
+        search=search,
+        sort=sort,
     )
 
 

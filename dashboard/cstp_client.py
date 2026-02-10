@@ -117,6 +117,7 @@ class CSTPClient:
         category: str | None = None,
         has_outcome: bool | None = None,
         project: str | None = None,
+        search: str | None = None,
     ) -> tuple[list[Decision], int]:
         """List decisions with optional filters.
         
@@ -126,12 +127,13 @@ class CSTPClient:
             category: Filter by category (architecture, process, etc.)
             has_outcome: Filter by review status (True=reviewed, False=pending)
             project: Filter by project (owner/repo format)
+            search: Search query for semantic search
             
         Returns:
             Tuple of (list of Decision objects, total count)
         """
         params: dict[str, Any] = {
-            "query": "",
+            "query": search or "",
             "top_k": limit,
         }
         if category:

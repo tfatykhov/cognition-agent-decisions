@@ -1,0 +1,69 @@
+{% for decision in decisions %}
+<tr>
+    <td>
+        <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}">
+            <code>{{ decision.id[:8] }}</code>
+        </a>
+    </td>
+    <td>
+        <a href="{{ url_for('decision_detail', decision_id=decision.id[:8]) }}" style="color: var(--c-text-secondary)">
+            {{ decision.summary[:70] }}{% if decision.summary|length > 70 %}...{% endif %}
+        </a>
+    </td>
+    <td><span class="badge badge--category">{{ decision.category }}</span></td>
+    <td><span class="badge badge--stakes-{{ decision.stakes }}">{{ decision.stakes }}</span></td>
+    <td>
+        <div class="confidence-bar">
+            <div class="confidence-bar-track">
+                <div class="confidence-bar-fill {% if decision.confidence >= 0.9 %}confidence-bar-fill--high{% elif decision.confidence >= 0.7 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
+                     style="width: {{ decision.confidence_pct }}%"></div>
+            </div>
+            <span class="confidence-bar-label">{{ decision.confidence_pct }}%</span>
+        </div>
+    </td>
+    <td>{{ decision.outcome_icon }}</td>
+    <td>
+        {% if decision.tags %}
+        <div class="tag-list">
+            {% for tag in decision.tags[:3] %}
+            <span class="tag">{{ tag }}</span>
+            {% endfor %}
+            {% if decision.tags|length > 3 %}
+            <span class="tag tag--more">+{{ decision.tags|length - 3 }}</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </td>
+</tr>
+{% else %}
+<tr>
+    <td colspan="7">
+        <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p class="empty-state-text">No decisions match your filters.</p>
+        </div>
+    </td>
+</tr>
+{% endfor %}
+
+<!-- OOB swaps for result count + pagination (valid HTML) -->
+<span id="decisions-info" hx-swap-oob="innerHTML">
+    {{ total }} decision{{ 's' if total != 1 }} found
+</span>
+<div id="decisions-pagination-target" hx-swap-oob="innerHTML">
+    {% if total_pages > 1 %}
+    {% if page > 1 %}
+    <a href="#" class="btn btn--ghost btn--sm"
+       hx-get="{{ url_for('decisions_partial', page=page-1, category=category, status=status, stakes=stakes, search=search, sort=sort) }}"
+       hx-target="#decisions-tbody"
+       hx-swap="innerHTML">← Previous</a>
+    {% endif %}
+    <span class="pagination-info">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="#" class="btn btn--ghost btn--sm"
+       hx-get="{{ url_for('decisions_partial', page=page+1, category=category, status=status, stakes=stakes, search=search, sort=sort) }}"
+       hx-target="#decisions-tbody"
+       hx-swap="innerHTML">Next →</a>
+    {% endif %}
+    {% endif %}
+</div>

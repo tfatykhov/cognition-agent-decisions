@@ -43,6 +43,9 @@ class Decision:
     reviewed_at: datetime | None = None
     project_context: ProjectContext | None = None
     agent_id: str | None = None
+    tags: list[str] = field(default_factory=list)
+    pattern: str | None = None
+    quality_score: float | None = None
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Decision":
@@ -113,6 +116,9 @@ class Decision:
             reviewed_at=reviewed_at,
             project_context=project_context,
             agent_id=data.get("agent_id"),
+            tags=data.get("tags", []),
+            pattern=data.get("pattern"),
+            quality_score=float(data["quality"]["score"]) if data.get("quality", {}).get("score") else None,
         )
     
     @property
