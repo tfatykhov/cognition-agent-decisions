@@ -1,6 +1,6 @@
 # F011 Implementation Plan: Web Dashboard (Detailed)
 
-**Spec:** `docs/specs/F011-WEB-DASHBOARD.md`  
+**Spec:** `docs/features/F011-WEB-DASHBOARD.md`  
 **Skill:** python-pro (type-safe Python 3.11+)  
 **Decision IDs:** cd235c3e, 8bcce9f4  
 

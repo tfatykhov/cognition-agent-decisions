@@ -1,6 +1,6 @@
 # F016 Implementation Plan: Confidence Variance Tracking
 
-**Spec:** `docs/specs/V0.9.0-FEATURES.md`  
+**Spec:** `docs/features/V0.9.0-FEATURES.md`  
 **Skill:** python-pro  
 **Complexity:** Low (~1 hour)
 

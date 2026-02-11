@@ -335,8 +335,8 @@ def track(self, key: str, tracked_input: TrackedInput) -> None:
 | `a2a/cstp/dispatcher.py` | Modify | +40 |
 | `a2a/mcp_server.py` | Modify | +40 |
 | `tests/test_deliberation_tracker.py` | **NEW** | ~200 |
-| `docs/specs/F023-DELIBERATION-TRACES.md` | Updated | (done) |
-| `docs/specs/F023-PHASE2-IMPLEMENTATION.md` | **NEW** | this file |
+| `docs/features/F023-DELIBERATION-TRACES.md` | Updated | (done) |
+| `docs/features/F023-PHASE2-IMPLEMENTATION.md` | **NEW** | this file |
 
 **Total new code:** ~510 lines
 

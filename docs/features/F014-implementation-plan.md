@@ -1,6 +1,6 @@
 # F014 Implementation Plan: Rolling Calibration Windows
 
-**Spec:** `docs/specs/V0.9.0-FEATURES.md`  
+**Spec:** `docs/features/V0.9.0-FEATURES.md`  
 **Skill:** python-pro  
 
 ---
