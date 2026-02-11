@@ -40,6 +40,11 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F032 | Error Amplification Tracking | MIT 17.2x Error Finding | `F032-error-amplification-tracking.md` |
 | F033 | Censor Layer | Minsky Ch 27 | `F033-censor-layer.md` |
 | F034 | Decomposed Confidence | Minsky Ch 28 | `F034-decomposed-confidence.md` |
+| F035 | Semantic State Transfer | Cisco IoC, README | `F035-semantic-state-transfer.md` |
+| F036 | Reasoning Continuity | Minsky teaching-selves | `F036-reasoning-continuity.md` |
+| F037 | Collective Innovation | Cisco IoC, README | `F037-collective-innovation.md` |
+| F038 | Cross-Agent Federation | Cisco IoC, README | `F038-cross-agent-federation.md` |
+| F039 | Cognition Protocol Stack | Cisco IoC (SSTP/CSTP/LSTP) | `F039-protocol-stack.md` |
 
 ## Retired IDs
 
