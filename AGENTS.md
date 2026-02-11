@@ -108,7 +108,7 @@ cognition-agent-decisions/
 │   ├── CSTP-v0.7.0-DESIGN.md       # Full CSTP protocol specification
 │   ├── DOCKER.md                    # Docker deployment guide
 │   ├── WORKFLOWS.md                 # Developer & code-review agent workflows
-│   ├── specs/                       # Feature specifications (F001–F020)
+│   ├── specs/                       # Feature specifications (F001-F034)
 │   ├── features/                    # Feature implementation checklists
 │   └── images/                      # Architecture diagrams
 │
@@ -474,7 +474,7 @@ ATTRIBUTION_FAILED = -32008  # Attribution error
 
 ## 11. Adding a New Feature — Checklist
 
-1. **Check existing specs:** Look in `docs/specs/` for related feature specs (F001–F020).
+1. **Check existing specs:** Look in `docs/features/` for related feature specs (F001-F034).
 2. **Design:** If the feature introduces a new CSTP method, follow the pattern in `docs/CSTP-v0.7.0-DESIGN.md`.
 3. **Implement core logic** in `src/cognition_engines/` if it's framework-agnostic.
 4. **Implement CSTP handler** in `a2a/cstp/`:
@@ -488,7 +488,7 @@ ATTRIBUTION_FAILED = -32008  # Attribution error
 8. **Update documentation:**
    - `README.md` for user-facing summaries
    - `ProductDocumentation/` for detailed guides
-   - `docs/specs/` for the feature spec
+   - `docs/features/` for the feature spec
 9. **Verify linting:** `python -m ruff check .`
 
 ---
