@@ -47,9 +47,10 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F039 | Cognition Protocol Stack | Cisco IoC (SSTP/CSTP/LSTP) | `F039-protocol-stack.md` |
 | F040 | Task-Decision Graph | Beads (steveyegge/beads) | `F040-task-decision-graph.md` |
 | F041 | Memory Compaction | Beads (steveyegge/beads) | `F041-memory-compaction.md` |
-| F042 | Decision Dependency Graph | Beads (steveyegge/beads) | `F042-decision-dependencies.md` |
+| F042 | ~~Decision Dependency Graph~~ | ~~Beads~~ (merged into F045) | `F042-decision-dependencies.md` |
 | F043 | Distributed Decision Merge | Beads (steveyegge/beads) | `F043-distributed-merge.md` |
 | F044 | Agent Work Discovery | Beads (steveyegge/beads) | `F044-agent-work-discovery.md` |
+| F045 | Decision Graph Storage Layer | GNN/KG Research (ICML 2025, MemoBrain, Context Graphs) | `F045-graph-storage-layer.md` |
 
 ## Retired IDs
 
