@@ -1,6 +1,6 @@
 # F017 Implementation Plan: Hybrid Retrieval Scoring
 
-**Spec:** `docs/specs/V0.9.0-FEATURES.md`  
+**Spec:** `docs/features/V0.9.0-FEATURES.md`  
 **Skill:** python-pro  
 **Complexity:** Medium (~3 hours)
 

@@ -253,7 +253,7 @@ export CHROMA_PORT="8000"
 
 ## Remote Access (CSTP)
 
-**New in v0.7.0:** Cognition Engines now supports **CSTP (Cognition State Transfer Protocol)**, allowing remote agents to query your decision history via JSON-RPC.
+Cognition Engines supports **CSTP (Cognition State Transfer Protocol)**, exposing decision intelligence via JSON-RPC 2.0.
 
 **Endpoint:** `POST /cstp`
 
@@ -296,7 +296,7 @@ export CHROMA_PORT="8000"
 }
 ```
 
-**Method: `cstp.recordDecision`** *(New in v0.7.1)*
+**Method: `cstp.recordDecision`**
 ```json
 {
   "jsonrpc": "2.0",
@@ -313,6 +313,8 @@ export CHROMA_PORT="8000"
     "reasons": [
       {"type": "analysis", "text": "ACID compliance needed", "strength": 0.9}
     ],
+    "tags": ["database", "infrastructure"],
+    "pattern": "Choose proven technology for critical data paths",
     "reviewIn": "30d"
   },
   "id": 3
@@ -329,6 +331,8 @@ Response:
     "indexed": true,
     "deliberation_auto": true,
     "deliberation_inputs_count": 2,
+    "quality_score": 0.85,
+    "bridge_auto": true,
     "timestamp": "2026-02-05T00:48:00Z"
   }
 }
@@ -356,7 +360,7 @@ Analyze which reason types correlate with success.
 }
 ```
 
-**Method: `cstp.attributeOutcomes`** *(New in v0.7.2)*
+**Method: `cstp.attributeOutcomes`**
 ```json
 {
   "jsonrpc": "2.0",
@@ -369,25 +373,59 @@ Analyze which reason types correlate with success.
 }
 ```
 
-See [CSTP Design](docs/CSTP-v0.7.0-DESIGN.md) for full protocol details.
+**Method: `cstp.recordThought`** *(New in v0.10.0)*
+
+Capture reasoning during work. Links to a decision for full deliberation trace.
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.recordThought",
+  "params": {
+    "text": "Exploring option A - direct YAML update seems simpler but less scalable",
+    "decision_id": "abc12345"
+  },
+  "id": 7
+}
+```
+
+**Method: `cstp.updateDecision`** *(New in v0.10.0)*
+
+Update a decision after work is complete (record-at-start workflow).
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.updateDecision",
+  "params": {
+    "id": "abc12345",
+    "updates": {
+      "decision": "Used PostgreSQL with connection pooling",
+      "context": "Final outcome: deployed with PgBouncer, 3ms p99 latency"
+    }
+  },
+  "id": 8
+}
+```
+
+See [docs/features/](docs/features/) for full feature specifications.
 
 ## MCP Server (F022)
 
 Cognition Engines provides a native **Model Context Protocol (MCP)** server, allowing AI agents (Claude Desktop, OpenClaw, etc.) to use decision intelligence tools directly.
 
-**Tools Provided:**
-- `query_decisions`: Search past decisions to learn from history
+**Tools Provided (9):**
+- `query_decisions`: Search past decisions with hybrid retrieval (semantic + BM25)
 - `check_action`: Validate actions against guardrails
-- `log_decision`: Record a new decision
+- `log_decision`: Record a new decision with tags, patterns, and quality scoring
 - `review_outcome`: Record the outcome of a past decision
-- `get_stats`: Get calibration statistics (Brier score, etc.)
-- `get_decision`: Retrieve full decision details
-- `get_reason_stats`: Analyze reasoning patterns
+- `get_stats`: Get calibration statistics (Brier score, rolling windows, drift)
+- `get_decision`: Retrieve full decision details with deliberation trace
+- `get_reason_stats`: Analyze which reasoning types predict success
+- `update_decision`: Update a decision after work completes
+- `record_thought`: Capture reasoning during work
 
-**Connect via HTTP (SSE):**
-The server exposes an MCP endpoint at `/mcp` (Server-Sent Events).
+**Connect via Streamable HTTP:**
 ```bash
-# Connect your agent to:
+# MCP endpoint (handles POST for tools and GET for events):
 http://localhost:8000/mcp
 ```
 
@@ -396,12 +434,18 @@ http://localhost:8000/mcp
 python -m a2a.mcp_server
 ```
 
-## Deliberation Traces (F023)
+## Deliberation Traces (F023) & Reasoning Capture (F028)
 
-Decisions are more than just the final choice—they are the result of a thinking process. Deliberation Traces capture this process automatically.
+Decisions are more than just the final choice - they are the result of a thinking process. Deliberation Traces capture this process automatically.
 
 **Auto-Capture:**
 When an agent uses CSTP tools (`query_decisions`, `check_action`) before making a decision, the server automatically tracks these as "inputs" to the deliberation. When `log_decision` is called, these inputs are attached to the decision record.
+
+**Explicit Thoughts:**
+Use `cstp.recordThought` to capture reasoning during work:
+```json
+{"method": "cstp.recordThought", "params": {"text": "Option B is better - avoids Docker filesystem access", "decision_id": "abc123"}}
+```
 
 - **Zero client changes**: The server tracks inputs by `agent_id` or MCP session.
 - **Provenance**: See exactly which past decisions or guardrails influenced the choice.
@@ -456,6 +500,17 @@ related_to:
 - **Zero config**: Works with existing query/check/record workflow
 - **Deduplication**: Keeps the closest distance when same decision appears across multiple queries
 
+## Decision Quality (F027)
+
+Decisions are scored for retrieval quality based on tags, patterns, and bridge definitions:
+
+- **Tags**: Reusable keywords for filtering (`--tag infrastructure --tag timeout`)
+- **Patterns**: Abstract lessons ("Override system defaults when they don't match actual workload")
+- **Quality Score**: 0.0-1.0 based on completeness of tags, patterns, context, and bridge definitions
+- **Smart Bridge Extractors**: Auto-generate structure/function descriptions from decision text
+
+**Two-level thinking:** Every decision should capture both the operational level (what you did) and the conceptual level (what pattern it represents). The `pattern` field makes decisions findable by purpose, not just keywords.
+
 ## Guardrail Example
 
 ```yaml
@@ -475,45 +530,53 @@ message: "High-stakes decisions require ≥50% confidence"
 
 ![Roadmap Architecture](docs/images/roadmap-architecture.png)
 
+See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature index.
+
+### Shipped
+
 | Version | Features | Status |
 |---------|----------|--------|
 | v0.5.0 | Semantic Decision Index | ✅ Shipped |
-| v0.6.0 | Pattern Detection Engine | ✅ Shipped |
-| v0.6.0 | Enhanced Guardrails + Audit Trail | ✅ Shipped |
+| v0.6.0 | Pattern Detection + Enhanced Guardrails | ✅ Shipped |
 | v0.7.0 | Cross-Agent Federation (CSTP) | ✅ Shipped |
 | v0.7.2 | Project Context & Attribution | ✅ Shipped |
-| v0.9.0 | Hybrid Retrieval + Drift Alerts | ✅ Shipped |
-| v0.9.1 | F022 MCP Server | ✅ Shipped |
-| v0.9.2 | F023 Deliberation Traces | ✅ Shipped |
-| v0.9.3 | F024 Bridge-Definitions | ✅ Shipped |
-| v0.9.4 | F025 Related Decisions | ✅ Shipped |
-| v1.0.0 | Multi-Agent Cognition Network | Planned |
+| v0.8.0 | CSTP Server, Docker, Web Dashboard (F001-F011) | ✅ Shipped |
+| v0.9.0 | Hybrid Retrieval, Drift Alerts, Confidence Variance (F014-F017) | ✅ Shipped |
+| v0.10.0 | MCP Server, Deliberation Traces, Bridge-Definitions, Decision Quality (F019-F028) | ✅ Shipped |
 
-### v0.7.0 — Cross-Agent Federation
-- **Cross-agent query**: `query.py --scope=org` — search all agents' decisions
-- **Federated ChromaDB**: Shared collection or cross-instance queries
-- **Guardrail inheritance**: Org-level GATs that all agents inherit
-- **Agent-specific overrides**: Local rules with audit trail
-
-### v0.9.0 — Hybrid Retrieval & Stability
-- **Hybrid Search**: Semantic + keyword matching (BM25) for precision
-- **Drift Alerts**: Detect when decision patterns change over time
-- **Confidence Variance**: Track uncertainty across agent decisions
-
-### v0.9.1+ — Decision Intelligence Features
-- **F022 MCP Server**: Native integration for Claude Desktop and OpenClaw
-- **F023 Deliberation Traces**: Capture the *process* of thinking, not just the result
+### v0.10.0 — Decision Intelligence with Auto-Capture (Current)
+- **F019 List Guardrails**: Discover active guardrail rules
+- **F022 MCP Server**: 9 native MCP tools at `/mcp` (Streamable HTTP)
+- **F023 Deliberation Traces**: Auto-capture query/check as structured inputs
 - **F024 Bridge-Definitions**: Dual-indexing for structure (form) and function (purpose)
 - **F025 Related Decisions**: Auto-linked predecessors from pre-decision queries
+- **F027 Decision Quality**: Tags, patterns, quality scores, smart bridge extractors
+- **F028 Reasoning Capture**: `recordThought` for inline reasoning capture
+
+### Next: Research-Driven Features
+Based on MIT/Google scaling research and ai16z autonomous agent patterns:
+
+| Feature | Description |
+|---------|-------------|
+| F020 Structured Reasoning Traces | Step-by-step reasoning chain capture |
+| F029 Task Router | Classify tasks by decomposability, recommend agent architecture |
+| F030 Circuit Breaker Guardrails | Stateful closed/open/half-open guardrails that trip on failure patterns |
+| F031 Source Trust Scoring | Track information source reliability, weight query results |
+| F032 Error Amplification Tracking | Causal chains across multi-agent decisions |
+| F033 Censor Layer | Proactive failure pattern warnings (Minsky Ch 27) |
+| F034 Decomposed Confidence | Per-reason confidence weights (Minsky Ch 28) |
 
 ### v1.0.0 — Multi-Agent Cognition Network
-- **Semantic State Transfer**: Export decision context in portable format
-- **Reasoning continuity**: Another agent can "resume" a decision thread
-- **Collective innovation**: Agents reason together on novel problems
-- **COGs + GATs**: Full cognitive amplifiers and guardrail technologies
-- **Full protocol stack**: LSTP/CSTP/SSTP support based on use case
 
-### Cognition State Protocols (Future)
+| Feature | Description |
+|---------|-------------|
+| F035 Semantic State Transfer | Export decision context in portable bundles |
+| F036 Reasoning Continuity | Another agent can resume a decision thread |
+| F037 Collective Innovation | Multi-agent structured deliberation protocol |
+| F038 Cross-Agent Federation | Multi-instance CSTP with trust levels and discovery |
+| F039 Protocol Stack | Three-layer SSTP/CSTP/LSTP support |
+
+### Cognition State Protocols (F039)
 
 Based on [Cisco Outshift's Internet of Cognition](https://outshift.cisco.com/blog/from-connection-to-cognition-scaling-superintelligence):
 
@@ -523,7 +586,7 @@ Based on [Cisco Outshift's Internet of Cognition](https://outshift.cisco.com/blo
 | **CSTP** | Compressed | Low-bandwidth environments (Edge, WAN). Abstracted feature representations. |
 | **LSTP** | Latent | High-fidelity inference continuity. Local clusters with unified execution. |
 
-**Our focus:** SSTP first — it's the decision-making layer. CSTP/LSTP for future performance optimization.
+**Our focus:** SSTP first - it's the decision-making layer. CSTP/LSTP for future performance optimization.
 
 ## Project Structure
 
@@ -531,21 +594,33 @@ Based on [Cisco Outshift's Internet of Cognition](https://outshift.cisco.com/blo
 cognition-agent-decisions/
 ├── src/
 │   └── cognition_engines/
-│       ├── accelerators/     # Query, patterns, learning
-│       └── guardrails/       # Definitions, enforcement
-├── a2a/                      # CSTP Protocol (Server/Client)
+│       ├── accelerators/          # Query, patterns, learning
+│       └── guardrails/            # Definitions, enforcement
+├── a2a/                           # CSTP Protocol (Server/Client)
 │   ├── cstp/
-│   │   ├── bridge_extractor.py    # F024 Auto-extraction
-│   │   ├── bridge_hook.py         # F024 Bridge logic
+│   │   ├── dispatcher.py          # JSON-RPC method routing (10 methods)
+│   │   ├── query_service.py       # Hybrid retrieval (semantic + BM25)
+│   │   ├── decision_service.py    # Record, update, retrieve decisions
+│   │   ├── calibration_service.py # Brier scoring, rolling windows
+│   │   ├── guardrails_service.py  # Policy evaluation
 │   │   ├── deliberation_tracker.py # F023 Auto-capture
-│   │   └── ...
-│   ├── mcp_server.py         # F022 MCP Server
-│   ├── mcp_schemas.py        # F022 MCP Pydantic models
-│   └── server.py             # FastAPI / JSON-RPC server
-├── guardrails/               # YAML guardrail definitions
-├── tests/                    # Test suite
-├── docs/                     # Documentation
-└── examples/                 # Usage examples
+│   │   ├── bridge_extractor.py    # F024 Auto-extraction
+│   │   ├── drift_service.py       # F015 Calibration drift
+│   │   ├── attribution_service.py # F010 Outcome attribution
+│   │   └── reason_stats_service.py # Reason-type analytics
+│   ├── mcp_server.py              # F022 MCP Server (9 tools)
+│   ├── mcp_schemas.py             # F022 MCP Pydantic models
+│   └── server.py                  # FastAPI / JSON-RPC server
+├── dashboard/                     # Web dashboard (Flask)
+│   ├── app.py                     # Decision list, detail, review, calibration
+│   ├── cstp_client.py             # HTTP client for CSTP server
+│   └── templates/                 # Jinja2 templates
+├── guardrails/                    # YAML guardrail definitions
+├── tests/                         # Test suite
+├── docs/
+│   └── features/                  # All feature specs (F001-F039)
+└── skills/
+    └── cognition-engines/         # OpenClaw skill
 ```
 
 ## Related Projects

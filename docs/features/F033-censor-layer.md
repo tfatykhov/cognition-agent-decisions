@@ -1,9 +1,10 @@
-# F027: Censor Layer - Proactive Failure Pattern Warnings
+# F033: Censor Layer - Proactive Failure Pattern Warnings
 
 > **Status:** Proposed
 > **Source:** Minsky Society of Mind Ch 27 (Censors and Jokes)
 > **Depends on:** Sufficient failure data (~10+ failed/partial decisions)
 > **Priority:** Low (blocked by data)
+> **Note:** Previously numbered F027; renumbered to avoid conflict with shipped F027 (Decision Quality)
 
 ## Concept
 
