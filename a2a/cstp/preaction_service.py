@@ -1,0 +1,201 @@
+"""F046: Pre-action hook service.
+
+Composes query, guardrails, calibration, and optional record into a single call.
+Designed to be the one call an agent makes before any significant decision.
+"""
+
+import asyncio
+import logging
+import time
+from typing import Any
+
+from .calibration_service import GetCalibrationRequest, get_calibration
+from .decision_service import RecordDecisionRequest, record_decision
+from .guardrails_service import evaluate_guardrails, log_guardrail_check
+from .models import (
+    CalibrationContext,
+    DecisionSummary,
+    GuardrailViolation,
+    PatternSummary,
+    PreActionRequest,
+    PreActionResponse,
+)
+from .query_service import query_decisions
+
+logger = logging.getLogger("cstp.preaction")
+
+
+async def pre_action(
+    request: PreActionRequest,
+    agent_id: str,
+) -> PreActionResponse:
+    """Execute the pre-action hook.
+
+    Steps:
+    1. Query similar past decisions (semantic search)
+    2. Evaluate guardrails against proposed action
+    3. Fetch calibration for this category
+    4. Extract patterns from matched decisions
+    5. Optionally record the decision if allowed
+
+    Args:
+        request: Parsed PreActionRequest.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        PreActionResponse with allowed flag, decisions, guardrails, calibration.
+    """
+    start_time = time.time()
+
+    action = request.action
+    options = request.options
+
+    # --- Build inputs for concurrent calls ---
+
+    # Guardrail evaluation context
+    guardrail_context: dict[str, Any] = {
+        "category": action.category,
+        "stakes": action.stakes,
+        "confidence": action.confidence,
+    }
+    if action.context:
+        guardrail_context.update(action.context)
+
+    # Calibration request scoped to this category
+    cal_request = GetCalibrationRequest(category=action.category)
+
+    # --- Run query, guardrails, calibration concurrently ---
+    query_result, guardrail_result, calibration_result = await asyncio.gather(
+        query_decisions(
+            query=action.description,
+            n_results=options.query_limit,
+            category=action.category,
+        ),
+        evaluate_guardrails(guardrail_context),
+        get_calibration(cal_request),
+        return_exceptions=True,
+    )
+
+    # --- Process query results ---
+    relevant_decisions: list[DecisionSummary] = []
+    if isinstance(query_result, Exception):
+        logger.warning("Query failed in pre_action: %s", query_result)
+    elif query_result.error:
+        logger.warning("Query returned error: %s", query_result.error)
+    else:
+        for r in query_result.results:
+            relevant_decisions.append(DecisionSummary(
+                id=r.id,
+                title=r.title,
+                category=r.category,
+                confidence=r.confidence,
+                stakes=r.stakes,
+                status=r.status,
+                outcome=r.outcome,
+                date=r.date,
+                distance=r.distance,
+                tags=r.tags,
+                pattern=r.pattern,
+            ))
+
+    # --- Process guardrail results ---
+    allowed = True
+    block_reasons: list[str] = []
+    guardrail_violations: list[GuardrailViolation] = []
+
+    if isinstance(guardrail_result, Exception):
+        logger.warning("Guardrail evaluation failed: %s", guardrail_result)
+        # Fail open: allow if guardrails error
+    else:
+        allowed = guardrail_result.allowed
+        for v in guardrail_result.violations:
+            guardrail_violations.append(GuardrailViolation(
+                guardrail_id=v.guardrail_id,
+                name=v.name,
+                message=v.message,
+                severity=v.severity,
+                suggestion=v.suggestion,
+            ))
+            block_reasons.append(v.message)
+        for w in guardrail_result.warnings:
+            guardrail_violations.append(GuardrailViolation(
+                guardrail_id=w.guardrail_id,
+                name=w.name,
+                message=w.message,
+                severity=w.severity,
+                suggestion=w.suggestion,
+            ))
+
+        # Audit log
+        log_guardrail_check(
+            requesting_agent=agent_id,
+            action_description=action.description,
+            allowed=guardrail_result.allowed,
+            violations=guardrail_result.violations,
+            evaluated=guardrail_result.evaluated,
+        )
+
+    # --- Process calibration results ---
+    calibration_context = CalibrationContext()
+    if isinstance(calibration_result, Exception):
+        logger.warning("Calibration failed: %s", calibration_result)
+    elif calibration_result.overall:
+        cal = calibration_result.overall
+        calibration_context = CalibrationContext(
+            brier_score=cal.brier_score,
+            accuracy=cal.accuracy,
+            calibration_gap=cal.calibration_gap,
+            interpretation=cal.interpretation,
+            reviewed_decisions=cal.reviewed_decisions,
+        )
+
+    # --- Extract patterns from matched decisions ---
+    patterns_summary: list[PatternSummary] = []
+    if options.include_patterns:
+        pattern_groups: dict[str, list[str]] = {}
+        for d in relevant_decisions:
+            if d.pattern:
+                if d.pattern not in pattern_groups:
+                    pattern_groups[d.pattern] = []
+                pattern_groups[d.pattern].append(d.id)
+        for pat, ids in pattern_groups.items():
+            patterns_summary.append(PatternSummary(
+                pattern=pat,
+                count=len(ids),
+                example_ids=ids[:3],
+            ))
+
+    # --- Optionally record the decision ---
+    decision_id: str | None = None
+    if allowed and options.auto_record:
+        record_req = RecordDecisionRequest.from_dict(
+            {
+                "decision": action.description,
+                "confidence": action.confidence or 0.5,
+                "category": action.category or "process",
+                "stakes": action.stakes,
+                "reasons": request.reasons,
+                "tags": request.tags,
+                "pattern": request.pattern,
+            },
+            agent_id=agent_id,
+        )
+        try:
+            record_result = await record_decision(record_req)
+            if record_result.success:
+                decision_id = record_result.id
+        except Exception as e:
+            logger.warning("Auto-record failed in pre_action: %s", e)
+
+    query_time_ms = int((time.time() - start_time) * 1000)
+
+    return PreActionResponse(
+        allowed=allowed,
+        decision_id=decision_id,
+        relevant_decisions=relevant_decisions,
+        guardrail_results=guardrail_violations,
+        calibration_context=calibration_context,
+        patterns_summary=patterns_summary,
+        block_reasons=block_reasons,
+        query_time_ms=query_time_ms,
+    )

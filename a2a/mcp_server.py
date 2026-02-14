@@ -30,8 +30,10 @@ from .mcp_schemas import (
     CheckActionInput,
     GetDecisionInput,
     GetReasonStatsInput,
+    GetSessionContextInput,
     GetStatsInput,
     LogDecisionInput,
+    PreActionInput,
     QueryDecisionsInput,
     RecordThoughtInput,
     ReviewOutcomeInput,
@@ -234,6 +236,29 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=_deref_schema(RecordThoughtInput.model_json_schema()),
         ),
+        # F046: Pre-action hook
+        Tool(
+            name="pre_action",
+            description=(
+                "All-in-one pre-action check: queries similar past decisions, "
+                "evaluates guardrails, fetches calibration context, and optionally "
+                "records the decision. Call this BEFORE taking any significant "
+                "action to get full cognitive context in one round-trip."
+            ),
+            inputSchema=_deref_schema(PreActionInput.model_json_schema()),
+        ),
+        # F047: Session context
+        Tool(
+            name="get_session_context",
+            description=(
+                "Get full cognitive context for session start. Returns agent "
+                "profile (accuracy, Brier score, tendency), relevant past "
+                "decisions, active guardrails, calibration by category, overdue "
+                "reviews, and confirmed patterns. Call at session start or when "
+                "switching tasks to prime decision-making context."
+            ),
+            inputSchema=_deref_schema(GetSessionContextInput.model_json_schema()),
+        ),
     ]
 
 
@@ -269,6 +294,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "record_thought":
             return await _handle_record_thought_mcp(arguments)
+
+        if name == "pre_action":
+            return await _handle_pre_action_mcp(arguments)
+
+        if name == "get_session_context":
+            return await _handle_get_session_context_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -787,6 +818,81 @@ async def _handle_record_thought_mcp(arguments: dict[str, Any]) -> list[TextCont
         "success": True,
         "mode": "pre-decision",
     }))]
+
+
+async def _handle_pre_action_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle pre_action tool call (F046)."""
+    from .cstp.models import PreActionRequest
+    from .cstp.preaction_service import pre_action
+
+    # Validate input via Pydantic
+    args = PreActionInput(**arguments)
+
+    # Build params dict for CSTP
+    params: dict[str, Any] = {
+        "action": {
+            "description": args.action.description,
+            "stakes": args.action.stakes,
+        },
+    }
+    if args.action.category:
+        params["action"]["category"] = args.action.category
+    if args.action.confidence is not None:
+        params["action"]["confidence"] = args.action.confidence
+    if args.options:
+        params["options"] = {
+            "queryLimit": args.options.query_limit,
+            "autoRecord": args.options.auto_record,
+        }
+    if args.reasons:
+        params["reasons"] = [
+            {"type": r.type, "text": r.text} for r in args.reasons
+        ]
+    if args.tags:
+        params["tags"] = args.tags
+    if args.pattern:
+        params["pattern"] = args.pattern
+
+    request = PreActionRequest.from_params(params)
+    response = await pre_action(request, agent_id="mcp-client")
+
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(response.to_dict(), indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_get_session_context_mcp(
+    arguments: dict[str, Any],
+) -> list[TextContent]:
+    """Handle get_session_context tool call (F047)."""
+    from .cstp.models import SessionContextRequest
+    from .cstp.session_context_service import get_session_context
+
+    # Validate input via Pydantic
+    args = GetSessionContextInput(**arguments)
+
+    # Build params dict for CSTP
+    params: dict[str, Any] = {
+        "decisionsLimit": args.decisions_limit,
+        "readyLimit": args.ready_limit,
+    }
+    if args.task_description:
+        params["taskDescription"] = args.task_description
+    if args.include:
+        params["include"] = args.include
+
+    request = SessionContextRequest.from_params(params)
+    response = await get_session_context(request, agent_id="mcp-client")
+
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(response.to_dict(), indent=2, default=str),
+        )
+    ]
 
 
 async def run_stdio() -> None:
