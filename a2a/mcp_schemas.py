@@ -409,3 +409,109 @@ class RecordThoughtInput(BaseModel):
             "Omit for pre-decision mode (auto-attached on next recordDecision)."
         ),
     )
+
+
+# ============================================================================
+# F046: pre_action tool
+# ============================================================================
+
+
+class PreActionActionInput(BaseModel):
+    """Action description for the pre_action tool."""
+
+    description: str = Field(
+        ...,
+        min_length=1,
+        description="Description of the action you intend to take",
+    )
+    category: str | None = Field(
+        default=None,
+        description=(
+            "Action category: architecture, process, integration, tooling, security"
+        ),
+    )
+    stakes: Literal["low", "medium", "high", "critical"] = Field(
+        default="medium",
+        description="Stakes level of the action",
+    )
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Your confidence in this action (0.0 to 1.0)",
+    )
+
+
+class PreActionOptionsInput(BaseModel):
+    """Options for the pre_action tool."""
+
+    query_limit: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Max similar past decisions to return (1-20)",
+    )
+    auto_record: bool = Field(
+        default=True,
+        description="Automatically record the decision if guardrails allow it",
+    )
+
+
+class PreActionInput(BaseModel):
+    """Input for the pre_action tool."""
+
+    action: PreActionActionInput = Field(
+        ...,
+        description="The action you intend to take",
+    )
+    options: PreActionOptionsInput | None = Field(
+        default=None,
+        description="Options for the pre-action check",
+    )
+    reasons: list[ReasonInput] | None = Field(
+        default=None,
+        description="Reasons supporting this action (aim for 2+ different types)",
+    )
+    tags: list[str] | None = Field(
+        default=None,
+        description="Tags for categorization",
+    )
+    pattern: str | None = Field(
+        default=None,
+        description="Abstract pattern this action represents",
+    )
+
+
+# ============================================================================
+# F047: get_session_context tool
+# ============================================================================
+
+
+class GetSessionContextInput(BaseModel):
+    """Input for the get_session_context tool."""
+
+    task_description: str | None = Field(
+        default=None,
+        description=(
+            "What you're working on this session. Used to find relevant "
+            "past decisions via semantic search."
+        ),
+    )
+    include: list[
+        Literal["decisions", "guardrails", "calibration", "ready", "patterns"]
+    ] | None = Field(
+        default=None,
+        description="Which sections to include (default: all)",
+    )
+    decisions_limit: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Max relevant past decisions to return (1-50)",
+    )
+    ready_limit: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Max ready queue items to return (1-20)",
+    )

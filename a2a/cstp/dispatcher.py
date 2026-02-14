@@ -46,11 +46,15 @@ from .models import (
     CheckGuardrailsResponse,
     DecisionSummary,
     GuardrailViolation,
+    PreActionRequest,
     QueryDecisionsRequest,
     QueryDecisionsResponse,
+    SessionContextRequest,
 )
+from .preaction_service import pre_action
 from .query_service import query_decisions, load_all_decisions
 from .reindex_service import reindex_decisions
+from .session_context_service import get_session_context
 
 
 # Type alias for method handlers
@@ -540,6 +544,42 @@ async def _handle_list_guardrails(params: dict[str, Any], _agent_id: str) -> dic
     }
 
 
+async def _handle_pre_action(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.preAction method (F046).
+
+    Combines query + guardrails + calibration + optional record in one call.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Pre-action results as dict.
+    """
+    request = PreActionRequest.from_params(params)
+    response = await pre_action(request, agent_id)
+    return response.to_dict()
+
+
+async def _handle_get_session_context(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.getSessionContext method (F047).
+
+    Returns full cognitive context for session start.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Session context as dict.
+    """
+    request = SessionContextRequest.from_params(params)
+    response = await get_session_context(request, agent_id)
+    return response.to_dict()
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -560,6 +600,10 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.checkDrift", _handle_check_drift)
     dispatcher.register("cstp.reindex", _handle_reindex)
     dispatcher.register("cstp.getReasonStats", _handle_get_reason_stats)
+
+    # F046/F047: Agentic loop integration
+    dispatcher.register("cstp.preAction", _handle_pre_action)
+    dispatcher.register("cstp.getSessionContext", _handle_get_session_context)
 
 
 async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
