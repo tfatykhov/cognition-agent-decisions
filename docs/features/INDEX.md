@@ -45,6 +45,11 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F037 | Collective Innovation | Cisco IoC, README | `F037-collective-innovation.md` |
 | F038 | Cross-Agent Federation | Cisco IoC, README | `F038-cross-agent-federation.md` |
 | F039 | Cognition Protocol Stack | Cisco IoC (SSTP/CSTP/LSTP) | `F039-protocol-stack.md` |
+| F040 | Task-Decision Graph | Beads (steveyegge/beads) | `F040-task-decision-graph.md` |
+| F041 | Memory Compaction | Beads (steveyegge/beads) | `F041-memory-compaction.md` |
+| F042 | Decision Dependency Graph | Beads (steveyegge/beads) | `F042-decision-dependencies.md` |
+| F043 | Distributed Decision Merge | Beads (steveyegge/beads) | `F043-distributed-merge.md` |
+| F044 | Agent Work Discovery | Beads (steveyegge/beads) | `F044-agent-work-discovery.md` |
 
 ## Retired IDs
 
