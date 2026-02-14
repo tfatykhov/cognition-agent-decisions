@@ -515,3 +515,7 @@ class GetSessionContextInput(BaseModel):
         le=20,
         description="Max ready queue items to return (1-20)",
     )
+    format: Literal["json", "markdown"] = Field(
+        default="markdown",
+        description="Response format: 'json' for structured data, 'markdown' for system prompt injection",
+    )

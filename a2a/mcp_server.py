@@ -878,6 +878,7 @@ async def _handle_get_session_context_mcp(
     params: dict[str, Any] = {
         "decisionsLimit": args.decisions_limit,
         "readyLimit": args.ready_limit,
+        "format": args.format,
     }
     if args.task_description:
         params["taskDescription"] = args.task_description
