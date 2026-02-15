@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'Cognition Engines',
   description: 'Decision Intelligence for AI Agents',
   base: '/',
@@ -119,5 +120,9 @@ export default defineConfig({
       message: 'Released under the Apache 2.0 License.',
       copyright: 'Built with Minsky\'s Society of Mind'
     }
+  },
+
+  mermaid: {
+    theme: 'dark'
   }
-})
+}))
