@@ -62,11 +62,12 @@ Ruff config: line-length 100, target Python 3.11, rules `E F I N W UP B C4 SIM`.
 AI Agents → POST /cstp (JSON-RPC 2.0, Bearer auth)
   → a2a/server.py → CstpDispatcher → *_service.py handlers
     → VectorStore (chromadb | memory)  + EmbeddingProvider (gemini)
+    → GraphStore (networkx | memory)   + JSONL persistence (F045)
     → src/cognition_engines/ (SemanticIndex, GuardrailEngine, PatternDetector)
     → YAML files (decisions/guardrails)
 ```
 
-Vector storage and embeddings are abstracted behind `VectorStore` and `EmbeddingProvider` ABCs (F048). Services access backends via factory singletons (`get_vector_store()`, `get_embedding_provider()`). Backend selection is driven by `VECTOR_BACKEND` and `EMBEDDING_PROVIDER` env vars.
+Vector storage and embeddings are abstracted behind `VectorStore` and `EmbeddingProvider` ABCs (F048). Graph storage is abstracted behind `GraphStore` ABC (F045). Services access backends via factory singletons (`get_vector_store()`, `get_embedding_provider()`, `get_graph_store()`). Backend selection is driven by `VECTOR_BACKEND`, `EMBEDDING_PROVIDER`, and `GRAPH_BACKEND` env vars.
 
 **Key constraint**: `src/cognition_engines/` must never import from `a2a/`. Core uses dataclasses, the a2a layer uses Pydantic.
 
@@ -104,6 +105,11 @@ Vector storage and embeddings are abstracted behind `VectorStore` and `Embedding
 - `a2a/cstp/embeddings/factory.py` — Provider selection via `EMBEDDING_PROVIDER` env var
 - `src/cognition_engines/accelerators/semantic_index.py` — Semantic search core (separate from a2a vectordb)
 - `src/cognition_engines/guardrails/engine.py` — Guardrail engine core
+- `a2a/cstp/graphdb/__init__.py` — `GraphStore` ABC + `GraphNode`/`GraphEdge` dataclasses
+- `a2a/cstp/graphdb/networkx_store.py` — NetworkX graph backend with JSONL persistence
+- `a2a/cstp/graphdb/memory.py` — In-memory graph backend (tests/dev)
+- `a2a/cstp/graphdb/factory.py` — Graph backend selection via `GRAPH_BACKEND` env var
+- `a2a/cstp/graph_service.py` — Graph business logic (link, query, init from YAML)
 - `a2a/config.py` — Server configuration (YAML + env)
 - `guardrails/cornerstone.yaml` — Default guardrail rules
 - `config/server.yaml` — Default server config

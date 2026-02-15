@@ -45,13 +45,13 @@ Semantic decay for old resolved decisions.
 - [ ] `preserve: true` flag to skip compaction
 - Spec: `docs/features/F041-memory-compaction.md`
 
-### F045: Decision Graph Storage Layer (P1 — NetworkX foundation)
-- [ ] Add `networkx` dependency
-- [ ] Initialize graph from existing `related_to` data on startup
-- [ ] Implement `cstp.linkDecisions` (create typed edges)
-- [ ] Implement `cstp.getGraph` (subgraph query with depth + edge type filter)
-- [ ] JSONL persistence for graph edges
-- [ ] Edge types: `relates_to`, `supersedes`, `depends_on`
+### F045: Decision Graph Storage Layer (P1 — NetworkX foundation) ✅
+- [x] Add `networkx` dependency
+- [x] Initialize graph from existing `related_to` data on startup
+- [x] Implement `cstp.linkDecisions` (create typed edges)
+- [x] Implement `cstp.getGraph` (subgraph query with depth + edge type filter)
+- [x] JSONL persistence for graph edges
+- [x] Edge types: `relates_to`, `supersedes`, `depends_on`
 - Spec: `docs/features/F045-graph-storage-layer.md`
 
 ### F030: Circuit Breaker Guardrails
@@ -153,3 +153,4 @@ Link decisions to executable tasks with dependencies.
 - [x] MCP tool descriptions updated (PRIMARY vs Granular)
 - [x] Claude Code / Desktop MCP setup docs
 - [x] Custom domain base path fix
+- [x] F045 P1: Decision Graph Storage Layer — GraphStore ABC + factory, NetworkX + MemoryGraphStore backends, JSONL persistence, `cstp.linkDecisions` + `cstp.getGraph` endpoints, graph init from `related_to` YAML data

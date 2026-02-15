@@ -665,3 +665,104 @@ class SessionContextResponse:
             "confirmedPatterns": [p.to_dict() for p in self.confirmed_patterns],
             "queryTimeMs": self.query_time_ms,
         }
+
+
+# ---------------------------------------------------------------------------
+# F045: Decision Graph Storage Layer
+# ---------------------------------------------------------------------------
+
+# Valid edge types for P1
+_GRAPH_EDGE_TYPES = frozenset({"relates_to", "supersedes", "depends_on"})
+
+
+@dataclass(slots=True)
+class LinkDecisionsRequest:
+    """Request for cstp.linkDecisions (F045 P1)."""
+
+    source_id: str
+    target_id: str
+    edge_type: str
+    weight: float = 1.0
+    context: str | None = None
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "LinkDecisionsRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        source_id = str(params.get("sourceId") or params.get("source_id", ""))
+        target_id = str(params.get("targetId") or params.get("target_id", ""))
+        edge_type = str(params.get("edgeType") or params.get("edge_type", ""))
+        weight = float(params.get("weight", 1.0))
+        context = params.get("context")
+
+        return cls(
+            source_id=source_id,
+            target_id=target_id,
+            edge_type=edge_type,
+            weight=weight,
+            context=context,
+        )
+
+    def validate(self) -> list[str]:
+        """Validate request fields. Returns list of error messages."""
+        errors: list[str] = []
+        if not self.source_id:
+            errors.append("sourceId is required")
+        if not self.target_id:
+            errors.append("targetId is required")
+        if self.source_id and self.target_id and self.source_id == self.target_id:
+            errors.append("sourceId and targetId must be different (no self-loops)")
+        if not self.edge_type:
+            errors.append("edgeType is required")
+        elif self.edge_type not in _GRAPH_EDGE_TYPES:
+            errors.append(
+                f"edgeType must be one of: {', '.join(sorted(_GRAPH_EDGE_TYPES))}"
+            )
+        if self.weight <= 0:
+            errors.append("weight must be positive")
+        return errors
+
+
+@dataclass(slots=True)
+class GetGraphRequest:
+    """Request for cstp.getGraph (F045 P1)."""
+
+    node_id: str
+    depth: int = 1
+    edge_types: list[str] | None = None
+    direction: str = "both"
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "GetGraphRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        node_id = str(params.get("nodeId") or params.get("node_id", ""))
+        depth = int(params.get("depth", 1))
+
+        edge_types_raw = params.get("edgeTypes") or params.get("edge_types")
+        edge_types: list[str] | None = None
+        if isinstance(edge_types_raw, list):
+            edge_types = [str(t) for t in edge_types_raw]
+
+        direction = str(params.get("direction", "both"))
+
+        return cls(
+            node_id=node_id,
+            depth=max(1, min(depth, 5)),
+            edge_types=edge_types,
+            direction=direction,
+        )
+
+    def validate(self) -> list[str]:
+        """Validate request fields. Returns list of error messages."""
+        errors: list[str] = []
+        if not self.node_id:
+            errors.append("nodeId is required")
+        if self.direction not in ("outgoing", "incoming", "both"):
+            errors.append("direction must be: outgoing, incoming, or both")
+        if self.edge_types:
+            invalid = [t for t in self.edge_types if t not in _GRAPH_EDGE_TYPES]
+            if invalid:
+                errors.append(
+                    f"Invalid edgeTypes: {invalid}. "
+                    f"Must be one of: {', '.join(sorted(_GRAPH_EDGE_TYPES))}"
+                )
+        return errors

@@ -600,6 +600,66 @@ async def _handle_ready(params: dict[str, Any], agent_id: str) -> dict[str, Any]
     return response.to_dict()
 
 
+async def _handle_link_decisions(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.linkDecisions method (F045 P1).
+
+    Creates a typed edge between two decisions.
+
+    Args:
+        params: {"sourceId": "...", "targetId": "...", "edgeType": "...", ...}
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Link response with the created edge.
+    """
+    from .graph_service import link_decisions
+    from .models import LinkDecisionsRequest
+
+    request = LinkDecisionsRequest.from_params(params)
+    errors = request.validate()
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    response = await link_decisions(
+        source_id=request.source_id,
+        target_id=request.target_id,
+        edge_type=request.edge_type,
+        weight=request.weight,
+        context=request.context,
+        agent_id=agent_id,
+    )
+    return response.to_dict()
+
+
+async def _handle_get_graph(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.getGraph method (F045 P1).
+
+    Returns subgraph around a decision node.
+
+    Args:
+        params: {"nodeId": "...", "depth": 1, "edgeTypes": [...], "direction": "both"}
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Subgraph with nodes and edges.
+    """
+    from .graph_service import get_graph
+    from .models import GetGraphRequest
+
+    request = GetGraphRequest.from_params(params)
+    errors = request.validate()
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    response = await get_graph(
+        node_id=request.node_id,
+        depth=request.depth,
+        edge_types=request.edge_types,
+        direction=request.direction,
+    )
+    return response.to_dict()
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -627,6 +687,10 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
 
     # F044: Agent Work Discovery
     dispatcher.register("cstp.ready", _handle_ready)
+
+    # F045: Decision Graph Storage Layer
+    dispatcher.register("cstp.linkDecisions", _handle_link_decisions)
+    dispatcher.register("cstp.getGraph", _handle_get_graph)
 
 
 async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
