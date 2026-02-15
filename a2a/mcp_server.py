@@ -152,28 +152,33 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="query_decisions",
             description=(
-                "Search similar past decisions using semantic search, keyword matching, "
-                "or hybrid retrieval. Returns matching decisions with confidence scores, "
-                "categories, and outcomes. Use before making new decisions to learn from "
-                "history."
+                "Low-level: Search similar past decisions using semantic search, keyword "
+                "matching, or hybrid retrieval. Returns matching decisions with confidence "
+                "scores, categories, and outcomes. Prefer pre_action for decision-making "
+                "workflows (combines query + guardrails + record in one call). Use this "
+                "directly only for exploratory search without recording."
             ),
             inputSchema=_deref_schema(QueryDecisionsInput.model_json_schema()),
         ),
         Tool(
             name="check_action",
             description=(
-                "Validate an intended action against safety guardrails and policies. "
-                "Returns whether the action is allowed, any violations (blocking), and "
-                "warnings. Always check before high-stakes actions."
+                "Low-level: Validate an intended action against safety guardrails and "
+                "policies. Returns whether the action is allowed, any violations "
+                "(blocking), and warnings. Prefer pre_action which includes guardrail "
+                "checks automatically. Use this directly only for standalone what-if "
+                "guardrail checks without querying or recording."
             ),
             inputSchema=_deref_schema(CheckActionInput.model_json_schema()),
         ),
         Tool(
             name="log_decision",
             description=(
-                "Record a decision to the immutable decision log. Include what you "
-                "decided, your confidence level, category, and supporting reasons. "
-                "Use after making a decision to build calibration history."
+                "Low-level: Record a decision to the immutable decision log. Include "
+                "what you decided, your confidence level, category, and supporting "
+                "reasons. Prefer pre_action with auto_record=true which queries + "
+                "checks guardrails + records in one call. Use this directly only for "
+                "after-the-fact recording when pre_action was not used."
             ),
             inputSchema=_deref_schema(LogDecisionInput.model_json_schema()),
         ),
@@ -189,9 +194,11 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_stats",
             description=(
-                "Get calibration statistics: Brier score, accuracy, confidence "
-                "distribution, and decision counts. Optionally filter by category, "
-                "project, or time window. Use to check decision-making quality."
+                "Low-level: Get calibration statistics: Brier score, accuracy, "
+                "confidence distribution, and decision counts. Optionally filter by "
+                "category, project, or time window. Prefer get_session_context which "
+                "includes calibration alongside decisions, guardrails, and patterns. "
+                "Use this directly for monitoring dashboards or CI checks."
             ),
             inputSchema=_deref_schema(GetStatsInput.model_json_schema()),
         ),
@@ -240,10 +247,11 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="pre_action",
             description=(
-                "All-in-one pre-action check: queries similar past decisions, "
-                "evaluates guardrails, fetches calibration context, and optionally "
-                "records the decision. Call this BEFORE taking any significant "
-                "action to get full cognitive context in one round-trip."
+                "PRIMARY - Call this BEFORE any significant decision. All-in-one: "
+                "queries similar past decisions, evaluates guardrails, fetches "
+                "calibration context, extracts confirmed patterns, and optionally "
+                "records the decision. One round-trip replaces separate calls to "
+                "query_decisions + check_action + log_decision."
             ),
             inputSchema=_deref_schema(PreActionInput.model_json_schema()),
         ),
@@ -251,11 +259,11 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="get_session_context",
             description=(
-                "Get full cognitive context for session start. Returns agent "
-                "profile (accuracy, Brier score, tendency), relevant past "
-                "decisions, active guardrails, calibration by category, overdue "
-                "reviews, and confirmed patterns. Call at session start or when "
-                "switching tasks to prime decision-making context."
+                "PRIMARY - Call at session start or when switching tasks. Returns "
+                "full cognitive context: agent profile (accuracy, Brier score, "
+                "tendency), relevant past decisions, active guardrails, calibration "
+                "by category, overdue reviews, and confirmed patterns. Available in "
+                "JSON or markdown format for direct system prompt injection."
             ),
             inputSchema=_deref_schema(GetSessionContextInput.model_json_schema()),
         ),
