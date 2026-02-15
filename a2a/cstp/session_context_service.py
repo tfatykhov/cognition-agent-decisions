@@ -10,6 +10,7 @@ import time
 from typing import Any
 
 from .calibration_service import calculate_calibration
+from .compaction_service import build_wisdom
 from .guardrails_service import list_guardrails
 from .models import (
     AgentProfile,
@@ -18,6 +19,7 @@ from .models import (
     ReadyQueueItem,
     SessionContextRequest,
     SessionContextResponse,
+    WisdomEntry,
 )
 from .query_service import load_all_decisions, query_decisions
 
@@ -95,6 +97,14 @@ async def get_session_context(
     if "patterns" in include:
         confirmed_patterns = _extract_confirmed_patterns(all_decisions)
 
+    # --- Wisdom (F041 P2) ---
+    wisdom_entries: list[WisdomEntry] = []
+    if "wisdom" in include:
+        try:
+            wisdom_entries = build_wisdom(all_decisions, min_decisions=5)
+        except Exception as e:
+            logger.warning("Failed to build wisdom for session context: %s", e)
+
     query_time_ms = int((time.time() - start_time) * 1000)
 
     response = SessionContextResponse(
@@ -104,6 +114,7 @@ async def get_session_context(
         calibration_by_category=calibration_by_category,
         ready_queue=ready_queue,
         confirmed_patterns=confirmed_patterns,
+        wisdom_entries=wisdom_entries,
         query_time_ms=query_time_ms,
     )
 
@@ -351,6 +362,26 @@ def _render_markdown(
         for pat in response.confirmed_patterns:
             cats = ", ".join(pat.categories)
             lines.append(f"- {pat.pattern} ({pat.count}x, {cats})")
+        lines.append("")
+
+    # Wisdom (F041 P2)
+    if response.wisdom_entries:
+        lines.append("### Wisdom")
+        for w in response.wisdom_entries:
+            rate = f"{w.success_rate:.0%}" if w.success_rate is not None else "?"
+            lines.append(
+                f"- **{w.category}** ({w.decisions} decisions, "
+                f"{rate} success)"
+            )
+            for principle in w.key_principles:
+                lines.append(
+                    f"  - {principle.text}"
+                    f" ({principle.confirmations} confirmations)"
+                )
+            if w.common_failure_mode:
+                lines.append(
+                    f"  - Failure mode: {w.common_failure_mode}"
+                )
         lines.append("")
 
     # Relevant decisions

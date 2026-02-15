@@ -70,6 +70,22 @@ async def lifespan(app: FastAPI):
         set_graph_store(None)
         app.state.graph_store = None
 
+    # F041 P2: Auto-compact on startup (read-only level calculation)
+    try:
+        from .cstp.compaction_service import run_compaction
+        from .cstp.models import CompactRequest
+
+        compact_result = await run_compaction(CompactRequest())
+        levels = compact_result.levels
+        logger.info(
+            "Startup compaction: %d decisions "
+            "(full=%d, summary=%d, digest=%d, wisdom=%d)",
+            compact_result.compacted,
+            levels.full, levels.summary, levels.digest, levels.wisdom,
+        )
+    except Exception:
+        logger.warning("Startup compaction failed", exc_info=True)
+
     # Initialize MCP Streamable HTTP session manager
     try:
         from mcp.server.streamable_http_manager import StreamableHTTPSessionManager

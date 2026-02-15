@@ -3,6 +3,7 @@
 Routes incoming JSON-RPC requests to appropriate method handlers.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -56,6 +57,7 @@ from .query_service import query_decisions, load_all_decisions
 from .reindex_service import reindex_decisions
 from .session_context_service import get_session_context
 
+logger = logging.getLogger("cstp.dispatcher")
 
 # Type alias for method handlers
 MethodHandler = Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]]
@@ -160,6 +162,33 @@ def get_dispatcher() -> CstpDispatcher:
     return _dispatcher
 
 
+def _annotate_compaction_levels(result: QueryDecisionsResponse) -> None:
+    """Annotate DecisionSummary items with compaction level (F041 P2).
+
+    Determines compaction level from each decision's date and status,
+    sets compaction_level on each summary, and filters out wisdom-level
+    decisions (those are aggregated via cstp.getWisdom instead).
+
+    Mutates result in place.
+    """
+    from .compaction_service import determine_compaction_level
+
+    annotated: list[DecisionSummary] = []
+    for d in result.decisions:
+        # Build a minimal decision dict for determine_compaction_level
+        decision_dict: dict[str, Any] = {
+            "date": d.date,
+            "status": d.status,
+        }
+        level = determine_compaction_level(decision_dict)
+        d.compaction_level = level
+        # Exclude wisdom-level from individual results
+        if level != "wisdom":
+            annotated.append(d)
+    result.decisions = annotated
+    result.total = len(annotated)
+
+
 async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     """Handle cstp.queryDecisions method.
 
@@ -223,6 +252,10 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
             retrieval_mode="list",
             scores={},
         )
+
+        # F041 P2: Annotate with compaction levels and filter wisdom
+        if request.compacted:
+            _annotate_compaction_levels(result)
 
         # F023 Phase 2: Track query for auto-deliberation
         from .deliberation_tracker import track_query
@@ -425,6 +458,10 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
         retrieval_mode=request.retrieval_mode,
         scores=scores if scores else {},
     )
+
+    # F041 P2: Annotate with compaction levels and filter wisdom
+    if request.compacted:
+        _annotate_compaction_levels(result)
 
     # F023 Phase 2: Track query for auto-deliberation
     from .deliberation_tracker import track_query
@@ -1015,7 +1052,22 @@ async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict
     if not response.success:
         raise RuntimeError(response.error or "Failed to review decision")
 
-    return response.to_dict()
+    result = response.to_dict()
+
+    # F041 P2: Annotate with compaction level after review
+    try:
+        from .compaction_service import determine_compaction_level
+        from .decision_service import find_decision
+
+        found = await find_decision(request.id)
+        if found:
+            _, decision_data = found
+            level = determine_compaction_level(decision_data)
+            result["compactionLevel"] = level
+    except Exception:
+        logger.debug("Failed to annotate compaction level for %s", request.id, exc_info=True)
+
+    return result
 
 
 async def _handle_get_calibration(params: dict[str, Any], agent_id: str) -> dict[str, Any]:

@@ -98,6 +98,20 @@ async def pre_action(
                 pattern=r.pattern,
             ))
 
+    # F041 P2: Always annotate with compaction level in pre_action
+    if relevant_decisions:
+        try:
+            from .compaction_service import determine_compaction_level
+
+            for d in relevant_decisions:
+                decision_dict: dict[str, Any] = {
+                    "date": d.date,
+                    "status": d.status,
+                }
+                d.compaction_level = determine_compaction_level(decision_dict)
+        except Exception:
+            logger.debug("Failed to annotate compaction levels", exc_info=True)
+
     # --- Process guardrail results ---
     allowed = True
     block_reasons: list[str] = []
