@@ -201,8 +201,8 @@ See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature ca
 | v0.8.0 | Core CSTP Server, Docker, Dashboard (F001-F011) | ✅ Shipped |
 | v0.9.0 | Hybrid Retrieval, Drift Alerts, Calibration (F014-F017) | ✅ Shipped |
 | v0.10.0 | MCP Server, Deliberation Traces, Bridge Definitions, Quality (F019-F028) | ✅ Shipped |
-| v0.11.0 | Pre-Action Hook, Session Context (F046-F047) | ✅ Shipped |
-| v0.12.0 | Multi-Vector-DB, Agent Work Discovery (F048, F044) | 🚧 In Progress |
+| v0.11.0 | Pre-Action Hook, Session Context, Dashboard, Website, Pluggable Storage (F027-F028, F046-F048) | ✅ Shipped |
+| v0.12.0 | Agent Work Discovery, Graph Storage (F044, F045) | 🚧 In Progress |
 
 ### Upcoming
 
