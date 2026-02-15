@@ -101,19 +101,7 @@ async def get_session_context(
     wisdom_entries: list[WisdomEntry] = []
     if "wisdom" in include:
         try:
-            raw_wisdom = build_wisdom(all_decisions, min_decisions=5)
-            wisdom_entries = [
-                WisdomEntry(
-                    category=w.category,
-                    decisions=w.decisions,
-                    success_rate=w.success_rate,
-                    key_principles=w.key_principles,
-                    common_failure_mode=w.common_failure_mode,
-                    avg_confidence=w.avg_confidence,
-                    brier_score=w.brier_score,
-                )
-                for w in raw_wisdom
-            ]
+            wisdom_entries = build_wisdom(all_decisions, min_decisions=5)
         except Exception as e:
             logger.warning("Failed to build wisdom for session context: %s", e)
 

@@ -3,6 +3,7 @@
 Routes incoming JSON-RPC requests to appropriate method handlers.
 """
 
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -56,6 +57,7 @@ from .query_service import query_decisions, load_all_decisions
 from .reindex_service import reindex_decisions
 from .session_context_service import get_session_context
 
+logger = logging.getLogger("cstp.dispatcher")
 
 # Type alias for method handlers
 MethodHandler = Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]]
@@ -1063,7 +1065,7 @@ async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict
             level = determine_compaction_level(decision_data)
             result["compactionLevel"] = level
     except Exception:
-        pass  # Non-critical annotation
+        logger.debug("Failed to annotate compaction level for %s", request.id, exc_info=True)
 
     return result
 

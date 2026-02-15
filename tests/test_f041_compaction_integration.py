@@ -297,10 +297,10 @@ class TestWisdomInSessionContext:
         resp = await get_session_context(req, agent_id="test-agent")
         assert len(resp.wisdom_entries) == 0
 
-    def test_wisdom_default_in_include(self) -> None:
-        """'wisdom' should be in the default include list."""
+    def test_wisdom_opt_in_not_in_default_include(self) -> None:
+        """'wisdom' should NOT be in the default include list (opt-in only)."""
         req = SessionContextRequest.from_params({})
-        assert "wisdom" in req.include
+        assert "wisdom" not in req.include
 
     def test_render_markdown_with_wisdom(self) -> None:
         """Test _render_markdown includes wisdom section."""

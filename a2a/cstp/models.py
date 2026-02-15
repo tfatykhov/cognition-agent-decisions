@@ -448,7 +448,7 @@ class SessionContextRequest:
 
     task_description: str | None = None
     include: list[str] = field(default_factory=lambda: [
-        "decisions", "guardrails", "calibration", "ready", "patterns", "wisdom",
+        "decisions", "guardrails", "calibration", "ready", "patterns",
     ])
     decisions_limit: int = 10
     ready_limit: int = 5
@@ -459,7 +459,6 @@ class SessionContextRequest:
         """Create from JSON-RPC params."""
         include = params.get("include", [
             "decisions", "guardrails", "calibration", "ready", "patterns",
-            "wisdom",
         ])
         decisions_limit = params.get(
             "decisionsLimit", params.get("decisions_limit", 10)
