@@ -1,9 +1,9 @@
 # MCP Integration Guide
 
-> **Since:** v0.9.0  
+> **Since:** v0.9.0 (core), v0.10.0+ (F046/F047)  
 > **Protocol:** [Model Context Protocol](https://modelcontextprotocol.io/) (MCP)
 
-This guide covers connecting MCP-compliant agents to CSTP decision intelligence. The MCP layer exposes the same capabilities as the JSON-RPC API through a standardized tool interface.
+This guide covers connecting MCP-compliant agents to CSTP decision intelligence. The MCP layer exposes the same capabilities as the JSON-RPC API through a standardized tool interface, with two high-level "primary" tools for streamlined workflows.
 
 ---
 
@@ -28,7 +28,7 @@ graph TB
     subgraph MCP["MCP Server"]
         APP["mcp_app<br/>Server('cstp-decisions')"]
         SCHEMAS["Pydantic Schemas<br/>(mcp_schemas.py)"]
-        TOOLS["5 Tool Handlers"]
+        TOOLS["11 Tool Handlers"]
     end
 
     subgraph Services["CSTP Services"]
@@ -91,49 +91,190 @@ docker exec -i cstp python -m a2a.mcp_server
 
 ## Client Setup
 
-### Claude Code
+### Claude Code CLI
 
-```bash
-claude mcp add --transport http cstp-decisions http://your-server:9991/mcp
+Add to your project's `.mcp.json` (or global `~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "decisions": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://your-server:9991/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization: Bearer YOUR_CSTP_TOKEN"
+      ]
+    }
+  }
+}
+```
+
+On Windows, use `cmd` as the command:
+
+```json
+{
+  "mcpServers": {
+    "decisions": {
+      "command": "cmd",
+      "args": [
+        "/c", "npx", "mcp-remote@latest",
+        "http://your-server:9991/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization: Bearer YOUR_CSTP_TOKEN"
+      ]
+    }
+  }
+}
 ```
 
 After adding, CSTP tools appear in Claude Code's tool list automatically.
 
 ### Claude Desktop
 
-Add to your Claude Desktop configuration file (`claude_desktop_config.json`):
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
 
 ```json
 {
   "mcpServers": {
-    "cstp": {
-      "command": "docker",
-      "args": ["exec", "-i", "cstp", "python", "-m", "a2a.mcp_server"],
-      "env": {}
+    "decisions": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://your-server:9991/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization: Bearer YOUR_CSTP_TOKEN"
+      ]
     }
   }
 }
 ```
 
-> **Note:** The CSTP container must be running. The MCP server inherits all environment variables (`CHROMA_URL`, `GEMINI_API_KEY`, etc.) from the container.
-
 ### OpenClaw
 
-Point OpenClaw's MCP client configuration to the Streamable HTTP endpoint:
+Add to your OpenClaw gateway config:
 
+```yaml
+mcp:
+  servers:
+    cognition-engines:
+      url: http://your-server:9991/mcp
+      headers:
+        Authorization: "Bearer your-token"
 ```
-http://your-server:9991/mcp
-```
-
-Or configure stdio transport to launch the MCP server process directly.
 
 ### Generic MCP Client
 
-Any client implementing the [MCP specification](https://modelcontextprotocol.io/) can connect via either transport. The server advertises itself as `cstp-decisions` and exposes 9 tools via the standard `tools/list` method.
+Any client implementing the [MCP specification](https://modelcontextprotocol.io/) can connect via either transport. The server advertises itself as `cstp-decisions` and exposes 11 tools via the standard `tools/list` method.
 
 ---
 
 ## Available Tools
+
+### Primary Tools
+
+These are the recommended entry points. Use these first; fall back to granular tools only when you need fine-grained control.
+
+### `pre_action` (PRIMARY)
+
+All-in-one pre-action check: queries similar past decisions, evaluates guardrails, fetches calibration context, extracts confirmed patterns, and optionally records the decision. **One call replaces `query_decisions` + `check_action` + `log_decision`.**
+
+**Call this BEFORE any significant decision.**
+
+```json
+{
+  "action": {
+    "description": "Refactor auth module to use JWT",
+    "category": "architecture",
+    "stakes": "high",
+    "confidence": 0.82
+  },
+  "reasons": [
+    {"type": "analysis", "text": "Stateless auth scales better for microservices"},
+    {"type": "pattern", "text": "Team successfully used JWT in 2 other services"}
+  ],
+  "tags": ["auth", "jwt", "refactor"],
+  "pattern": "Stateless auth scales better than session-based",
+  "options": {
+    "auto_record": true,
+    "query_limit": 5,
+    "include_patterns": true
+  }
+}
+```
+
+**Input Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `action` | object | ✅ | Action details (see below) |
+| `reasons` | array | ❌ | Supporting reasons (aim for 2+ types) |
+| `tags` | string[] | ❌ | Tags for categorization |
+| `pattern` | string | ❌ | Abstract pattern this decision represents |
+| `options` | object | ❌ | `auto_record` (bool, default true), `query_limit` (int, default 5), `include_patterns` (bool, default true) |
+
+**Action object:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `description` | string | ✅ | What you plan to do |
+| `category` | string | ✅ | `architecture`, `process`, `integration`, `tooling`, `security` |
+| `stakes` | string | ✅ | `low`, `medium`, `high`, `critical` |
+| `confidence` | float | ✅ | Your confidence (0.0–1.0) |
+
+**Output:** `allowed` boolean, `decision_id` (if recorded), relevant past decisions, guardrail results, calibration context (accuracy, Brier, tendency for this category), confirmed patterns, and query time.
+
+---
+
+### `get_session_context` (PRIMARY)
+
+Full cognitive context for session start or task switch. Returns agent profile, relevant decisions, active guardrails, calibration by category, overdue reviews, and confirmed patterns.
+
+**Call at session start to prime decision-making context.**
+
+```json
+{
+  "task_description": "Build authentication service for user API",
+  "include": ["decisions", "guardrails", "calibration", "ready", "patterns"],
+  "format": "markdown"
+}
+```
+
+**Input Schema:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `task_description` | string | ✅ | — | What you're working on |
+| `include` | string[] | ❌ | all | Sections to include: `decisions`, `guardrails`, `calibration`, `ready`, `patterns`, `contradictions` |
+| `decisions_limit` | int | ❌ | 10 | Max relevant decisions |
+| `ready_limit` | int | ❌ | 5 | Max ready queue items |
+| `format` | `"json"` \| `"markdown"` | ❌ | `"markdown"` | Output format (`markdown` is ready for system prompt injection) |
+
+**Output (JSON):** Agent profile (total decisions, reviewed, accuracy, Brier, tendency, strongest/weakest category), relevant decisions, active guardrails, calibration by category, ready queue (overdue reviews, stale pending), confirmed patterns.
+
+**Output (Markdown):** Pre-formatted block ready to inject into a system prompt or CLAUDE.md.
+
+---
+
+### Recommended Workflow
+
+```
+1. Session start    → get_session_context (load context into system prompt)
+2. Decision point   → pre_action (gate + record + get relevant history)
+3. During work      → record_thought (capture reasoning)
+4. After work       → update_decision (finalize with outcome details)
+5. Later            → review_outcome (log success/failure for calibration)
+```
+
+---
+
+### Granular Tools
+
+Use these when you need fine-grained control beyond what `pre_action` and `get_session_context` provide.
 
 ### `query_decisions`
 
@@ -376,14 +517,16 @@ python -m uvicorn a2a.server:app --host 0.0.0.0 --port 9991
 
 ## Tool-to-Method Mapping
 
-| MCP Tool | CSTP JSON-RPC Method | Service Module |
-|----------|----------------------|----------------|
-| `query_decisions` | `cstp.queryDecisions` | `a2a/cstp/query_service.py` |
-| `check_action` | `cstp.checkGuardrails` | `a2a/cstp/guardrails_service.py` |
-| `log_decision` | `cstp.recordDecision` | `a2a/cstp/decision_service.py` |
-| `review_outcome` | `cstp.reviewDecision` | `a2a/cstp/decision_service.py` |
-| `get_stats` | `cstp.getCalibration` | `a2a/cstp/calibration_service.py` |
-| `get_decision` | `cstp.getDecision` | `a2a/cstp/decision_service.py` |
-| `get_reason_stats` | `cstp.getReasonStats` | `a2a/cstp/reason_stats_service.py` |
-| `update_decision` | `cstp.updateDecision` | `a2a/cstp/decision_service.py` |
-| `record_thought` | `cstp.recordThought` | `a2a/cstp/deliberation_tracker.py` |
+| MCP Tool | CSTP JSON-RPC Method | Service Module | Level |
+|----------|----------------------|----------------|-------|
+| `pre_action` | `cstp.preAction` | `a2a/cstp/preaction_service.py` | **Primary** |
+| `get_session_context` | `cstp.getSessionContext` | `a2a/cstp/session_context_service.py` | **Primary** |
+| `query_decisions` | `cstp.queryDecisions` | `a2a/cstp/query_service.py` | Granular |
+| `check_action` | `cstp.checkGuardrails` | `a2a/cstp/guardrails_service.py` | Granular |
+| `log_decision` | `cstp.recordDecision` | `a2a/cstp/decision_service.py` | Granular |
+| `review_outcome` | `cstp.reviewDecision` | `a2a/cstp/decision_service.py` | Granular |
+| `get_stats` | `cstp.getCalibration` | `a2a/cstp/calibration_service.py` | Granular |
+| `get_decision` | `cstp.getDecision` | `a2a/cstp/decision_service.py` | Granular |
+| `get_reason_stats` | `cstp.getReasonStats` | `a2a/cstp/reason_stats_service.py` | Granular |
+| `update_decision` | `cstp.updateDecision` | `a2a/cstp/decision_service.py` | Granular |
+| `record_thought` | `cstp.recordThought` | `a2a/cstp/deliberation_tracker.py` | Granular |
