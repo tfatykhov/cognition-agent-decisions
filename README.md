@@ -406,13 +406,85 @@ Update a decision after work is complete (record-at-start workflow).
 }
 ```
 
+**Method: `cstp.preAction`** *(New in v0.11.0)*
+
+All-in-one pre-action check. Combines query + guardrails + calibration + optional record in one round-trip.
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.preAction",
+  "params": {
+    "action": {
+      "description": "Refactor auth module to use JWT",
+      "category": "architecture",
+      "stakes": "high",
+      "confidence": 0.85
+    },
+    "options": {
+      "queryLimit": 5,
+      "autoRecord": true,
+      "includePatterns": true
+    },
+    "tags": ["auth", "refactor"],
+    "pattern": "Stateless auth scales better than session-based"
+  },
+  "id": 9
+}
+```
+
+**Method: `cstp.getSessionContext`** *(New in v0.11.0)*
+
+Full cognitive context for session start. Returns agent profile, relevant decisions, guardrails, ready queue, and patterns.
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.getSessionContext",
+  "params": {
+    "taskDescription": "Build authentication service for user API",
+    "include": ["decisions", "guardrails", "calibration", "ready", "patterns"],
+    "decisionsLimit": 10,
+    "readyLimit": 5,
+    "format": "markdown"
+  },
+  "id": 10
+}
+```
+
 See [docs/features/](docs/features/) for full feature specifications.
+
+## Pre-Action Hook (F046)
+
+Integrating CSTP into an agent's decision loop previously required 3 separate calls (query, check, record). The **Pre-Action Hook** combines them into a single `cstp.preAction` endpoint:
+
+1. **Query**: Semantic search for similar past decisions
+2. **Guardrails**: Run all active guardrails against the proposed action
+3. **Calibration**: Fetch agent's calibration profile for this category
+4. **Patterns**: Extract confirmed patterns from matching decisions
+5. **Record (optional)**: If `auto_record: true` and guardrails pass, record the decision immediately
+
+**Key behaviors:**
+- **Fail open**: If services error, the action is allowed (configurable per deployment)
+- **Block on violation**: If any guardrail blocks, `allowed: false` and no decision is recorded
+- **Idempotent when read-only**: With `auto_record: false`, the call is pure query (safe to retry)
+
+## Session Context (F047)
+
+Agents starting a new session typically have no cognitive context. **Session Context** provides everything an agent needs in a single call to `cstp.getSessionContext`:
+
+- **Agent profile**: Total decisions, accuracy, Brier score, calibration tendency, strongest/weakest categories
+- **Relevant decisions**: Task-scoped semantic search against past decisions
+- **Active guardrails**: All active guardrail rules
+- **Ready queue**: Overdue reviews, stale pending decisions — cognitive maintenance tasks
+- **Confirmed patterns**: Patterns confirmed across multiple decisions
+- **Markdown format**: Pre-formatted output ready for system prompt injection
+
+**Progressive disclosure:** The `include` array lets lightweight agents request only what they need.
 
 ## MCP Server (F022)
 
 Cognition Engines provides a native **Model Context Protocol (MCP)** server, allowing AI agents (Claude Desktop, OpenClaw, etc.) to use decision intelligence tools directly.
 
-**Tools Provided (9):**
+**Tools Provided (11):**
 - `query_decisions`: Search past decisions with hybrid retrieval (semantic + BM25)
 - `check_action`: Validate actions against guardrails
 - `log_decision`: Record a new decision with tags, patterns, and quality scoring
@@ -422,6 +494,8 @@ Cognition Engines provides a native **Model Context Protocol (MCP)** server, all
 - `get_reason_stats`: Analyze which reasoning types predict success
 - `update_decision`: Update a decision after work completes
 - `record_thought`: Capture reasoning during work
+- `pre_action`: All-in-one pre-action check (query + guardrails + calibration + record)
+- `get_session_context`: Full cognitive context for session start (profile, decisions, guardrails, patterns)
 
 **Connect via Streamable HTTP:**
 ```bash
@@ -543,10 +617,15 @@ See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature in
 | v0.8.0 | CSTP Server, Docker, Web Dashboard (F001-F011) | ✅ Shipped |
 | v0.9.0 | Hybrid Retrieval, Drift Alerts, Confidence Variance (F014-F017) | ✅ Shipped |
 | v0.10.0 | MCP Server, Deliberation Traces, Bridge-Definitions, Decision Quality (F019-F028) | ✅ Shipped |
+| v0.11.0 | Pre-Action Hook, Session Context (F046-F047) | ✅ Shipped |
 
-### v0.10.0 — Decision Intelligence with Auto-Capture (Current)
+### v0.11.0 — Agentic Loop Integration (Current)
+- **F046 Pre-Action Hook API**: Single `cstp.preAction` call combining query + guardrails + calibration + optional record — reduces 3-call overhead to one round-trip
+- **F047 Session Context Endpoint**: `cstp.getSessionContext` returns full cognitive context at session start — agent profile, relevant decisions, active guardrails, ready queue, confirmed patterns, with JSON or markdown output
+
+### v0.10.0 — Decision Intelligence with Auto-Capture
 - **F019 List Guardrails**: Discover active guardrail rules
-- **F022 MCP Server**: 9 native MCP tools at `/mcp` (Streamable HTTP)
+- **F022 MCP Server**: 11 native MCP tools at `/mcp` (Streamable HTTP)
 - **F023 Deliberation Traces**: Auto-capture query/check as structured inputs
 - **F024 Bridge-Definitions**: Dual-indexing for structure (form) and function (purpose)
 - **F025 Related Decisions**: Auto-linked predecessors from pre-decision queries
@@ -598,7 +677,7 @@ cognition-agent-decisions/
 │       └── guardrails/            # Definitions, enforcement
 ├── a2a/                           # CSTP Protocol (Server/Client)
 │   ├── cstp/
-│   │   ├── dispatcher.py          # JSON-RPC method routing (10 methods)
+│   │   ├── dispatcher.py          # JSON-RPC method routing (12 methods)
 │   │   ├── query_service.py       # Hybrid retrieval (semantic + BM25)
 │   │   ├── decision_service.py    # Record, update, retrieve decisions
 │   │   ├── calibration_service.py # Brier scoring, rolling windows
@@ -607,8 +686,10 @@ cognition-agent-decisions/
 │   │   ├── bridge_extractor.py    # F024 Auto-extraction
 │   │   ├── drift_service.py       # F015 Calibration drift
 │   │   ├── attribution_service.py # F010 Outcome attribution
-│   │   └── reason_stats_service.py # Reason-type analytics
-│   ├── mcp_server.py              # F022 MCP Server (9 tools)
+│   │   ├── reason_stats_service.py # Reason-type analytics
+│   │   ├── preaction_service.py   # F046 Pre-action hook
+│   │   └── session_context_service.py # F047 Session context
+│   ├── mcp_server.py              # F022 MCP Server (11 tools)
 │   ├── mcp_schemas.py             # F022 MCP Pydantic models
 │   └── server.py                  # FastAPI / JSON-RPC server
 ├── dashboard/                     # Web dashboard (Flask)
@@ -618,7 +699,7 @@ cognition-agent-decisions/
 ├── guardrails/                    # YAML guardrail definitions
 ├── tests/                         # Test suite
 ├── docs/
-│   └── features/                  # All feature specs (F001-F039)
+│   └── features/                  # All feature specs (F001-F048)
 └── skills/
     └── cognition-engines/         # OpenClaw skill
 ```
