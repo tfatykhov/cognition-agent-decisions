@@ -606,14 +606,18 @@ class ReadyResponse:
     actions: list[ReadyAction]
     total: int
     filtered: int = 0
+    warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict."""
-        return {
+        result: dict[str, Any] = {
             "actions": [a.to_dict() for a in self.actions],
             "total": self.total,
             "filtered": self.filtered,
         }
+        if self.warnings:
+            result["warnings"] = self.warnings
+        return result
 
 
 @dataclass(slots=True)

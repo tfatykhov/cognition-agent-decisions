@@ -27,10 +27,15 @@ PRIORITY_ORDER = {"low": 0, "medium": 1, "high": 2}
 # Type ordering for tiebreaking (review_outcome first)
 TYPE_ORDER = {"review_outcome": 0, "calibration_drift": 1, "stale_pending": 2}
 
+# Known action types for validation
+KNOWN_ACTION_TYPES = frozenset(TYPE_ORDER.keys())
+
 
 async def get_ready_actions(
     request: ReadyRequest,
     preloaded_decisions: list[dict[str, Any]] | None = None,
+    *,
+    agent_id: str | None = None,
 ) -> ReadyResponse:
     """Get prioritized cognitive actions.
 
@@ -38,6 +43,8 @@ async def get_ready_actions(
         request: Ready request with filters.
         preloaded_decisions: Pre-loaded decisions to avoid redundant disk reads.
             If None, decisions are loaded from disk.
+        agent_id: Authenticated agent ID. Currently unused but accepted for
+            forward compatibility with multi-agent isolation.
 
     Returns:
         ReadyResponse with prioritized actions.
@@ -46,15 +53,26 @@ async def get_ready_actions(
     if decisions is None:
         decisions = await load_all_decisions()
 
+    # Warn on unrecognized action_types (silently returns no results otherwise)
+    if request.action_types:
+        unknown = set(request.action_types) - KNOWN_ACTION_TYPES
+        if unknown:
+            logger.warning("Unknown action_types requested: %s", sorted(unknown))
+
     actions: list[ReadyAction] = []
+    warnings: list[str] = []
 
     # 1. Review outcome actions
     if not request.action_types or "review_outcome" in request.action_types:
-        actions.extend(_detect_review_outcome_actions(decisions))
+        actions.extend(_detect_review_outcome_actions(
+            decisions, category_filter=request.category,
+        ))
 
     # 2. Stale pending actions
     if not request.action_types or "stale_pending" in request.action_types:
-        actions.extend(_detect_stale_pending_actions(decisions))
+        actions.extend(_detect_stale_pending_actions(
+            decisions, category_filter=request.category,
+        ))
 
     # 3. Calibration drift actions
     if not request.action_types or "calibration_drift" in request.action_types:
@@ -65,13 +83,7 @@ async def get_ready_actions(
             actions.extend(drift_actions)
         except Exception as e:
             logger.warning("Drift detection failed: %s", e)
-
-    # Filter by category (non-drift actions match on their own category)
-    if request.category:
-        actions = [
-            a for a in actions
-            if a.category == request.category
-        ]
+            warnings.append(f"Drift detection failed: {e}")
 
     total = len(actions)
 
@@ -90,11 +102,12 @@ async def get_ready_actions(
 
     actions = actions[:request.limit]
 
-    return ReadyResponse(actions=actions, total=total, filtered=filtered)
+    return ReadyResponse(actions=actions, total=total, filtered=filtered, warnings=warnings)
 
 
 def _detect_review_outcome_actions(
     decisions: list[dict[str, Any]],
+    category_filter: str | None = None,
 ) -> list[ReadyAction]:
     """Find pending decisions with overdue review_by dates.
 
@@ -107,10 +120,15 @@ def _detect_review_outcome_actions(
         if d.get("status") != "pending":
             continue
 
+        if category_filter and str(d.get("category", "")) != category_filter:
+            continue
+
         review_by = str(d.get("review_by", "") or "")
         if not review_by or review_by >= today:
             continue
 
+        # Truncate to 8 chars for display brevity (matches session_context pattern;
+        # full IDs are 8-char hex so this is lossless for current ID format)
         decision_id = str(d.get("id", ""))[:8]
         title = str(d.get("summary") or d.get("decision") or "Untitled")[:80]
         date = str(d.get("date") or d.get("created_at") or "")[:10]
@@ -144,6 +162,7 @@ def _detect_review_outcome_actions(
 
 def _detect_stale_pending_actions(
     decisions: list[dict[str, Any]],
+    category_filter: str | None = None,
 ) -> list[ReadyAction]:
     """Find pending decisions older than STALE_MEDIUM_DAYS without review_by.
 
@@ -159,6 +178,9 @@ def _detect_stale_pending_actions(
         if d.get("status") != "pending":
             continue
 
+        if category_filter and str(d.get("category", "")) != category_filter:
+            continue
+
         # Skip if has review_by (handled by review_outcome detector)
         if d.get("review_by"):
             continue
@@ -167,6 +189,7 @@ def _detect_stale_pending_actions(
         if not date or date >= cutoff_medium:
             continue
 
+        # 8-char truncation: see _detect_review_outcome_actions comment
         decision_id = str(d.get("id", ""))[:8]
         title = str(d.get("summary") or d.get("decision") or "Untitled")[:80]
         category = str(d.get("category", "")) or None

@@ -596,7 +596,7 @@ async def _handle_ready(params: dict[str, Any], agent_id: str) -> dict[str, Any]
     from .ready_service import get_ready_actions
 
     request = ReadyRequest.from_params(params)
-    response = await get_ready_actions(request)
+    response = await get_ready_actions(request, agent_id=agent_id)
     return response.to_dict()
 
 

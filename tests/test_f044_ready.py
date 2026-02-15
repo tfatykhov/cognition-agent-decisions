@@ -146,6 +146,16 @@ class TestReadyResponse:
         assert data["total"] == 0
         assert data["filtered"] == 0
 
+    def test_to_dict_no_warnings_omitted(self) -> None:
+        resp = ReadyResponse(actions=[], total=0)
+        data = resp.to_dict()
+        assert "warnings" not in data
+
+    def test_to_dict_with_warnings(self) -> None:
+        resp = ReadyResponse(actions=[], total=0, warnings=["Drift failed"])
+        data = resp.to_dict()
+        assert data["warnings"] == ["Drift failed"]
+
 
 # ---------------------------------------------------------------------------
 # Detector tests: review_outcome
@@ -208,6 +218,16 @@ class TestDetectReviewOutcome:
     def test_empty_decisions(self) -> None:
         assert _detect_review_outcome_actions([]) == []
 
+    def test_category_filter_matches(self) -> None:
+        decisions = [_make_decision(review_by=_days_ago(1), category="tooling")]
+        actions = _detect_review_outcome_actions(decisions, category_filter="tooling")
+        assert len(actions) == 1
+
+    def test_category_filter_excludes(self) -> None:
+        decisions = [_make_decision(review_by=_days_ago(1), category="architecture")]
+        actions = _detect_review_outcome_actions(decisions, category_filter="tooling")
+        assert len(actions) == 0
+
 
 # ---------------------------------------------------------------------------
 # Detector tests: stale_pending
@@ -254,6 +274,16 @@ class TestDetectStalePending:
         decisions = [_make_decision(date=_days_ago(45))]
         actions = _detect_stale_pending_actions(decisions)
         assert "45 days" in actions[0].detail
+
+    def test_category_filter_matches(self) -> None:
+        decisions = [_make_decision(date=_days_ago(40), category="tooling")]
+        actions = _detect_stale_pending_actions(decisions, category_filter="tooling")
+        assert len(actions) == 1
+
+    def test_category_filter_excludes(self) -> None:
+        decisions = [_make_decision(date=_days_ago(40), category="architecture")]
+        actions = _detect_stale_pending_actions(decisions, category_filter="tooling")
+        assert len(actions) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +397,41 @@ class TestGetReadyActions:
         response = await get_ready_actions(request, preloaded_decisions=decisions)
         assert response.total == 10
         assert len(response.actions) == 3
+
+    @pytest.mark.asyncio
+    async def test_drift_failure_populates_warnings(self) -> None:
+        """When drift detection raises, warnings field surfaces the error."""
+        decisions = [_make_decision(status="reviewed", category="tooling")]
+        with patch(
+            "a2a.cstp.ready_service._detect_drift_actions",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("connection failed"),
+        ):
+            response = await get_ready_actions(
+                ReadyRequest(action_types=["calibration_drift"]),
+                preloaded_decisions=decisions,
+            )
+        assert len(response.warnings) == 1
+        assert "connection failed" in response.warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_unknown_action_types_logged(self) -> None:
+        """Unknown action_types are logged as warnings."""
+        with patch("a2a.cstp.ready_service.logger") as mock_logger:
+            await get_ready_actions(
+                ReadyRequest(action_types=["bogus_type"]),
+                preloaded_decisions=[],
+            )
+            mock_logger.warning.assert_called_once()
+            assert "bogus_type" in str(mock_logger.warning.call_args)
+
+    @pytest.mark.asyncio
+    async def test_agent_id_accepted(self) -> None:
+        """get_ready_actions accepts agent_id kwarg for forward compat."""
+        response = await get_ready_actions(
+            ReadyRequest(), preloaded_decisions=[], agent_id="test-agent",
+        )
+        assert response.total == 0
 
 
 # ---------------------------------------------------------------------------

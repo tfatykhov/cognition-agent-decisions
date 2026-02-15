@@ -533,8 +533,8 @@ class ReadyInput(BaseModel):
         default="low",
         description="Minimum priority level: low (all), medium (skip low), high (only high)",
     )
-    action_types: list[str] | None = Field(
-        default=None,
+    action_types: list[str] = Field(
+        default_factory=list,
         description=(
             "Filter to specific action types: review_outcome, "
             "calibration_drift, stale_pending (default: all)"

@@ -198,6 +198,10 @@ async def _build_ready_queue(
 
     Converts ReadyAction → ReadyQueueItem for backward compatibility with
     the session context response format.
+
+    Note: async because get_ready_actions is async (supports drift detection).
+    We only request sync detectors here, but keep the async signature for API
+    consistency and forward compatibility if drift is added to session context.
     """
     from .models import ReadyRequest
     from .ready_service import get_ready_actions
