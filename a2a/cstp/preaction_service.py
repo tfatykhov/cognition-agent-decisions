@@ -181,6 +181,35 @@ async def pre_action(
             agent_id=agent_id,
         )
         try:
+            # Apply dispatcher hooks before recording (issue #120):
+            # Must match the sequence in dispatcher._handle_record_decision
+
+            # F025: Extract related decisions BEFORE consuming tracker
+            from .deliberation_tracker import (
+                auto_attach_deliberation,
+                extract_related_from_tracker,
+            )
+
+            if not record_req.related_to:
+                related_raw = extract_related_from_tracker(f"rpc:{agent_id}")
+                if related_raw:
+                    from .decision_service import RelatedDecision
+
+                    record_req.related_to = [
+                        RelatedDecision.from_dict(r) for r in related_raw
+                    ]
+
+            # F023 Phase 2: Auto-attach deliberation from tracked inputs
+            record_req.deliberation, _auto_captured = auto_attach_deliberation(
+                key=f"rpc:{agent_id}",
+                deliberation=record_req.deliberation,
+            )
+
+            # F027 P2: Smart bridge extraction
+            from .bridge_hook import maybe_smart_extract_bridge
+
+            await maybe_smart_extract_bridge(record_req)
+
             record_result = await record_decision(record_req)
             if record_result.success:
                 decision_id = record_result.id
