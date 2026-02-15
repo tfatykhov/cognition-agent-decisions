@@ -484,7 +484,11 @@ Agents starting a new session typically have no cognitive context. **Session Con
 
 Cognition Engines provides a native **Model Context Protocol (MCP)** server, allowing AI agents (Claude Desktop, OpenClaw, etc.) to use decision intelligence tools directly.
 
-**Tools Provided (11):**
+**Primary Tools (start here):**
+- `pre_action` **(PRIMARY)**: All-in-one pre-action check - queries similar past decisions, evaluates guardrails, fetches calibration context, extracts confirmed patterns, and optionally records the decision. One call replaces `query_decisions` + `check_action` + `log_decision`.
+- `get_session_context` **(PRIMARY)**: Full cognitive context for session start - agent profile (accuracy, Brier score, tendency), relevant decisions, active guardrails, calibration by category, overdue reviews, and confirmed patterns. Available in JSON or markdown for system prompt injection.
+
+**Granular Tools (for fine-grained control):**
 - `query_decisions`: Search past decisions with hybrid retrieval (semantic + BM25)
 - `check_action`: Validate actions against guardrails
 - `log_decision`: Record a new decision with tags, patterns, and quality scoring
@@ -494,19 +498,89 @@ Cognition Engines provides a native **Model Context Protocol (MCP)** server, all
 - `get_reason_stats`: Analyze which reasoning types predict success
 - `update_decision`: Update a decision after work completes
 - `record_thought`: Capture reasoning during work
-- `pre_action`: All-in-one pre-action check (query + guardrails + calibration + record)
-- `get_session_context`: Full cognitive context for session start (profile, decisions, guardrails, patterns)
 
-**Connect via Streamable HTTP:**
-```bash
-# MCP endpoint (handles POST for tools and GET for events):
-http://localhost:8000/mcp
+### Claude Code CLI
+
+Add to your project's `.mcp.json` (or global `~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "decisions": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://YOUR_HOST:9991/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization: Bearer YOUR_CSTP_TOKEN"
+      ]
+    }
+  }
+}
 ```
 
-**Connect via Stdio:**
+On Windows, use `cmd` as the command:
+
+```json
+{
+  "mcpServers": {
+    "decisions": {
+      "command": "cmd",
+      "args": [
+        "/c", "npx", "mcp-remote@latest",
+        "http://YOUR_HOST:9991/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization: Bearer YOUR_CSTP_TOKEN"
+      ]
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "decisions": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "http://YOUR_HOST:9991/mcp",
+        "--allow-http",
+        "--header",
+        "Authorization: Bearer YOUR_CSTP_TOKEN"
+      ]
+    }
+  }
+}
+```
+
+### Direct Connection (Streamable HTTP)
+
+```bash
+# MCP endpoint (handles POST for tools and GET for events):
+# Default port is 8100; override with CSTP_PORT env var
+http://localhost:8100/mcp
+```
+
+### Stdio Transport
+
 ```bash
 python -m a2a.mcp_server
 ```
+
+### Recommended Workflow
+
+1. **Session start**: Call `get_session_context` to load cognitive context
+2. **Each decision**: Call `pre_action` before acting (query + guardrails + record in one call)
+3. **During work**: Call `record_thought` to capture reasoning
+4. **After work**: Call `update_decision` to finalize the decision text and context
+5. **Later**: Call `review_outcome` to record success/failure for calibration
 
 ## Deliberation Traces (F023) & Reasoning Capture (F028)
 
