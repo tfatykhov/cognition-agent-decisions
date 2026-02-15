@@ -1,9 +1,10 @@
-# F028: Decomposed Confidence - Per-Reason Confidence Weights
+# F034: Decomposed Confidence - Per-Reason Confidence Weights
 
 > **Status:** Proposed
 > **Source:** Minsky Society of Mind Ch 28 (The Mind and the World, section 28.3)
 > **Depends on:** Schema change across dataclass, YAML, CLI, MCP
 > **Priority:** Medium (addresses known calibration issue)
+> **Note:** Previously numbered F028; renumbered to avoid conflict with shipped F028 (Reasoning Capture)
 
 ## Problem
 
