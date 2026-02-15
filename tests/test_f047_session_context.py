@@ -240,64 +240,74 @@ class TestBuildAgentProfile:
 
 
 class TestBuildReadyQueue:
-    def test_overdue_review(self) -> None:
+    @pytest.mark.asyncio
+    async def test_overdue_review(self) -> None:
         decisions = [
             {"id": "abc12345", "summary": "Old decision", "status": "pending",
              "date": "2025-12-01", "review_by": "2026-01-01"},
         ]
-        items = _build_ready_queue(decisions, limit=5)
+        items = await _build_ready_queue(decisions, limit=5)
         assert len(items) == 1
         assert items[0].reason == "overdue_review"
         assert items[0].id == "abc12345"
         assert "2026-01-01" in items[0].detail
 
-    def test_stale_pending(self) -> None:
+    @pytest.mark.asyncio
+    async def test_stale_pending(self) -> None:
         decisions = [
             {"id": "def67890", "summary": "Stale decision",
              "status": "pending", "date": "2025-01-01"},
         ]
-        items = _build_ready_queue(decisions, limit=5)
+        items = await _build_ready_queue(decisions, limit=5)
         assert len(items) >= 1
         assert items[0].reason == "stale_pending"
         assert "pending" in items[0].detail
 
-    def test_reviewed_excluded(self) -> None:
+    @pytest.mark.asyncio
+    async def test_reviewed_excluded(self) -> None:
         decisions = [
             {"id": "rev12345", "summary": "Done", "status": "reviewed",
              "outcome": "success", "date": "2025-01-01"},
         ]
-        items = _build_ready_queue(decisions, limit=5)
+        items = await _build_ready_queue(decisions, limit=5)
         assert len(items) == 0
 
-    def test_recent_pending_excluded(self) -> None:
+    @pytest.mark.asyncio
+    async def test_recent_pending_excluded(self) -> None:
         """Pending decisions younger than STALE_DAYS should not appear."""
         decisions = [
             {"id": "new12345", "summary": "Recent", "status": "pending",
              "date": "2026-02-10"},
         ]
-        items = _build_ready_queue(decisions, limit=5)
+        items = await _build_ready_queue(decisions, limit=5)
         assert len(items) == 0
 
-    def test_overdue_before_stale(self) -> None:
-        """Overdue reviews should sort before stale pending."""
+    @pytest.mark.asyncio
+    async def test_overdue_before_stale(self) -> None:
+        """At same priority, overdue reviews should sort before stale pending."""
+        from datetime import UTC, datetime, timedelta
+
+        # 45-day stale → medium priority; medium-stakes overdue → medium priority
+        stale_date = (datetime.now(UTC) - timedelta(days=45)).strftime("%Y-%m-%d")
         decisions = [
             {"id": "stale123", "summary": "Stale", "status": "pending",
-             "date": "2025-01-01"},
+             "date": stale_date},
             {"id": "overdue1", "summary": "Overdue", "status": "pending",
              "date": "2025-12-01", "review_by": "2026-01-01"},
         ]
-        items = _build_ready_queue(decisions, limit=5)
+        items = await _build_ready_queue(decisions, limit=5)
         assert len(items) == 2
         assert items[0].reason == "overdue_review"
         assert items[1].reason == "stale_pending"
 
-    def test_limit_respected(self) -> None:
+    @pytest.mark.asyncio
+    async def test_limit_respected(self) -> None:
         decisions = [
             {"id": f"id{i:06d}", "summary": f"Dec {i}", "status": "pending",
              "date": "2025-01-01"}
             for i in range(10)
         ]
-        items = _build_ready_queue(decisions, limit=3)
+        items = await _build_ready_queue(decisions, limit=3)
         assert len(items) == 3
 
 

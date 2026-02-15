@@ -528,6 +528,98 @@ class ReadyQueueItem:
         }
 
 
+# ============================================================================
+# F044: Ready (Agent Work Discovery) models
+# ============================================================================
+
+
+@dataclass(slots=True)
+class ReadyRequest:
+    """Request for cstp.ready endpoint (F044)."""
+
+    min_priority: str = "low"  # low, medium, high
+    action_types: list[str] = field(default_factory=list)  # empty = all types
+    limit: int = 20
+    category: str | None = None
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "ReadyRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        min_priority = str(params.get("minPriority", params.get("min_priority", "low")))
+        if min_priority not in ("low", "medium", "high"):
+            min_priority = "low"
+
+        action_types = params.get("actionTypes", params.get("action_types", []))
+        if not isinstance(action_types, list):
+            action_types = []
+
+        limit = int(params.get("limit", 20))
+        limit = max(1, min(limit, 50))
+
+        return cls(
+            min_priority=min_priority,
+            action_types=action_types,
+            limit=limit,
+            category=params.get("category"),
+        )
+
+
+@dataclass(slots=True)
+class ReadyAction:
+    """A prioritized cognitive action from cstp.ready (F044)."""
+
+    type: str  # review_outcome, calibration_drift, stale_pending
+    priority: str  # low, medium, high
+    reason: str
+    suggestion: str
+    decision_id: str | None = None
+    category: str | None = None
+    date: str | None = None
+    title: str | None = None
+    detail: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        result: dict[str, Any] = {
+            "type": self.type,
+            "priority": self.priority,
+            "reason": self.reason,
+            "suggestion": self.suggestion,
+        }
+        if self.decision_id:
+            result["decisionId"] = self.decision_id
+        if self.category:
+            result["category"] = self.category
+        if self.date:
+            result["date"] = self.date
+        if self.title:
+            result["title"] = self.title
+        if self.detail:
+            result["detail"] = self.detail
+        return result
+
+
+@dataclass(slots=True)
+class ReadyResponse:
+    """Response from cstp.ready endpoint (F044)."""
+
+    actions: list[ReadyAction]
+    total: int
+    filtered: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict."""
+        result: dict[str, Any] = {
+            "actions": [a.to_dict() for a in self.actions],
+            "total": self.total,
+            "filtered": self.filtered,
+        }
+        if self.warnings:
+            result["warnings"] = self.warnings
+        return result
+
+
 @dataclass(slots=True)
 class ConfirmedPattern:
     """A pattern confirmed across 2+ decisions."""

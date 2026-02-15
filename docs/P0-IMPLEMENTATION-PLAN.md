@@ -8,7 +8,7 @@ The P0 roadmap has 4 items. One is already done (F047 bug fix, merged in `0fac94
 
 1. ~~**F048: Multi-Vector-DB Support** (XL)~~ — **DONE** (branch `feat/f048-multi-vectordb`, 446 tests pass)
 2. **Date-range filtering** (S) — rides on the refactored query_service
-3. **F044: Agent Work Discovery** (M) — standalone feature, benefits from MemoryStore for testing
+3. ~~**F044: Agent Work Discovery** (M)~~ — **DONE** (branch `feat/f044-agent-work-discovery`, 49 tests)
 4. ~~F047 format param bug~~ — already merged, mark done in TODO.md
 
 ---
@@ -146,7 +146,7 @@ No `hybrid_query()` on the ABC — hybrid search stays orchestrated in the dispa
 
 ---
 
-## 3. F044: Agent Work Discovery
+## 3. F044: Agent Work Discovery ✅
 
 ### Problem
 No standalone endpoint for agents to discover what maintenance work needs attention. `session_context_service.py` has basic ready queue logic but it's embedded in the session context response, not independently queryable or filterable.

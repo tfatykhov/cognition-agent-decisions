@@ -7,7 +7,6 @@ confirmed patterns.
 
 import logging
 import time
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from .calibration_service import calculate_calibration
@@ -23,9 +22,6 @@ from .models import (
 from .query_service import load_all_decisions, query_decisions
 
 logger = logging.getLogger("cstp.session_context")
-
-# Days before a pending decision is considered stale
-STALE_DAYS = 30
 
 
 async def get_session_context(
@@ -92,7 +88,7 @@ async def get_session_context(
     # --- Ready Queue ---
     ready_queue: list[ReadyQueueItem] = []
     if "ready" in include:
-        ready_queue = _build_ready_queue(all_decisions, request.ready_limit)
+        ready_queue = await _build_ready_queue(all_decisions, request.ready_limit)
 
     # --- Confirmed Patterns ---
     confirmed_patterns: list[ConfirmedPattern] = []
@@ -194,54 +190,43 @@ def _build_agent_profile(decisions: list[dict[str, Any]]) -> AgentProfile:
     return profile
 
 
-def _build_ready_queue(
+async def _build_ready_queue(
     decisions: list[dict[str, Any]],
     limit: int,
 ) -> list[ReadyQueueItem]:
-    """Find decisions needing attention (overdue reviews, stale pending)."""
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
-    cutoff = (datetime.now(UTC) - timedelta(days=STALE_DAYS)).strftime("%Y-%m-%d")
+    """Find decisions needing attention (delegates to F044 ready_service).
+
+    Converts ReadyAction → ReadyQueueItem for backward compatibility with
+    the session context response format.
+
+    Note: async because get_ready_actions is async (supports drift detection).
+    We only request sync detectors here, but keep the async signature for API
+    consistency and forward compatibility if drift is added to session context.
+    """
+    from .models import ReadyRequest
+    from .ready_service import get_ready_actions
+
+    request = ReadyRequest(
+        min_priority="low",
+        action_types=["review_outcome", "stale_pending"],
+        limit=limit,
+    )
+    response = await get_ready_actions(request, preloaded_decisions=decisions)
+
+    # Map reason field: review_outcome → overdue_review for backward compat
+    reason_map = {"review_outcome": "overdue_review", "stale_pending": "stale_pending"}
 
     items: list[ReadyQueueItem] = []
+    for action in response.actions:
+        items.append(ReadyQueueItem(
+            id=action.decision_id or "",
+            title=action.title or "Untitled",
+            reason=reason_map.get(action.type, action.type),
+            date=action.date or "",
+            detail=action.detail or "",
+        ))
 
-    for d in decisions:
-        if d.get("status") != "pending":
-            continue
-
-        decision_id = str(d.get("id", ""))[:8]
-        title = str(d.get("summary") or d.get("decision") or "Untitled")[:80]
-        date = str(d.get("date") or d.get("created_at") or "")[:10]
-
-        # Overdue review (has review_by date in the past)
-        review_by = str(d.get("review_by", "") or "")
-        if review_by and review_by < today:
-            items.append(ReadyQueueItem(
-                id=decision_id,
-                title=title,
-                reason="overdue_review",
-                date=date,
-                detail=f"review by {review_by}",
-            ))
-            continue
-
-        # Stale pending (older than STALE_DAYS with no outcome)
-        if date and date < cutoff:
-            try:
-                dt = datetime.fromisoformat(date + "T00:00:00+00:00")
-                days_old = (datetime.now(UTC) - dt).days
-            except ValueError:
-                days_old = STALE_DAYS
-            items.append(ReadyQueueItem(
-                id=decision_id,
-                title=title,
-                reason="stale_pending",
-                date=date,
-                detail=f"pending {days_old} days",
-            ))
-
-    # Sort: overdue first, then stale by oldest date
-    items.sort(key=lambda x: (0 if x.reason == "overdue_review" else 1, x.date))
-    return items[:limit]
+    return items
 
 
 def _extract_confirmed_patterns(

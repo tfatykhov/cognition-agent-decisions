@@ -580,6 +580,26 @@ async def _handle_get_session_context(
     return response.to_dict()
 
 
+async def _handle_ready(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.ready method (F044).
+
+    Returns prioritized cognitive actions (reviews, drift, stale decisions).
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Ready response with prioritized actions.
+    """
+    from .models import ReadyRequest
+    from .ready_service import get_ready_actions
+
+    request = ReadyRequest.from_params(params)
+    response = await get_ready_actions(request, agent_id=agent_id)
+    return response.to_dict()
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -604,6 +624,9 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     # F046/F047: Agentic loop integration
     dispatcher.register("cstp.preAction", _handle_pre_action)
     dispatcher.register("cstp.getSessionContext", _handle_get_session_context)
+
+    # F044: Agent Work Discovery
+    dispatcher.register("cstp.ready", _handle_ready)
 
 
 async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
