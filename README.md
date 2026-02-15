@@ -564,7 +564,8 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 
 ```bash
 # MCP endpoint (handles POST for tools and GET for events):
-http://localhost:9991/mcp
+# Default port is 8100; override with CSTP_PORT env var
+http://localhost:8100/mcp
 ```
 
 ### Stdio Transport
@@ -578,8 +579,8 @@ python -m a2a.mcp_server
 1. **Session start**: Call `get_session_context` to load cognitive context
 2. **Each decision**: Call `pre_action` before acting (query + guardrails + record in one call)
 3. **During work**: Call `record_thought` to capture reasoning
-4. **After work**: Call `update_decision` to finalize the decision with outcome
-5. **Later**: Call `review_outcome` when you know the result
+4. **After work**: Call `update_decision` to finalize the decision text and context
+5. **Later**: Call `review_outcome` to record success/failure for calibration
 
 ## Deliberation Traces (F023) & Reasoning Capture (F028)
 

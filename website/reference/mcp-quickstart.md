@@ -266,8 +266,8 @@ Full cognitive context for session start or task switch. Returns agent profile, 
 1. Session start    → get_session_context (load context into system prompt)
 2. Decision point   → pre_action (gate + record + get relevant history)
 3. During work      → record_thought (capture reasoning)
-4. After work       → update_decision (finalize with outcome details)
-5. Later            → review_outcome (log success/failure for calibration)
+4. After work       → update_decision (finalize decision text and context)
+5. Later            → review_outcome (record success/failure for calibration)
 ```
 
 ---

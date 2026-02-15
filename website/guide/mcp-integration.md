@@ -42,9 +42,9 @@ Decision point → pre_action (query + guardrails + record in one call)
        ↓
 During work → record_thought (capture reasoning)
        ↓
-After work → update_decision (finalize with outcome details)
+After work → update_decision (finalize decision text and context)
        ↓
-Later → review_outcome (log success/failure for calibration)
+Later → review_outcome (record success/failure for calibration)
 ```
 
 ## Claude Code CLI
