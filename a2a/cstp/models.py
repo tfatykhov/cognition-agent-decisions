@@ -766,3 +766,337 @@ class GetGraphRequest:
                     f"Must be one of: {', '.join(sorted(_GRAPH_EDGE_TYPES))}"
                 )
         return errors
+
+
+# ---------------------------------------------------------------------------
+# F041: Memory Compaction
+# ---------------------------------------------------------------------------
+
+# Valid compaction levels (ordered by detail, most → least)
+COMPACTION_LEVELS = ("full", "summary", "digest", "wisdom")
+
+# Age thresholds in days for each compaction level
+COMPACTION_THRESHOLDS: dict[str, int | None] = {
+    "full": 7,       # < 7 days
+    "summary": 30,   # 7-30 days
+    "digest": 90,    # 30-90 days
+    "wisdom": None,  # 90+ days (no upper bound)
+}
+
+
+@dataclass(slots=True)
+class CompactRequest:
+    """Request for cstp.compact (F041 P1)."""
+
+    category: str | None = None
+    dry_run: bool = False
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "CompactRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        return cls(
+            category=params.get("category"),
+            dry_run=bool(params.get("dryRun", params.get("dry_run", False))),
+        )
+
+
+@dataclass(slots=True)
+class CompactLevelCount:
+    """Count of decisions at each compaction level."""
+
+    full: int = 0
+    summary: int = 0
+    digest: int = 0
+    wisdom: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict."""
+        return {
+            "full": self.full,
+            "summary": self.summary,
+            "digest": self.digest,
+            "wisdom": self.wisdom,
+        }
+
+
+@dataclass(slots=True)
+class CompactResponse:
+    """Response from cstp.compact (F041 P1)."""
+
+    compacted: int
+    preserved: int
+    levels: CompactLevelCount
+    dry_run: bool = False
+    errors: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        result: dict[str, Any] = {
+            "compacted": self.compacted,
+            "preserved": self.preserved,
+            "levels": self.levels.to_dict(),
+            "dryRun": self.dry_run,
+        }
+        if self.errors:
+            result["errors"] = self.errors
+        return result
+
+
+@dataclass(slots=True)
+class GetCompactedRequest:
+    """Request for cstp.getCompacted (F041 P1)."""
+
+    category: str | None = None
+    level: str | None = None  # Force a specific level; None = auto by age
+    limit: int = 50
+    include_preserved: bool = True
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "GetCompactedRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        level = params.get("level")
+        if level and level not in COMPACTION_LEVELS:
+            level = None
+
+        limit = int(params.get("limit", 50))
+        limit = max(1, min(limit, 500))
+
+        return cls(
+            category=params.get("category"),
+            level=level,
+            limit=limit,
+            include_preserved=bool(
+                params.get(
+                    "includePreserved", params.get("include_preserved", True)
+                )
+            ),
+        )
+
+
+@dataclass(slots=True)
+class CompactedDecision:
+    """A decision shaped at a specific compaction level (F041 P1).
+
+    Shape varies by level:
+    - full: All fields populated (complete decision)
+    - summary: decision, outcome, pattern, confidence, actual_confidence
+    - digest: one_line summary only
+    - wisdom: Not used here (wisdom is aggregated via WisdomEntry)
+    """
+
+    id: str
+    level: str  # full, summary, digest
+    decision: str
+    category: str
+    date: str
+    preserved: bool = False
+    # summary-level fields
+    outcome: str | None = None
+    confidence: float | None = None
+    actual_confidence: float | None = None
+    pattern: str | None = None
+    stakes: str | None = None
+    # full-level fields
+    context: str | None = None
+    reasons: list[dict[str, Any]] | None = None
+    tags: list[str] | None = None
+    bridge: dict[str, Any] | None = None
+    deliberation: dict[str, Any] | None = None
+    # digest-level: one-line summary
+    one_line: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys, shaped by level."""
+        result: dict[str, Any] = {
+            "id": self.id,
+            "level": self.level,
+            "decision": self.decision,
+            "category": self.category,
+            "date": self.date,
+        }
+        if self.preserved:
+            result["preserved"] = True
+
+        if self.level == "digest":
+            if self.one_line:
+                result["oneLine"] = self.one_line
+            return result
+
+        # summary and full both include these
+        if self.outcome:
+            result["outcome"] = self.outcome
+        if self.confidence is not None:
+            result["confidence"] = self.confidence
+        if self.actual_confidence is not None:
+            result["actualConfidence"] = self.actual_confidence
+        if self.pattern:
+            result["pattern"] = self.pattern
+        if self.stakes:
+            result["stakes"] = self.stakes
+
+        # full only
+        if self.level == "full":
+            if self.context:
+                result["context"] = self.context
+            if self.reasons:
+                result["reasons"] = self.reasons
+            if self.tags:
+                result["tags"] = self.tags
+            if self.bridge:
+                result["bridge"] = self.bridge
+            if self.deliberation:
+                result["deliberation"] = self.deliberation
+
+        return result
+
+
+@dataclass(slots=True)
+class GetCompactedResponse:
+    """Response from cstp.getCompacted (F041 P1)."""
+
+    decisions: list[CompactedDecision]
+    total: int
+    levels: CompactLevelCount
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict."""
+        return {
+            "decisions": [d.to_dict() for d in self.decisions],
+            "total": self.total,
+            "levels": self.levels.to_dict(),
+        }
+
+
+@dataclass(slots=True)
+class SetPreserveRequest:
+    """Request for cstp.setPreserve (F041 P1)."""
+
+    decision_id: str
+    preserve: bool = True
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "SetPreserveRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        decision_id = str(
+            params.get("decisionId")
+            or params.get("decision_id")
+            or params.get("id")
+            or ""
+        )
+        return cls(
+            decision_id=decision_id,
+            preserve=bool(params.get("preserve", True)),
+        )
+
+    def validate(self) -> list[str]:
+        """Validate request fields. Returns list of error messages."""
+        errors: list[str] = []
+        if not self.decision_id:
+            errors.append("decisionId is required")
+        return errors
+
+
+@dataclass(slots=True)
+class SetPreserveResponse:
+    """Response from cstp.setPreserve (F041 P1)."""
+
+    success: bool
+    decision_id: str
+    preserve: bool
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        result: dict[str, Any] = {
+            "success": self.success,
+            "decisionId": self.decision_id,
+            "preserve": self.preserve,
+        }
+        if self.error:
+            result["error"] = self.error
+        return result
+
+
+@dataclass(slots=True)
+class WisdomPrinciple:
+    """A distilled principle from a category of decisions."""
+
+    text: str
+    confirmations: int
+    example_ids: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "text": self.text,
+            "confirmations": self.confirmations,
+            "exampleIds": self.example_ids,
+        }
+
+
+@dataclass(slots=True)
+class WisdomEntry:
+    """Category-level wisdom aggregate (F041 P1)."""
+
+    category: str
+    decisions: int
+    success_rate: float | None = None
+    key_principles: list[WisdomPrinciple] = field(default_factory=list)
+    common_failure_mode: str | None = None
+    avg_confidence: float | None = None
+    brier_score: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        result: dict[str, Any] = {
+            "category": self.category,
+            "decisions": self.decisions,
+        }
+        if self.success_rate is not None:
+            result["successRate"] = self.success_rate
+        if self.key_principles:
+            result["keyPrinciples"] = [p.to_dict() for p in self.key_principles]
+        if self.common_failure_mode:
+            result["commonFailureMode"] = self.common_failure_mode
+        if self.avg_confidence is not None:
+            result["avgConfidence"] = self.avg_confidence
+        if self.brier_score is not None:
+            result["brierScore"] = self.brier_score
+        return result
+
+
+@dataclass(slots=True)
+class GetWisdomRequest:
+    """Request for cstp.getWisdom (F041 P1)."""
+
+    category: str | None = None
+    min_decisions: int = 5
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "GetWisdomRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        min_decisions = int(
+            params.get("minDecisions", params.get("min_decisions", 5))
+        )
+        min_decisions = max(1, min(min_decisions, 100))
+        return cls(
+            category=params.get("category"),
+            min_decisions=min_decisions,
+        )
+
+
+@dataclass(slots=True)
+class GetWisdomResponse:
+    """Response from cstp.getWisdom (F041 P1)."""
+
+    wisdom: list[WisdomEntry]
+    total_decisions: int
+    categories_analyzed: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "wisdom": [w.to_dict() for w in self.wisdom],
+            "totalDecisions": self.total_decisions,
+            "categoriesAnalyzed": self.categories_analyzed,
+        }

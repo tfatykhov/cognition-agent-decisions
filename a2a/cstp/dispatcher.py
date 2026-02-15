@@ -660,6 +660,96 @@ async def _handle_get_graph(params: dict[str, Any], agent_id: str) -> dict[str, 
     return response.to_dict()
 
 
+async def _handle_compact(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.compact method (F041 P1).
+
+    Runs compaction cycle — recalculates levels for all decisions.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Compaction results with level counts.
+    """
+    from .compaction_service import run_compaction
+    from .models import CompactRequest
+
+    request = CompactRequest.from_params(params)
+    response = await run_compaction(request)
+    return response.to_dict()
+
+
+async def _handle_get_compacted(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.getCompacted method (F041 P1).
+
+    Returns decisions shaped at their appropriate compaction level.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Compacted decisions with level metadata.
+    """
+    from .compaction_service import get_compacted_decisions
+    from .models import GetCompactedRequest
+
+    request = GetCompactedRequest.from_params(params)
+    response = await get_compacted_decisions(request)
+    return response.to_dict()
+
+
+async def _handle_set_preserve(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.setPreserve method (F041 P1).
+
+    Marks a decision as never-compact (or removes the mark).
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Preserve status result.
+    """
+    from .compaction_service import set_preserve
+    from .models import SetPreserveRequest
+
+    request = SetPreserveRequest.from_params(params)
+    errors = request.validate()
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    response = await set_preserve(request)
+    return response.to_dict()
+
+
+async def _handle_get_wisdom(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.getWisdom method (F041 P1).
+
+    Returns category-level distilled principles from old decisions.
+
+    Args:
+        params: JSON-RPC params.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Wisdom entries with principles and statistics.
+    """
+    from .compaction_service import get_wisdom
+    from .models import GetWisdomRequest
+
+    request = GetWisdomRequest.from_params(params)
+    response = await get_wisdom(request)
+    return response.to_dict()
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -691,6 +781,12 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     # F045: Decision Graph Storage Layer
     dispatcher.register("cstp.linkDecisions", _handle_link_decisions)
     dispatcher.register("cstp.getGraph", _handle_get_graph)
+
+    # F041: Memory Compaction
+    dispatcher.register("cstp.compact", _handle_compact)
+    dispatcher.register("cstp.getCompacted", _handle_get_compacted)
+    dispatcher.register("cstp.setPreserve", _handle_set_preserve)
+    dispatcher.register("cstp.getWisdom", _handle_get_wisdom)
 
 
 async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
