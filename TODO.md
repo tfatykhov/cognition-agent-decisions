@@ -45,13 +45,18 @@ Semantic decay for old resolved decisions.
 - [ ] `preserve: true` flag to skip compaction
 - Spec: `docs/features/F041-memory-compaction.md`
 
-### F045: Decision Graph Storage Layer (P1 — NetworkX foundation) ✅
+### F045: Decision Graph Storage Layer ✅
 - [x] Add `networkx` dependency
 - [x] Initialize graph from existing `related_to` data on startup
 - [x] Implement `cstp.linkDecisions` (create typed edges)
 - [x] Implement `cstp.getGraph` (subgraph query with depth + edge type filter)
-- [x] JSONL persistence for graph edges
+- [x] JSONL persistence for graph edges (`GRAPH_DATA_PATH` env var)
 - [x] Edge types: `relates_to`, `supersedes`, `depends_on`
+- [x] Thread safety (asyncio.Lock)
+- [x] GraphStore ABC + factory pattern
+- [ ] Add `cstp.getNeighbors` (lightweight neighbor query)
+- [ ] Auto-linking in `recordDecision` flow
+- [ ] MCP tool registration for graph endpoints
 - Spec: `docs/features/F045-graph-storage-layer.md`
 
 ### F030: Circuit Breaker Guardrails

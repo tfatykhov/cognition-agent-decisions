@@ -44,6 +44,14 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 | [F046](/specs/f046-pre-action-hook) | Pre-Action Hook API |
 | [F047](/specs/f047-session-context) | Session Context Endpoint |
 
+## Shipped (v0.12.0)
+
+| Spec | Feature |
+|------|---------|
+| [F044](/specs/f044-agent-work-discovery) | Agent Work Discovery (`cstp.ready`) |
+| [F045](/specs/f045-graph-storage-layer) | Decision Graph Storage Layer |
+| [F048](/specs/f048-multi-vectordb) | Multi-Vector-DB Support (P1: ABCs + MemoryStore) |
+
 ## Roadmap
 
 ### Research & Observability
@@ -81,14 +89,9 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 | [F041](/specs/f041-memory-compaction) | Memory Compaction |
 | [F042](/specs/f042-decision-dependencies) | Decision Dependencies |
 | [F043](/specs/f043-distributed-merge) | Distributed Merge |
-| [F044](/specs/f044-agent-work-discovery) | Agent Work Discovery |
-| [F045](/specs/f045-graph-storage-layer) | Graph Storage Layer |
-
 ### Infrastructure
 
-| Spec | Feature |
-|------|---------|
-| [F048](/specs/f048-multi-vectordb) | Multi-Vector-DB Support |
+*F048 Multi-Vector-DB shipped in v0.12.0. Weaviate and pgvector backends planned as P2.*
 
 ## Theoretical Sources
 

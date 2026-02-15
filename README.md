@@ -79,6 +79,7 @@ Later            → review_outcome       (log success/failure)
 |------|---------|
 | `pre_action` **(PRIMARY)** | All-in-one: queries similar decisions, evaluates guardrails, fetches calibration, extracts patterns, optionally records. One call replaces 3. |
 | `get_session_context` **(PRIMARY)** | Full cognitive context at session start: agent profile, relevant decisions, guardrails, calibration by category, ready queue, confirmed patterns. JSON or markdown output. |
+| `ready` **(PRIMARY)** | Prioritized cognitive maintenance queue: overdue reviews, calibration drift, stale decisions. Filter by priority, type, category. |
 
 ### Granular MCP Tools
 
@@ -93,6 +94,13 @@ Later            → review_outcome       (log success/failure)
 | `get_reason_stats` | Which reasoning types predict success |
 | `update_decision` | Update decision text/context after work |
 | `record_thought` | Capture reasoning steps during work |
+
+### Graph Tools
+
+| Tool | Purpose |
+|------|---------|
+| `link_decisions` | Create typed edges between decisions (`relates_to`, `supersedes`, `depends_on`) |
+| `get_graph` | Query subgraph around a decision with configurable depth and edge type filters |
 
 ## JSON-RPC API
 
@@ -119,7 +127,7 @@ curl -X POST http://localhost:8100/cstp \
   }'
 ```
 
-**Available methods:** `cstp.queryDecisions`, `cstp.checkGuardrails`, `cstp.recordDecision`, `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getDecision`, `cstp.getReasonStats`, `cstp.updateDecision`, `cstp.recordThought`, `cstp.preAction`, `cstp.getSessionContext`, `cstp.checkDrift`, `cstp.reindex`, `cstp.listGuardrails`, `cstp.attributeOutcomes`
+**Available methods:** `cstp.queryDecisions`, `cstp.checkGuardrails`, `cstp.recordDecision`, `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getDecision`, `cstp.getReasonStats`, `cstp.updateDecision`, `cstp.recordThought`, `cstp.preAction`, `cstp.getSessionContext`, `cstp.ready`, `cstp.linkDecisions`, `cstp.getGraph`, `cstp.checkDrift`, `cstp.reindex`, `cstp.listGuardrails`, `cstp.attributeOutcomes`
 
 ## Architecture
 
@@ -181,7 +189,8 @@ See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature ca
 | v0.9.0 | Hybrid Retrieval, Drift Alerts, Calibration (F014-F017) | ✅ Shipped |
 | v0.10.0 | MCP Server, Deliberation Traces, Bridge Definitions, Quality (F019-F028) | ✅ Shipped |
 | v0.11.0 | Pre-Action Hook, Session Context, Dashboard, Website, Pluggable Storage (F027-F028, F046-F048) | ✅ Shipped |
-| v0.12.0 | Agent Work Discovery, Graph Storage (F044, F045) | 🚧 In Progress |
+| v0.12.0 | Agent Work Discovery, Graph Storage, Pluggable Storage (F044, F045, F048) | ✅ Shipped |
+| v0.13.0 | Memory Compaction, Circuit Breakers (F041, F030) | 🚧 In Progress |
 
 ### Upcoming
 
