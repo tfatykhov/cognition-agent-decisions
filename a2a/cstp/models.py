@@ -60,6 +60,8 @@ class QueryDecisionsRequest:
     hybrid_weight: float = 0.7  # semantic weight (keyword = 1 - this)
     # F024: Bridge-side search
     bridge_side: str | None = None  # structure | function | None (both)
+    # F041 P2: Compaction level annotation
+    compacted: bool = False  # When true, annotate results with compaction level
 
     @property
     def effective_query(self) -> str:
@@ -109,6 +111,7 @@ class QueryDecisionsRequest:
             retrieval_mode=retrieval_mode,
             hybrid_weight=hybrid_weight,
             bridge_side=bridge_side,
+            compacted=bool(params.get("compacted", False)),
         )
 
 
@@ -129,6 +132,8 @@ class DecisionSummary:
     # F027: Tags and pattern in results
     tags: list[str] | None = None
     pattern: str | None = None
+    # F041 P2: Compaction level annotation
+    compaction_level: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON response."""
@@ -150,6 +155,8 @@ class DecisionSummary:
             result["tags"] = self.tags
         if self.pattern:
             result["pattern"] = self.pattern
+        if self.compaction_level:
+            result["compactionLevel"] = self.compaction_level
         return result
 
 
@@ -441,7 +448,7 @@ class SessionContextRequest:
 
     task_description: str | None = None
     include: list[str] = field(default_factory=lambda: [
-        "decisions", "guardrails", "calibration", "ready", "patterns",
+        "decisions", "guardrails", "calibration", "ready", "patterns", "wisdom",
     ])
     decisions_limit: int = 10
     ready_limit: int = 5
@@ -452,6 +459,7 @@ class SessionContextRequest:
         """Create from JSON-RPC params."""
         include = params.get("include", [
             "decisions", "guardrails", "calibration", "ready", "patterns",
+            "wisdom",
         ])
         decisions_limit = params.get(
             "decisionsLimit", params.get("decisions_limit", 10)
@@ -649,6 +657,7 @@ class SessionContextResponse:
     calibration_by_category: dict[str, Any] = field(default_factory=dict)
     ready_queue: list[ReadyQueueItem] = field(default_factory=list)
     confirmed_patterns: list[ConfirmedPattern] = field(default_factory=list)
+    wisdom_entries: list["WisdomEntry"] = field(default_factory=list)
     query_time_ms: int = 0
     markdown: str | None = None
 
@@ -656,7 +665,7 @@ class SessionContextResponse:
         """Convert to dict for JSON response."""
         if self.markdown is not None:
             return {"markdown": self.markdown, "queryTimeMs": self.query_time_ms}
-        return {
+        result: dict[str, Any] = {
             "agentProfile": self.agent_profile.to_dict(),
             "relevantDecisions": [d.to_dict() for d in self.relevant_decisions],
             "activeGuardrails": self.active_guardrails,
@@ -665,6 +674,9 @@ class SessionContextResponse:
             "confirmedPatterns": [p.to_dict() for p in self.confirmed_patterns],
             "queryTimeMs": self.query_time_ms,
         }
+        if self.wisdom_entries:
+            result["wisdom"] = [w.to_dict() for w in self.wisdom_entries]
+        return result
 
 
 # ---------------------------------------------------------------------------
