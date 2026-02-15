@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Cognition Engines
   text: Decision Intelligence for AI Agents
-  tagline: Every decision automatically captures its full cognitive context - deliberation traces, bridge-definitions, and related decision links.
+  tagline: "Query past decisions, enforce guardrails, and track calibration - all in two API calls. v0.11.0: Pre-Action Hook, Dashboard, and Pluggable Storage."
   image:
     src: /logo.png
     alt: Cognition Engines
@@ -40,7 +40,7 @@ features:
     details: Track Brier scores, success rates, and confidence calibration over time. Reason-type analytics show which reasoning patterns predict success.
   - icon: 🔌
     title: MCP Integration
-    details: 7 native MCP tools for Claude Desktop, OpenClaw, and any MCP-compliant agent. Streamable HTTP at /mcp - plug into any AI agent system.
+    details: 11 MCP tools for Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent. Two PRIMARY tools (pre_action, get_session_context) handle the full workflow.
   - icon: ⚡
     title: JSON-RPC API
     details: CSTP protocol over HTTP. Query, check, record, review - all via simple JSON-RPC 2.0 calls. Built on FastAPI with ChromaDB for semantic search.
@@ -48,26 +48,22 @@ features:
 
 ## How It Works
 
-Every significant decision follows a simple protocol. The server handles the rest automatically.
+Two calls cover the full agent workflow:
 
 ```
-1. Query  →  "What solved problems like this?"
-2. Check  →  "Am I allowed to do this?"
-3. Record →  "Here's what I decided and why"
+Session start  → get_session_context  (cognitive context: profile, calibration, patterns)
+Decision point → pre_action           (query + guardrails + record in one call)
 ```
 
-The server auto-captures:
-- **Deliberation trace** from your queries and checks
-- **Bridge-definition** extracted from your decision text
-- **Related decisions** linked from your query results
+The server auto-captures deliberation traces, bridge-definitions, and related decision links - zero client changes needed.
 
 ```json
 {
-  "id": "abc123",
-  "deliberation_auto": true,
-  "deliberation_inputs_count": 2,
-  "bridge_auto": true,
-  "related_count": 5
+  "allowed": true,
+  "similar_decisions": [...],
+  "guardrail_results": [...],
+  "calibration_context": {"brier_score": 0.024, "accuracy": 0.963},
+  "decision_id": "abc123"
 }
 ```
 

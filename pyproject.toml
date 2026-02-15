@@ -1,6 +1,6 @@
 [project]
 name = "cognition-agent-decisions"
-version = "0.7.0"
+version = "0.11.0"
 description = "Decision intelligence for AI agents - semantic search, guardrails, and pattern detection"
 readme = "README.md"
 license = {text = "Apache-2.0"}
