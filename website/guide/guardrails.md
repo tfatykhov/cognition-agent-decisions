@@ -67,4 +67,4 @@ Pre-built guardrail templates are available in `guardrails/templates/`:
 
 ## Future: Censors (F027)
 
-Current guardrails are reactive (block at action time). A future **censor layer** will proactively warn when query results surface failed decisions with similar patterns - intercepting *before* the bad decision forms. See [F027 spec](/specs/f027-censor-layer).
+Current guardrails are reactive (block at action time). A future **censor layer** will proactively warn when query results surface failed decisions with similar patterns - intercepting *before* the bad decision forms. See [F033 spec](/specs/f033-censor-layer).
