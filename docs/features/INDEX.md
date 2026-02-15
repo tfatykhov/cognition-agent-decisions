@@ -30,6 +30,7 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F028 | Reasoning Capture | v0.10.0 | *(shipped as part of F023/F027)* |
 | F046 | Pre-Action Hook API | v0.11.0 | `F046-pre-action-hook.md` |
 | F047 | Session Context Endpoint | v0.11.0 | `F047-session-context.md` |
+| F044 | Agent Work Discovery | v0.12.0 | `F044-agent-work-discovery.md` |
 
 ## Roadmap
 
@@ -51,7 +52,7 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F041 | Memory Compaction | Beads (steveyegge/beads) | `F041-memory-compaction.md` |
 | F042 | ~~Decision Dependency Graph~~ | ~~Beads~~ (merged into F045) | `F042-decision-dependencies.md` |
 | F043 | Distributed Decision Merge | Beads (steveyegge/beads) | `F043-distributed-merge.md` |
-| F044 | Agent Work Discovery | Beads (steveyegge/beads) | `F044-agent-work-discovery.md` |
+| ~~F044~~ | ~~Agent Work Discovery~~ | ~~Beads~~ | *Shipped in v0.12.0* |
 | F045 | Decision Graph Storage Layer | GNN/KG Research (ICML 2025, MemoBrain, Context Graphs) | `F045-graph-storage-layer.md` |
 | ~~F046~~ | ~~Pre-Action Hook API~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
 | ~~F047~~ | ~~Session Context Endpoint~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |

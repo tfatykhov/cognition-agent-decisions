@@ -18,13 +18,13 @@ Extract ChromaDB coupling behind a provider abstraction.
 - [x] Add tests for `MemoryStore` backend
 - Spec: `docs/features/F048-multi-vectordb.md`
 
-### F044: Agent Work Discovery
+### F044: Agent Work Discovery ✅
 `cstp.ready` endpoint that surfaces prioritized cognitive actions.
-- [ ] Implement `ready_service.py` with action types: `review_outcome`, `calibration_drift`, `stale_pending`
-- [ ] Add `cstp.ready` JSON-RPC method to dispatcher
-- [ ] Add `ready` MCP tool (PRIMARY level)
-- [ ] Add `--min-priority` and `--type` filtering
-- [ ] Add tests
+- [x] Implement `ready_service.py` with action types: `review_outcome`, `calibration_drift`, `stale_pending`
+- [x] Add `cstp.ready` JSON-RPC method to dispatcher
+- [x] Add `ready` MCP tool (PRIMARY level)
+- [x] Add `--min-priority` and `--type` filtering
+- [x] Add tests
 - [ ] Add `cstp.py ready` CLI command
 - Spec: `docs/features/F044-agent-work-discovery.md`
 
@@ -149,6 +149,7 @@ Link decisions to executable tasks with dependencies.
 - [x] F047: Session Context Endpoint
 - [x] F047: Fix MCP handler `format` param forwarding
 - [x] F048 P1: Multi-Vector-DB Support — VectorStore/EmbeddingProvider ABCs, ChromaDB + MemoryStore backends, factory pattern (v0.12.0)
+- [x] F044: Agent Work Discovery — `cstp.ready` endpoint with review_outcome, calibration_drift, stale_pending action types, MCP tool, priority/category/type filtering, warnings for partial results
 - [x] MCP tool descriptions updated (PRIMARY vs Granular)
 - [x] Claude Code / Desktop MCP setup docs
 - [x] Custom domain base path fix
