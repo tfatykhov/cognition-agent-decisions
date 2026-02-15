@@ -1,6 +1,6 @@
 """Reindex service for CSTP.
 
-Provides functionality to recreate the ChromaDB collection with fresh embeddings.
+Provides functionality to recreate the vector store collection with fresh embeddings.
 """
 
 import logging
@@ -8,16 +8,9 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-
-from .query_service import (
-    CHROMA_URL,
-    COLLECTION_NAME,
-    DATABASE,
-    TENANT,
-    _generate_embedding,
-    load_all_decisions,
-)
+from .embeddings.factory import get_embedding_provider
+from .query_service import load_all_decisions
+from .vectordb.factory import get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -43,197 +36,34 @@ class ReindexResult:
         }
 
 
-async def _delete_collection() -> bool:
-    """Delete the existing collection if it exists."""
-    base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
-    logger.info("Attempting to delete collection at %s", base)
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # List collections to find our collection
-            resp = await client.get(f"{base}/collections")
-            logger.info("List collections response: %s %s", resp.status_code, resp.text[:200] if resp.text else "")
-            if resp.status_code != 200:
-                logger.warning("Failed to list collections: %s", resp.text)
-                return False
-
-            collections = resp.json()
-            coll_id = None
-            for c in collections:
-                if c.get("name") == COLLECTION_NAME:
-                    coll_id = c["id"]
-                    break
-
-            if not coll_id:
-                logger.info("Collection %s does not exist, nothing to delete", COLLECTION_NAME)
-                return True
-
-            # Delete the collection
-            logger.info("Deleting collection %s with id %s", COLLECTION_NAME, coll_id)
-            resp = await client.delete(f"{base}/collections/{coll_id}")
-
-            # Treat 404/NotFound as success (already deleted)
-            if resp.status_code == 404:
-                logger.info("Collection already deleted (404)")
-                return True
-
-            # Check response body for NotFoundError
-            if resp.status_code not in (200, 204):
-                try:
-                    err_data = resp.json()
-                    if err_data.get("error") == "NotFoundError":
-                        logger.info("Collection already deleted (NotFoundError)")
-                        return True
-                except Exception:
-                    pass
-                logger.error("Failed to delete collection: %s", resp.text)
-                return False
-
-            logger.info("Deleted collection %s", COLLECTION_NAME)
-            return True
-    except Exception as e:
-        logger.exception("Exception during collection delete: %s", e)
-        return False
-
-
-async def _create_collection() -> str | None:
-    """Create a new collection and return its ID."""
-    base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
-    logger.info("Creating collection at %s", base)
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Create collection with cosine distance
-            payload = {
-                "name": COLLECTION_NAME,
-                "metadata": {
-                    "hnsw:space": "cosine",
-                },
-            }
-            logger.info("Create collection payload: %s", payload)
-            resp = await client.post(f"{base}/collections", json=payload)
-            logger.info("Create collection response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
-
-            # If collection already exists, get its ID
-            if resp.status_code not in (200, 201):
-                try:
-                    err_data = resp.json()
-                    if "already exists" in err_data.get("message", ""):
-                        logger.info("Collection already exists, fetching existing ID")
-                        # Get existing collection ID
-                        list_resp = await client.get(f"{base}/collections")
-                        if list_resp.status_code == 200:
-                            for c in list_resp.json():
-                                if c.get("name") == COLLECTION_NAME:
-                                    coll_id = c["id"]
-                                    logger.info("Found existing collection with id %s", coll_id)
-                                    # Clear all documents from existing collection
-                                    await _clear_collection(client, base, coll_id)
-                                    return coll_id
-                except Exception:
-                    pass
-                logger.error("Failed to create collection: %s", resp.text)
-                return None
-
-            data = resp.json()
-            coll_id = data.get("id")
-            logger.info("Created collection %s with id %s", COLLECTION_NAME, coll_id)
-            return coll_id
-    except Exception as e:
-        logger.exception("Exception during collection create: %s", e)
-        return None
-
-
-async def _clear_collection(client: httpx.AsyncClient, base: str, coll_id: str) -> bool:
-    """Clear all documents from a collection."""
-    try:
-        # Get all document IDs
-        resp = await client.post(f"{base}/collections/{coll_id}/get", json={"limit": 10000})
-        if resp.status_code != 200:
-            logger.warning("Failed to get documents for clearing: %s", resp.text)
-            return False
-
-        data = resp.json()
-        ids = data.get("ids", [])
-        if not ids:
-            logger.info("Collection is already empty")
-            return True
-
-        logger.info("Clearing %d documents from collection", len(ids))
-        # Delete all documents
-        resp = await client.post(f"{base}/collections/{coll_id}/delete", json={"ids": ids})
-        if resp.status_code not in (200, 204):
-            logger.warning("Failed to delete documents: %s", resp.text)
-            return False
-
-        logger.info("Cleared %d documents", len(ids))
-        return True
-    except Exception as e:
-        logger.exception("Exception clearing collection: %s", e)
-        return False
-
-
-async def _add_to_collection(
-    coll_id: str,
-    doc_id: str,
-    embedding: list[float],
-    metadata: dict[str, Any],
-    document: str,
-) -> bool:
-    """Add a single document to the collection."""
-    base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        payload = {
-            "ids": [doc_id],
-            "embeddings": [embedding],
-            "metadatas": [metadata],
-            "documents": [document],
-        }
-        resp = await client.post(f"{base}/collections/{coll_id}/add", json=payload)
-        if resp.status_code not in (200, 201):
-            logger.error("Failed to add document %s: %s", doc_id, resp.text)
-            return False
-        return True
-
-
 async def reindex_decisions() -> ReindexResult:
     """Reindex all decisions with fresh embeddings.
 
     This will:
-    1. Delete the existing collection
-    2. Create a new collection
-    3. Load all decisions from YAML files
-    4. Generate embeddings for each
-    5. Add to the new collection
+    1. Reset the vector store collection
+    2. Load all decisions from YAML files
+    3. Generate embeddings for each
+    4. Upsert to the store
 
     Returns:
         ReindexResult with operation status.
     """
     start_time = time.time()
 
-    # Step 1: Delete existing collection
-    if not await _delete_collection():
+    store = get_vector_store()
+    provider = get_embedding_provider()
+
+    # Step 1: Reset collection (delete + recreate)
+    if not await store.reset():
         return ReindexResult(
             success=False,
             decisions_indexed=0,
             errors=0,
             duration_ms=int((time.time() - start_time) * 1000),
-            message="Failed to delete existing collection",
+            message="Failed to reset vector store collection",
         )
 
-    # Step 2: Create new collection
-    coll_id = await _create_collection()
-    if not coll_id:
-        return ReindexResult(
-            success=False,
-            decisions_indexed=0,
-            errors=0,
-            duration_ms=int((time.time() - start_time) * 1000),
-            message="Failed to create new collection",
-        )
-
-    # Step 3: Load all decisions
+    # Step 2: Load all decisions
     decisions = await load_all_decisions()
     if not decisions:
         return ReindexResult(
@@ -244,7 +74,7 @@ async def reindex_decisions() -> ReindexResult:
             message="No decisions found to index",
         )
 
-    # Step 4 & 5: Generate embeddings and add to collection
+    # Step 3 & 4: Generate embeddings and upsert
     indexed = 0
     errors = 0
 
@@ -262,25 +92,23 @@ async def reindex_decisions() -> ReindexResult:
         text = f"{summary}\n{context}\nCategory: {category}"
 
         try:
-            embedding = await _generate_embedding(text)
+            embedding = await provider.embed(text)
         except Exception as e:
             logger.error("Failed to generate embedding for %s: %s", doc_id, e)
             errors += 1
             continue
 
         # Build metadata
-        # Extract title from title, decision, or summary fields (fallback chain)
         title = (
             decision.get("title")
             or decision.get("decision")
             or decision.get("summary")
             or ""
         )
-        # Extract date from date or timestamp fields (YYYY-MM-DD format)
         date_raw = decision.get("date") or decision.get("timestamp") or ""
         date_str = str(date_raw)[:10] if date_raw else ""
 
-        metadata = {
+        metadata: dict[str, Any] = {
             "title": title[:500] if title else "",
             "date": date_str,
             "category": decision.get("category", ""),
@@ -290,11 +118,11 @@ async def reindex_decisions() -> ReindexResult:
             "created_at": decision.get("created_at", ""),
         }
 
-        # Filter None values (ChromaDB doesn't like them)
+        # Filter None/empty values (some backends don't accept them)
         metadata = {k: v for k, v in metadata.items() if v is not None and v != ""}
 
-        # Add to collection
-        if await _add_to_collection(coll_id, doc_id, embedding, metadata, text):
+        # Upsert to store
+        if await store.upsert(doc_id, text, embedding, metadata):
             indexed += 1
         else:
             errors += 1

@@ -1,6 +1,6 @@
 # F048: Multi-Vector-DB Support
 
-**Status:** Proposed
+**Status:** P1 Shipped (v0.12.0)
 **Priority:** High
 **Category:** Infrastructure
 
@@ -454,13 +454,21 @@ services:
 
 ## Phases
 
-### P1: Abstraction + ChromaDB extraction
-- Define `VectorStore` and `EmbeddingProvider` ABCs
-- Extract ChromaDB logic from `query_service.py` and `decision_service.py` into `vectordb/chromadb.py`
-- Extract Gemini embedding logic into `embeddings/gemini.py`
-- Add `MemoryStore` for testing
-- Factory with env-based backend selection
+### P1: Abstraction + ChromaDB extraction ✅ Shipped
+- [x] Define `VectorStore` and `EmbeddingProvider` ABCs
+- [x] Extract ChromaDB logic from `query_service.py` and `decision_service.py` into `vectordb/chromadb.py`
+- [x] Extract Gemini embedding logic into `embeddings/gemini.py`
+- [x] Add `MemoryStore` for testing
+- [x] Factory with env-based backend selection
+- [x] Refactor `reindex_service.py` to use VectorStore interface
+- [x] Update all tests to use MemoryStore + factory injection (446 tests pass)
 - **Zero behavior change** - existing ChromaDB deployments work unchanged
+
+**Implementation notes (P1):**
+- `hybrid_query()` was kept off the ABC — hybrid search stays orchestrated in the dispatcher (semantic via VectorStore + BM25 via `bm25_index.py`), matching existing behavior
+- `EmbeddingProvider.embed()` takes a single string (not batch) — `embed_batch()` provided as sequential default
+- `VectorStore.close()` is a non-abstract default no-op — backends override only if they hold resources
+- MemoryStore implements full ChromaDB-style where-clause matching: `$gte`, `$lte`, `$gt`, `$lt`, `$ne`, `$in`, `$nin`, `$contains`, `$or`, `$and`
 
 ### P2: Weaviate + pgvector
 - Implement `WeaviateStore` with native hybrid search

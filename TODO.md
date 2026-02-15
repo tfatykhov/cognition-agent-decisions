@@ -4,18 +4,18 @@ Prioritized work items. Check off as completed. See `docs/features/` for full sp
 
 ## P0 — Ship Next (v0.12.0)
 
-### F048: Multi-Vector-DB Support
+### F048: Multi-Vector-DB Support ✅
 Extract ChromaDB coupling behind a provider abstraction.
-- [ ] Define `VectorStore` ABC in `a2a/cstp/vectordb/__init__.py`
-- [ ] Define `EmbeddingProvider` ABC in `a2a/cstp/embeddings/__init__.py`
-- [ ] Extract ChromaDB HTTP logic from `query_service.py` into `vectordb/chromadb.py`
-- [ ] Extract ChromaDB indexing from `decision_service.py` into `vectordb/chromadb.py`
-- [ ] Extract Gemini embedding logic into `embeddings/gemini.py`
-- [ ] Implement `MemoryStore` (in-memory backend for tests)
-- [ ] Add factory with `VECTOR_BACKEND` env var selection
-- [ ] Update `query_service.py` and `decision_service.py` to use `VectorStore` interface
-- [ ] Verify all existing tests pass (zero behavior change)
-- [ ] Add tests for `MemoryStore` backend
+- [x] Define `VectorStore` ABC in `a2a/cstp/vectordb/__init__.py`
+- [x] Define `EmbeddingProvider` ABC in `a2a/cstp/embeddings/__init__.py`
+- [x] Extract ChromaDB HTTP logic from `query_service.py` into `vectordb/chromadb.py`
+- [x] Extract ChromaDB indexing from `decision_service.py` into `vectordb/chromadb.py`
+- [x] Extract Gemini embedding logic into `embeddings/gemini.py`
+- [x] Implement `MemoryStore` (in-memory backend for tests)
+- [x] Add factory with `VECTOR_BACKEND` env var selection
+- [x] Update `query_service.py` and `decision_service.py` to use `VectorStore` interface
+- [x] Verify all existing tests pass (zero behavior change)
+- [x] Add tests for `MemoryStore` backend
 - Spec: `docs/features/F048-multi-vectordb.md`
 
 ### F044: Agent Work Discovery
@@ -29,8 +29,8 @@ Extract ChromaDB coupling behind a provider abstraction.
 - Spec: `docs/features/F044-agent-work-discovery.md`
 
 ### Bug fixes / improvements
-- [ ] Fix F047 MCP handler: `format` param not forwarded to `SessionContextRequest` (returns JSON instead of markdown via MCP)
-- [ ] Merge F046/F047 feature branch PR if still open (`fix/session-context-format-param`)
+- [x] Fix F047 MCP handler: `format` param not forwarded to `SessionContextRequest` (returns JSON instead of markdown via MCP)
+- [x] Merge F046/F047 feature branch PR if still open (`fix/session-context-format-param`)
 - [ ] Add date-range filtering to `cstp.queryDecisions` (`dateFrom`/`dateTo` params)
 
 ## P1 — High Priority
@@ -137,7 +137,7 @@ Link decisions to executable tasks with dependencies.
 ## Website / Docs
 - [ ] Update website for custom domain (cognition-engines.ai) — done ✅
 - [ ] Add F046/F047 guide pages
-- [ ] Add F048 architecture diagram
+- [x] Add F048 architecture diagram
 - [ ] Version badge update to v0.11.0+
 
 ## Done ✅
@@ -147,6 +147,8 @@ Link decisions to executable tasks with dependencies.
 - [x] F022-F028: MCP, deliberation traces, bridge-definitions, decision quality (v0.10.0)
 - [x] F046: Pre-Action Hook API
 - [x] F047: Session Context Endpoint
+- [x] F047: Fix MCP handler `format` param forwarding
+- [x] F048 P1: Multi-Vector-DB Support — VectorStore/EmbeddingProvider ABCs, ChromaDB + MemoryStore backends, factory pattern (v0.12.0)
 - [x] MCP tool descriptions updated (PRIMARY vs Granular)
 - [x] Claude Code / Desktop MCP setup docs
 - [x] Custom domain base path fix
