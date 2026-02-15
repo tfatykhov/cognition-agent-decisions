@@ -519,3 +519,37 @@ class GetSessionContextInput(BaseModel):
         default="markdown",
         description="Response format: 'json' for structured data, 'markdown' for system prompt injection",
     )
+
+
+# ============================================================================
+# F044: ready tool
+# ============================================================================
+
+
+class ReadyInput(BaseModel):
+    """Input for the ready tool (F044)."""
+
+    min_priority: Literal["low", "medium", "high"] = Field(
+        default="low",
+        description="Minimum priority level: low (all), medium (skip low), high (only high)",
+    )
+    action_types: list[str] | None = Field(
+        default=None,
+        description=(
+            "Filter to specific action types: review_outcome, "
+            "calibration_drift, stale_pending (default: all)"
+        ),
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=50,
+        description="Maximum actions to return (1-50)",
+    )
+    category: str | None = Field(
+        default=None,
+        description=(
+            "Filter to specific category: architecture, process, "
+            "integration, tooling, security"
+        ),
+    )

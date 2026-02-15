@@ -35,6 +35,7 @@ from .mcp_schemas import (
     LogDecisionInput,
     PreActionInput,
     QueryDecisionsInput,
+    ReadyInput,
     RecordThoughtInput,
     ReviewOutcomeInput,
     UpdateDecisionInput,
@@ -267,6 +268,18 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=_deref_schema(GetSessionContextInput.model_json_schema()),
         ),
+        # F044: Agent Work Discovery
+        Tool(
+            name="ready",
+            description=(
+                "PRIMARY - Returns prioritized cognitive actions needing attention: "
+                "outcome reviews (overdue decisions), calibration drift (per-category "
+                "degradation), and stale pending decisions. Call during idle periods "
+                "or after completing tasks to discover maintenance work. Filter by "
+                "priority (low/medium/high), action types, or category."
+            ),
+            inputSchema=_deref_schema(ReadyInput.model_json_schema()),
+        ),
     ]
 
 
@@ -308,6 +321,9 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "get_session_context":
             return await _handle_get_session_context_mcp(arguments)
+
+        if name == "ready":
+            return await _handle_ready_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -895,6 +911,33 @@ async def _handle_get_session_context_mcp(
 
     request = SessionContextRequest.from_params(params)
     response = await get_session_context(request, agent_id="mcp-client")
+
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(response.to_dict(), indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_ready_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle ready tool call (F044)."""
+    from .cstp.models import ReadyRequest
+    from .cstp.ready_service import get_ready_actions
+
+    args = ReadyInput(**arguments)
+
+    params: dict[str, Any] = {
+        "minPriority": args.min_priority,
+        "limit": args.limit,
+    }
+    if args.action_types:
+        params["actionTypes"] = args.action_types
+    if args.category:
+        params["category"] = args.category
+
+    request = ReadyRequest.from_params(params)
+    response = await get_ready_actions(request)
 
     return [
         TextContent(
