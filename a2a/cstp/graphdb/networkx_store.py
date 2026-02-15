@@ -4,6 +4,7 @@ Production graph backend using NetworkX MultiDiGraph for
 in-process graph operations and JSONL for edge persistence.
 """
 
+import asyncio
 import logging
 import os
 from collections import deque
@@ -11,8 +12,8 @@ from pathlib import Path
 
 import networkx as nx
 
-from . import GraphEdge, GraphNode, GraphStore
-from .persistence import load_edges_from_jsonl, save_edges_to_jsonl
+from . import VALID_EDGE_TYPES, GraphEdge, GraphNode, GraphStore
+from .persistence import append_edge_to_jsonl, load_edges_from_jsonl, save_edges_to_jsonl
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class NetworkXGraphStore(GraphStore):
         self._graph: nx.MultiDiGraph = nx.MultiDiGraph()
         self._persistence_path = Path(persistence_path or GRAPH_DATA_PATH)
         self._initialized = False
+        self._lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Load edges from JSONL if the file exists."""
@@ -67,18 +69,21 @@ class NetworkXGraphStore(GraphStore):
     async def add_edge(self, edge: GraphEdge) -> bool:
         if edge.source_id == edge.target_id:
             return False
+        if edge.edge_type not in VALID_EDGE_TYPES:
+            return False
 
-        self._graph.add_edge(
-            edge.source_id,
-            edge.target_id,
-            key=edge.edge_type,
-            edge_type=edge.edge_type,
-            weight=edge.weight,
-            created_at=edge.created_at,
-            created_by=edge.created_by,
-            context=edge.context,
-        )
-        await self._persist()
+        async with self._lock:
+            self._graph.add_edge(
+                edge.source_id,
+                edge.target_id,
+                key=edge.edge_type,
+                edge_type=edge.edge_type,
+                weight=edge.weight,
+                created_at=edge.created_at,
+                created_by=edge.created_by,
+                context=edge.context,
+            )
+            await self._persist_append(edge)
         return True
 
     async def remove_edge(
@@ -87,26 +92,27 @@ class NetworkXGraphStore(GraphStore):
         target_id: str,
         edge_type: str | None = None,
     ) -> bool:
-        if not self._graph.has_node(source_id) or not self._graph.has_node(target_id):
-            return False
+        async with self._lock:
+            if not self._graph.has_node(source_id) or not self._graph.has_node(target_id):
+                return False
 
-        removed = False
-        if edge_type is not None:
-            if self._graph.has_edge(source_id, target_id, key=edge_type):
-                self._graph.remove_edge(source_id, target_id, key=edge_type)
-                removed = True
-        else:
-            # Remove all edges between the two nodes
-            while self._graph.has_edge(source_id, target_id):
-                keys = list(self._graph[source_id][target_id].keys())
-                if not keys:
-                    break
-                self._graph.remove_edge(source_id, target_id, key=keys[0])
-                removed = True
+            removed = False
+            if edge_type is not None:
+                if self._graph.has_edge(source_id, target_id, key=edge_type):
+                    self._graph.remove_edge(source_id, target_id, key=edge_type)
+                    removed = True
+            else:
+                # Remove all edges between the two nodes
+                while self._graph.has_edge(source_id, target_id):
+                    keys = list(self._graph[source_id][target_id].keys())
+                    if not keys:
+                        break
+                    self._graph.remove_edge(source_id, target_id, key=keys[0])
+                    removed = True
 
-        if removed:
-            await self._persist()
-        return removed
+            if removed:
+                await self._persist()
+            return removed
 
     async def get_node(self, node_id: str) -> GraphNode | None:
         if node_id not in self._graph:
@@ -215,9 +221,10 @@ class NetworkXGraphStore(GraphStore):
         return int(self._graph.number_of_edges())
 
     async def reset(self) -> bool:
-        self._graph.clear()
-        if self._persistence_path.exists():
-            self._persistence_path.unlink()
+        async with self._lock:
+            self._graph.clear()
+            if self._persistence_path.exists():
+                self._persistence_path.unlink()
         return True
 
     def _edge_from_attrs(
@@ -235,6 +242,10 @@ class NetworkXGraphStore(GraphStore):
         )
 
     async def _persist(self) -> None:
-        """Write all edges to JSONL (full rewrite)."""
+        """Write all edges to JSONL (full rewrite). Used by remove_edge."""
         edges = await self.get_edges()
         save_edges_to_jsonl(edges, self._persistence_path)
+
+    async def _persist_append(self, edge: GraphEdge) -> None:
+        """Append a single edge to JSONL. Used by add_edge."""
+        append_edge_to_jsonl(edge, self._persistence_path)

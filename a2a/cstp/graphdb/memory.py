@@ -6,7 +6,7 @@ No external dependencies required.
 
 from collections import deque
 
-from . import GraphEdge, GraphNode, GraphStore
+from . import VALID_EDGE_TYPES, GraphEdge, GraphNode, GraphStore
 
 
 class MemoryGraphStore(GraphStore):
@@ -28,6 +28,8 @@ class MemoryGraphStore(GraphStore):
 
     async def add_edge(self, edge: GraphEdge) -> bool:
         if edge.source_id == edge.target_id:
+            return False
+        if edge.edge_type not in VALID_EDGE_TYPES:
             return False
 
         # Ensure source and target nodes exist (create minimal stubs)

@@ -38,6 +38,30 @@ def save_edges_to_jsonl(edges: list[GraphEdge], path: Path) -> None:
             f.write(line + "\n")
 
 
+def append_edge_to_jsonl(edge: GraphEdge, path: Path) -> None:
+    """Append a single edge to a JSONL file.
+
+    Args:
+        edge: Edge to append.
+        path: File path for the JSONL file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(
+        {
+            "source_id": edge.source_id,
+            "target_id": edge.target_id,
+            "edge_type": edge.edge_type,
+            "weight": edge.weight,
+            "created_at": edge.created_at,
+            "created_by": edge.created_by,
+            "context": edge.context,
+        },
+        ensure_ascii=False,
+    )
+    with path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
 def load_edges_from_jsonl(path: Path) -> list[GraphEdge]:
     """Load edges from a JSONL file.
 

@@ -200,7 +200,7 @@ async def initialize_graph_from_decisions(
         # Add relates_to edges from YAML
         related_to = decision.get("related_to") or []
         for related in related_to:
-            related_id = str(related.get("id", ""))
+            related_id = str(related.get("id", ""))[:8]
             if not related_id:
                 continue
 
