@@ -123,28 +123,7 @@ curl -X POST http://localhost:8100/cstp \
 
 ## Architecture
 
-```
-AI Agents (Claude Code, OpenClaw, LangChain, ...)
-    │
-    ├── MCP (Streamable HTTP at /mcp)
-    └── JSON-RPC 2.0 (POST /cstp)
-         │
-    ┌────┴────────────────────────────────┐
-    │         CSTP Server (FastAPI)        │
-    │  dispatcher.py → *_service.py        │
-    ├──────────────┬──────────────────────┤
-    │ VectorStore  │  EmbeddingProvider   │
-    │ (pluggable)  │  (pluggable)         │
-    ├──────────────┼──────────────────────┤
-    │ ChromaDB     │  Gemini              │
-    │ Memory       │  (OpenAI, Ollama     │
-    │ (Weaviate,   │   planned)           │
-    │  pgvector    │                      │
-    │  planned)    │                      │
-    └──────────────┴──────────────────────┘
-         │
-    YAML Files (decisions, guardrails)
-```
+![Cognition Engines Architecture](docs/architecture.png)
 
 ### Pluggable Storage (F048)
 
