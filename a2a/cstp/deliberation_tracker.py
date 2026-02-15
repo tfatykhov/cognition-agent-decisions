@@ -170,6 +170,66 @@ class DeliberationTracker:
             convergence_point=None,
         )
 
+    def debug_sessions(self, key: str | None = None) -> dict[str, Any]:
+        """Peek at tracker state for debugging. Read-only, does not consume.
+
+        Args:
+            key: If provided, return detail for just that session.
+                 If None, return all sessions.
+
+        Returns:
+            Dict with sessions list, session_count, and detail mapping.
+        """
+        with self._lock:
+            cutoff = time.time() - self._ttl
+            now = time.time()
+
+            if key is not None:
+                session = self._sessions.get(key)
+                if session is None:
+                    return {"sessions": [], "sessionCount": 0, "detail": {}}
+                valid = [i for i in session.inputs if i.timestamp >= cutoff]
+                inputs = [
+                    {
+                        "id": i.id,
+                        "type": i.type,
+                        "text": i.text,
+                        "source": i.source,
+                        "ageSeconds": int(now - i.timestamp),
+                    }
+                    for i in valid
+                ]
+                detail = {key: {"inputCount": len(inputs), "inputs": inputs}}
+                return {
+                    "sessions": [key],
+                    "sessionCount": 1,
+                    "detail": detail,
+                }
+
+            # All sessions
+            sessions: list[str] = []
+            detail: dict[str, Any] = {}
+            for k, session in self._sessions.items():
+                sessions.append(k)
+                valid = [i for i in session.inputs if i.timestamp >= cutoff]
+                inputs = [
+                    {
+                        "id": i.id,
+                        "type": i.type,
+                        "text": i.text,
+                        "source": i.source,
+                        "ageSeconds": int(now - i.timestamp),
+                    }
+                    for i in valid
+                ]
+                detail[k] = {"inputCount": len(inputs), "inputs": inputs}
+
+            return {
+                "sessions": sessions,
+                "sessionCount": len(sessions),
+                "detail": detail,
+            }
+
     @property
     def session_count(self) -> int:
         """Number of active tracker sessions."""
@@ -220,6 +280,19 @@ def reset_tracker() -> None:
     global _tracker
     with _tracker_lock:
         _tracker = None
+
+
+def debug_tracker(key: str | None = None) -> dict[str, Any]:
+    """Convenience wrapper for debugging tracker state.
+
+    Args:
+        key: Optional session key to inspect. None returns all sessions.
+
+    Returns:
+        Dict with sessions, sessionCount, and detail.
+    """
+    tracker = get_tracker()
+    return tracker.debug_sessions(key)
 
 
 # ---------------------------------------------------------------------------

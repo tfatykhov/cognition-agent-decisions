@@ -1111,3 +1111,75 @@ class GetWisdomResponse:
             "totalDecisions": self.total_decisions,
             "categoriesAnalyzed": self.categories_analyzed,
         }
+
+
+# ============================================================================
+# F126: Debug Tracker models
+# ============================================================================
+
+
+@dataclass(slots=True)
+class DebugTrackerRequest:
+    """Request for cstp.debugTracker (F126)."""
+
+    key: str | None = None
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "DebugTrackerRequest":
+        """Create from JSON-RPC params."""
+        return cls(key=params.get("key"))
+
+
+@dataclass(slots=True)
+class TrackerInputDetail:
+    """Detail of a single tracked input in a debug session."""
+
+    id: str
+    type: str
+    text: str
+    source: str
+    age_seconds: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "id": self.id,
+            "type": self.type,
+            "text": self.text,
+            "source": self.source,
+            "ageSeconds": self.age_seconds,
+        }
+
+
+@dataclass(slots=True)
+class TrackerSessionDetail:
+    """Detail of a single tracker session."""
+
+    key: str
+    input_count: int
+    inputs: list[TrackerInputDetail] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "key": self.key,
+            "inputCount": self.input_count,
+            "inputs": [i.to_dict() for i in self.inputs],
+        }
+
+
+@dataclass(slots=True)
+class DebugTrackerResponse:
+    """Response from cstp.debugTracker (F126)."""
+
+    sessions: list[str]
+    session_count: int
+    detail: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "sessions": self.sessions,
+            "sessionCount": self.session_count,
+            "detail": self.detail,
+        }
