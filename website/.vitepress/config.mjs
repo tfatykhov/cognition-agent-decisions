@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Cognition Engines',
   description: 'Decision Intelligence for AI Agents',
-  base: '/cognition-agent-decisions/',
+  base: '/',
   appearance: 'dark',
 
   head: [
