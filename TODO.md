@@ -31,18 +31,19 @@ Extract ChromaDB coupling behind a provider abstraction.
 ### Bug fixes / improvements
 - [x] Fix F047 MCP handler: `format` param not forwarded to `SessionContextRequest` (returns JSON instead of markdown via MCP)
 - [x] Merge F046/F047 feature branch PR if still open (`fix/session-context-format-param`)
-- [ ] Add date-range filtering to `cstp.queryDecisions` (`dateFrom`/`dateTo` params)
+- [x] Fix #120: `pre_action` auto_record now attaches deliberation, related decisions, and bridge extraction
 
 ## P1 — High Priority
 
-### F041: Memory Compaction
+### F041: Memory Compaction ✅
 Semantic decay for old resolved decisions.
-- [ ] Define compaction levels (full → summary → digest → wisdom)
-- [ ] Implement time-based compaction in query responses
-- [ ] Add `cstp.compact` endpoint for manual trigger
-- [ ] Add `cstp.getWisdom` for category-level distilled principles
-- [ ] LLM-generated summaries for summary/digest levels
-- [ ] `preserve: true` flag to skip compaction
+- [x] Define compaction levels (full → summary → digest → wisdom)
+- [x] Implement time-based compaction in query responses (`cstp.getCompacted`)
+- [x] Add `cstp.compact` endpoint for manual trigger
+- [x] Add `cstp.getWisdom` for category-level distilled principles
+- [x] `preserve: true` flag via `cstp.setPreserve`
+- [ ] LLM-generated summaries for summary/digest levels (P2)
+- [ ] Integrate compacted results into `get_session_context`
 - Spec: `docs/features/F041-memory-compaction.md`
 
 ### F045: Decision Graph Storage Layer ✅
@@ -105,6 +106,9 @@ Link decisions to executable tasks with dependencies.
 - [ ] Implement Minsky Ch 27 censor for blocking bad decision patterns
 - Spec: `docs/features/F033-censor-layer.md`
 
+### Other improvements
+- [ ] Add date-range filtering to `cstp.queryDecisions` (`dateFrom`/`dateTo` params)
+
 ### Embedding providers (F048 P3)
 - [ ] `embeddings/openai.py` — text-embedding-3-small/large
 - [ ] `embeddings/ollama.py` — Local models (nomic-embed-text)
@@ -159,3 +163,5 @@ Link decisions to executable tasks with dependencies.
 - [x] Claude Code / Desktop MCP setup docs
 - [x] Custom domain base path fix
 - [x] F045 P1: Decision Graph Storage Layer — GraphStore ABC + factory, NetworkX + MemoryGraphStore backends, JSONL persistence, `cstp.linkDecisions` + `cstp.getGraph` endpoints, graph init from `related_to` YAML data
+- [x] F041: Memory Compaction — 4 levels (full/summary/digest/wisdom), `cstp.compact`, `cstp.getCompacted`, `cstp.getWisdom`, `cstp.setPreserve`
+- [x] Fix #120: pre_action auto_record deliberation/related/bridge attachment
