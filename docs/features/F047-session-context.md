@@ -1,6 +1,6 @@
 # F047: Session Context Endpoint
 
-**Status:** Proposed
+**Status:** Shipped (v0.11.0)
 **Priority:** High
 **Category:** Agentic Loop Integration
 

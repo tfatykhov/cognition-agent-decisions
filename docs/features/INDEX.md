@@ -28,6 +28,8 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F025 | Related Decisions | v0.10.0 | *(in changelog, no standalone spec)* |
 | F027 | Decision Quality | v0.10.0 | `F027-decision-quality.md` |
 | F028 | Reasoning Capture | v0.10.0 | *(shipped as part of F023/F027)* |
+| F046 | Pre-Action Hook API | v0.11.0 | `F046-pre-action-hook.md` |
+| F047 | Session Context Endpoint | v0.11.0 | `F047-session-context.md` |
 
 ## Roadmap
 
@@ -51,8 +53,8 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F043 | Distributed Decision Merge | Beads (steveyegge/beads) | `F043-distributed-merge.md` |
 | F044 | Agent Work Discovery | Beads (steveyegge/beads) | `F044-agent-work-discovery.md` |
 | F045 | Decision Graph Storage Layer | GNN/KG Research (ICML 2025, MemoBrain, Context Graphs) | `F045-graph-storage-layer.md` |
-| F046 | Pre-Action Hook API | Agentic Loop Integration | `F046-pre-action-hook.md` |
-| F047 | Session Context Endpoint | Agentic Loop Integration | `F047-session-context.md` |
+| ~~F046~~ | ~~Pre-Action Hook API~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
+| ~~F047~~ | ~~Session Context Endpoint~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
 | F048 | Multi-Vector-DB Support | Infrastructure | `F048-multi-vectordb.md` |
 
 ## Retired IDs
