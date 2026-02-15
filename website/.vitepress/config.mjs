@@ -111,11 +111,6 @@ export default withMermaid(defineConfig({
       provider: 'local'
     },
 
-    editLink: {
-      pattern: 'https://github.com/tfatykhov/cognition-agent-decisions/edit/main/website/:path',
-      text: 'Edit this page on GitHub'
-    },
-
     footer: {
       message: 'Released under the Apache 2.0 License.',
       copyright: 'Built with Minsky\'s Society of Mind'
