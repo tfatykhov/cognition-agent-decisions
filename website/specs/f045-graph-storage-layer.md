@@ -1,6 +1,6 @@
 # F045: Decision Graph Storage Layer
 
-**Status:** Proposed
+**Status:** P1 Implemented
 **Priority:** High
 **Research basis:** Context Graphs (Masood 2026), Graph-Constrained Reasoning (ICML 2025), MemoBrain (Qian et al. 2026), KnowFlow (Neural Networks 2026), Dual Memory Knowledge Graphs (ScienceDirect 2026)
 

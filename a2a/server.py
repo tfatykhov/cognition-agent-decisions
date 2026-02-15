@@ -54,6 +54,22 @@ async def lifespan(app: FastAPI):
     register_methods(dispatcher)
     app.state.dispatcher = dispatcher
 
+    # F045: Initialize graph store and load existing related_to edges
+    try:
+        from .cstp.graph_service import initialize_graph_from_decisions
+        from .cstp.graphdb.factory import get_graph_store, mark_initialized, set_graph_store
+
+        graph_store = get_graph_store()
+        await graph_store.initialize()
+        await initialize_graph_from_decisions()
+        mark_initialized()
+        app.state.graph_store = graph_store
+        logger.info("Graph store initialized")
+    except Exception:
+        logger.warning("Graph store initialization failed", exc_info=True)
+        set_graph_store(None)
+        app.state.graph_store = None
+
     # Initialize MCP Streamable HTTP session manager
     try:
         from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
