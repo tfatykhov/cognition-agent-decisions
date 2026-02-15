@@ -825,6 +825,32 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.setPreserve", _handle_set_preserve)
     dispatcher.register("cstp.getWisdom", _handle_get_wisdom)
 
+    # F126: Debug Tracker
+    dispatcher.register("cstp.debugTracker", _handle_debug_tracker)
+
+
+async def _handle_debug_tracker(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.debugTracker method (F126).
+
+    Read-only peek at deliberation tracker state for debugging.
+    Any authenticated agent can inspect all sessions (admin-level debug tool).
+
+    Args:
+        params: JSON-RPC params with optional 'key' field.
+        agent_id: Authenticated agent ID (not scoped — intentional for debugging).
+
+    Returns:
+        Tracker debug info with sessions, counts, and input details.
+    """
+    from .deliberation_tracker import debug_tracker
+    from .models import DebugTrackerRequest, DebugTrackerResponse
+
+    params = params or {}
+    request = DebugTrackerRequest.from_params(params)
+    raw = debug_tracker(key=request.key)
+    response = DebugTrackerResponse.from_raw(raw)
+    return response.to_dict()
+
 
 async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     """Handle cstp.updateDecision method (F027 backfill).
