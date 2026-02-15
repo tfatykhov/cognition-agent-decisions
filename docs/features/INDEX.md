@@ -53,6 +53,7 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F045 | Decision Graph Storage Layer | GNN/KG Research (ICML 2025, MemoBrain, Context Graphs) | `F045-graph-storage-layer.md` |
 | F046 | Pre-Action Hook API | Agentic Loop Integration | `F046-pre-action-hook.md` |
 | F047 | Session Context Endpoint | Agentic Loop Integration | `F047-session-context.md` |
+| F048 | Multi-Vector-DB Support | Infrastructure | `F048-multi-vectordb.md` |
 
 ## Retired IDs
 
