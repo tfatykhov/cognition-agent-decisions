@@ -1,8 +1,8 @@
 # MCP Integration
 
-> **Feature:** F022, F046, F047 | **Status:** Shipped in v0.10.0+
+> **Feature:** F022, F044, F045, F046, F047 | **Status:** Shipped in v0.12.0
 
-Cognition Engines exposes 11 tools via the [Model Context Protocol](https://modelcontextprotocol.io/) for integration with Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent.
+Cognition Engines exposes 14+ tools via the [Model Context Protocol](https://modelcontextprotocol.io/) for integration with Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent.
 
 ## Endpoint
 
@@ -18,6 +18,14 @@ Streamable HTTP - handles both POST (tool calls) and GET (SSE events).
 |------|-------------|
 | `pre_action` **(PRIMARY)** | All-in-one pre-action check: queries similar past decisions, evaluates guardrails, fetches calibration context, extracts patterns, and optionally records the decision. One call replaces `query_decisions` + `check_action` + `log_decision`. |
 | `get_session_context` **(PRIMARY)** | Full cognitive context for session start: agent profile (accuracy, Brier, tendency), relevant decisions, guardrails, calibration by category, overdue reviews, and confirmed patterns. Available in JSON or markdown for system prompt injection. |
+| `ready` **(PRIMARY)** | Prioritized cognitive maintenance queue: overdue reviews, calibration drift, stale decisions. Filter by priority, type, category. |
+
+## Graph Tools (F045)
+
+| Tool | Description |
+|------|-------------|
+| `link_decisions` | Create typed edges between decisions (`relates_to`, `supersedes`, `depends_on`) with optional weight |
+| `get_graph` | Query subgraph around a decision with configurable depth and edge type filters. Returns nodes with metadata and weighted edges. |
 
 ## Granular Tools (Fine-Grained Control)
 
@@ -36,15 +44,19 @@ Streamable HTTP - handles both POST (tool calls) and GET (SSE events).
 ## Recommended Workflow
 
 ```
-Session start → get_session_context (load cognitive context)
+Session start    → get_session_context  (load cognitive context)
        ↓
-Decision point → pre_action (query + guardrails + record in one call)
+Maintenance      → ready                (check for overdue reviews, drift)
        ↓
-During work → record_thought (capture reasoning)
+Decision point   → pre_action           (query + guardrails + record)
        ↓
-After work → update_decision (finalize decision text and context)
+During work      → record_thought       (capture reasoning)
        ↓
-Later → review_outcome (record success/failure for calibration)
+After work       → update_decision      (finalize decision text)
+       ↓
+Link related     → link_decisions       (explicit relationships)
+       ↓
+Later            → review_outcome       (record success/failure)
 ```
 
 ## Claude Code CLI
