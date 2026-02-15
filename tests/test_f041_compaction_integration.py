@@ -659,35 +659,34 @@ class TestAutoCompactOnStartup:
             "mcp.server": mcp_mock.server,
             "mcp.server.streamable_http_manager": mcp_mock.server.streamable_http_manager,
         }
-        with patch.dict(sys.modules, mcp_modules):
-            # Patch at the source module (local import inside lifespan resolves here)
-            with (
-                patch(
-                    "a2a.cstp.compaction_service.run_compaction",
-                    new_callable=AsyncMock,
-                    return_value=mock_response,
-                ) as mock_compact,
-                patch("a2a.server.AuthManager"),
-                patch("a2a.server.set_auth_manager"),
-                patch("a2a.server.get_dispatcher") as mock_disp,
-                patch("a2a.server.register_methods"),
-                patch(
-                    "a2a.cstp.graphdb.factory.get_graph_store",
-                    side_effect=ImportError("no graph"),
-                ),
-            ):
-                mock_disp.return_value = MagicMock()
+        with (
+            patch.dict(sys.modules, mcp_modules),
+            patch(
+                "a2a.cstp.compaction_service.run_compaction",
+                new_callable=AsyncMock,
+                return_value=mock_response,
+            ) as mock_compact,
+            patch("a2a.server.AuthManager"),
+            patch("a2a.server.set_auth_manager"),
+            patch("a2a.server.get_dispatcher") as mock_disp,
+            patch("a2a.server.register_methods"),
+            patch(
+                "a2a.cstp.graphdb.factory.get_graph_store",
+                side_effect=ImportError("no graph"),
+            ),
+        ):
+            mock_disp.return_value = MagicMock()
 
-                from a2a.server import lifespan
+            from a2a.server import lifespan
 
-                app = MagicMock()
-                app.state = MagicMock()
-                app.state.config = MagicMock()
+            app = MagicMock()
+            app.state = MagicMock()
+            app.state.config = MagicMock()
 
-                async with lifespan(app):
-                    mock_compact.assert_called_once()
-                    call_args = mock_compact.call_args[0]
-                    assert isinstance(call_args[0], CompactRequest)
+            async with lifespan(app):
+                mock_compact.assert_called_once()
+                call_args = mock_compact.call_args[0]
+                assert isinstance(call_args[0], CompactRequest)
 
     @pytest.mark.asyncio
     async def test_startup_compaction_error_does_not_crash(self) -> None:
@@ -701,33 +700,33 @@ class TestAutoCompactOnStartup:
             "mcp.server": mcp_mock.server,
             "mcp.server.streamable_http_manager": mcp_mock.server.streamable_http_manager,
         }
-        with patch.dict(sys.modules, mcp_modules):
-            with (
-                patch(
-                    "a2a.cstp.compaction_service.run_compaction",
-                    new_callable=AsyncMock,
-                    side_effect=RuntimeError("DB unavailable"),
-                ),
-                patch("a2a.server.AuthManager"),
-                patch("a2a.server.set_auth_manager"),
-                patch("a2a.server.get_dispatcher") as mock_disp,
-                patch("a2a.server.register_methods"),
-                patch(
-                    "a2a.cstp.graphdb.factory.get_graph_store",
-                    side_effect=ImportError("no graph"),
-                ),
-            ):
-                mock_disp.return_value = MagicMock()
+        with (
+            patch.dict(sys.modules, mcp_modules),
+            patch(
+                "a2a.cstp.compaction_service.run_compaction",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("DB unavailable"),
+            ),
+            patch("a2a.server.AuthManager"),
+            patch("a2a.server.set_auth_manager"),
+            patch("a2a.server.get_dispatcher") as mock_disp,
+            patch("a2a.server.register_methods"),
+            patch(
+                "a2a.cstp.graphdb.factory.get_graph_store",
+                side_effect=ImportError("no graph"),
+            ),
+        ):
+            mock_disp.return_value = MagicMock()
 
-                from a2a.server import lifespan
+            from a2a.server import lifespan
 
-                app = MagicMock()
-                app.state = MagicMock()
-                app.state.config = MagicMock()
+            app = MagicMock()
+            app.state = MagicMock()
+            app.state.config = MagicMock()
 
-                # Should not raise even though run_compaction fails
-                async with lifespan(app):
-                    pass
+            # Should not raise even though run_compaction fails
+            async with lifespan(app):
+                pass
 
     @pytest.mark.asyncio
     async def test_startup_compaction_with_no_decisions(self) -> None:
