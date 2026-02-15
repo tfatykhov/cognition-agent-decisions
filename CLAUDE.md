@@ -15,9 +15,12 @@ Decision intelligence layer for AI agents providing semantic search, guardrails,
 # Install all dependencies (core + a2a + mcp + dev)
 pip install -e ".[all]"
 
-# Run CSTP server
+# Run CSTP server (defaults: VECTOR_BACKEND=chromadb, EMBEDDING_PROVIDER=gemini)
 cstp-server
 # or: python -m a2a.server --host 0.0.0.0 --port 8100
+
+# Run with in-memory backend (no ChromaDB required, useful for dev/testing)
+VECTOR_BACKEND=memory cstp-server
 
 # Docker (server + ChromaDB)
 docker-compose up -d --build
@@ -58,9 +61,12 @@ Ruff config: line-length 100, target Python 3.11, rules `E F I N W UP B C4 SIM`.
 ```
 AI Agents → POST /cstp (JSON-RPC 2.0, Bearer auth)
   → a2a/server.py → CstpDispatcher → *_service.py handlers
+    → VectorStore (chromadb | memory)  + EmbeddingProvider (gemini)
     → src/cognition_engines/ (SemanticIndex, GuardrailEngine, PatternDetector)
-      → ChromaDB (vectors) + YAML files (decisions/guardrails)
+    → YAML files (decisions/guardrails)
 ```
+
+Vector storage and embeddings are abstracted behind `VectorStore` and `EmbeddingProvider` ABCs (F048). Services access backends via factory singletons (`get_vector_store()`, `get_embedding_provider()`). Backend selection is driven by `VECTOR_BACKEND` and `EMBEDDING_PROVIDER` env vars.
 
 **Key constraint**: `src/cognition_engines/` must never import from `a2a/`. Core uses dataclasses, the a2a layer uses Pydantic.
 
@@ -73,6 +79,7 @@ AI Agents → POST /cstp (JSON-RPC 2.0, Bearer auth)
 - Test files: `test_<module>.py` or `test_f0XX_<feature>.py`
 - Use `pathlib.Path` for file operations (cross-platform)
 - Mock all external APIs (ChromaDB, Gemini) in tests — tests must run offline
+- Use `MemoryStore` + mock `EmbeddingProvider` via factory injection (`set_vector_store()` / `set_embedding_provider()`) instead of patching internal HTTP functions
 - Config pattern: YAML → env var → default (see `a2a/config.py`)
 
 ## Adding a new CSTP method
@@ -88,7 +95,14 @@ AI Agents → POST /cstp (JSON-RPC 2.0, Bearer auth)
 ## Key files
 
 - `a2a/cstp/dispatcher.py` — All CSTP method handlers and routing
-- `src/cognition_engines/accelerators/semantic_index.py` — Semantic search core
+- `a2a/cstp/vectordb/__init__.py` — `VectorStore` ABC + `VectorResult` dataclass
+- `a2a/cstp/vectordb/chromadb.py` — ChromaDB HTTP backend
+- `a2a/cstp/vectordb/memory.py` — In-memory backend (tests/dev)
+- `a2a/cstp/vectordb/factory.py` — Backend selection via `VECTOR_BACKEND` env var
+- `a2a/cstp/embeddings/__init__.py` — `EmbeddingProvider` ABC
+- `a2a/cstp/embeddings/gemini.py` — Gemini embedding provider
+- `a2a/cstp/embeddings/factory.py` — Provider selection via `EMBEDDING_PROVIDER` env var
+- `src/cognition_engines/accelerators/semantic_index.py` — Semantic search core (separate from a2a vectordb)
 - `src/cognition_engines/guardrails/engine.py` — Guardrail engine core
 - `a2a/config.py` — Server configuration (YAML + env)
 - `guardrails/cornerstone.yaml` — Default guardrail rules

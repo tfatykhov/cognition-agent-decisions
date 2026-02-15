@@ -1,10 +1,9 @@
 """Query service for semantic decision search.
 
-Wraps ChromaDB HTTP API for querying decisions.
-Uses httpx for async HTTP to avoid blocking the event loop.
+Uses VectorStore and EmbeddingProvider abstractions for backend-agnostic
+querying. The where-clause building and result parsing remain here.
 """
 
-import json
 import os
 import time
 from dataclasses import dataclass
@@ -13,24 +12,16 @@ from typing import Any
 
 import yaml
 
-# Configuration
-CHROMA_URL = os.getenv("CHROMA_URL", "http://chromadb:8000")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-TENANT = "default_tenant"
-DATABASE = "default_database"
-COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
-DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
+from .embeddings.factory import get_embedding_provider
+from .vectordb.factory import get_vector_store
 
-# Configurable secrets paths (can be overridden via env)
-SECRETS_PATHS = os.getenv(
-    "SECRETS_PATHS",
-    "/home/node/.openclaw/workspace/.secrets:~/.secrets",
-).split(":")
+# Configuration (only decisions path remains — vector/embedding config moved to backends)
+DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
 
 
 @dataclass(slots=True)
 class QueryResult:
-    """Single query result from ChromaDB."""
+    """Single query result from vector search."""
 
     id: str
     title: str
@@ -57,108 +48,6 @@ class QueryResponse:
     error: str | None = None
 
 
-def _get_secrets_paths() -> list[Path]:
-    """Get list of paths to search for secrets."""
-    paths = []
-    for p in SECRETS_PATHS:
-        expanded = Path(p.strip()).expanduser()
-        paths.append(expanded)
-    return paths
-
-
-def _load_gemini_key() -> str:
-    """Load Gemini API key from env or secrets."""
-    global GEMINI_API_KEY
-    if GEMINI_API_KEY:
-        return GEMINI_API_KEY
-
-    for path in _get_secrets_paths():
-        gemini_env = path / "gemini.env"
-        if gemini_env.exists():
-            for line in gemini_env.read_text().splitlines():
-                if line.startswith("GEMINI_API_KEY="):
-                    GEMINI_API_KEY = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    return GEMINI_API_KEY
-
-    raise ValueError("GEMINI_API_KEY not found in environment or secrets paths")
-
-
-async def _async_request(
-    method: str, url: str, data: dict | None = None, headers: dict | None = None
-) -> tuple[int, Any]:
-    """Make async HTTP request using httpx.
-
-    Falls back to sync urllib if httpx not available.
-    """
-    try:
-        import httpx
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            if method == "GET":
-                response = await client.get(url, headers=headers)
-            else:
-                response = await client.request(
-                    method, url, json=data, headers=headers
-                )
-            return response.status_code, response.json() if response.text else {}
-    except ImportError:
-        # Fallback to sync (less ideal but works)
-        import urllib.request
-
-        req_headers = {"Content-Type": "application/json"}
-        if headers:
-            req_headers.update(headers)
-        body = json.dumps(data).encode() if data else None
-        req = urllib.request.Request(url, data=body, headers=req_headers, method=method)
-
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                content = resp.read().decode()
-                return resp.status, json.loads(content) if content else {}
-        except urllib.error.HTTPError as e:
-            content = e.read().decode() if e.fp else ""
-            return e.code, {"error": content}
-        except Exception as e:
-            return 0, {"error": str(e)}
-
-
-async def _generate_embedding(text: str) -> list[float]:
-    """Generate embedding using Gemini API.
-
-    API key is sent via header, not URL query param, for security.
-    """
-    api_key = _load_gemini_key()
-
-    if len(text) > 8000:
-        text = text[:8000]
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
-    data = {"content": {"parts": [{"text": text}]}}
-
-    status, result = await _async_request("POST", url, data, headers)
-
-    if status != 200:
-        raise RuntimeError(f"Embedding API error: {result}")
-
-    return result["embedding"]["values"]
-
-
-async def _get_collection_id() -> str | None:
-    """Get the decisions collection ID."""
-    base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
-    status, data = await _async_request("GET", f"{base}/collections")
-
-    if status == 200 and isinstance(data, list):
-        for c in data:
-            if c.get("name") == COLLECTION_NAME:
-                return c["id"]
-    return None
-
-
 async def query_decisions(
     query: str,
     n_results: int = 10,
@@ -175,7 +64,7 @@ async def query_decisions(
     # F027: Tag filter
     tags: list[str] | None = None,
 ) -> QueryResponse:
-    """Query similar decisions from ChromaDB.
+    """Query similar decisions using vector similarity search.
 
     Args:
         query: Search query text.
@@ -189,14 +78,18 @@ async def query_decisions(
         feature: Filter by feature name.
         pr: Filter by PR number.
         has_outcome: Filter to only reviewed decisions (True) or pending (False).
+        tags: Filter by tag values.
 
     Returns:
         QueryResponse with results or error.
     """
     start_time = time.time()
 
-    # Get collection
-    coll_id = await _get_collection_id()
+    store = get_vector_store()
+    provider = get_embedding_provider()
+
+    # Check collection exists
+    coll_id = await store.get_collection_id()
     if not coll_id:
         return QueryResponse(
             results=[],
@@ -207,7 +100,7 @@ async def query_decisions(
 
     # Generate embedding
     try:
-        embedding = await _generate_embedding(query)
+        embedding = await provider.embed(query)
     except Exception as e:
         return QueryResponse(
             results=[],
@@ -250,63 +143,44 @@ async def query_decisions(
     elif has_outcome is False:
         where["status"] = "pending"
 
-    # Query ChromaDB
-    base = f"{CHROMA_URL}/api/v2/tenants/{TENANT}/databases/{DATABASE}"
-    payload: dict[str, Any] = {
-        "query_embeddings": [embedding],
-        "n_results": n_results,
-        "include": ["documents", "metadatas", "distances"],
-    }
-    if where:
-        payload["where"] = where
-
-    status, data = await _async_request(
-        "POST", f"{base}/collections/{coll_id}/query", payload
+    # Query via VectorStore
+    vector_results = await store.query(
+        embedding=embedding,
+        n_results=n_results,
+        where=where if where else None,
     )
 
-    if status != 200:
-        return QueryResponse(
-            results=[],
-            query=query,
-            query_time_ms=int((time.time() - start_time) * 1000),
-            error=f"Query failed: {data}",
-        )
-
-    # Parse results
+    # Parse VectorResult into QueryResult
     results: list[QueryResult] = []
-    if data.get("documents") and data["documents"][0]:
-        ids = data.get("ids", [[]])[0]
-        for i, _doc in enumerate(data["documents"][0]):
-            meta = data["metadatas"][0][i] if data.get("metadatas") else {}
-            dist = data["distances"][0][i] if data.get("distances") else 0.0
-            doc_id = ids[i] if i < len(ids) else f"unknown-{i}"
+    for vr in vector_results:
+        meta = vr.metadata
 
-            # Parse reason types if present
-            reason_types = None
-            if meta.get("reason_types"):
-                reason_types = meta["reason_types"].split(",")
+        # Parse reason types if present
+        reason_types = None
+        if meta.get("reason_types"):
+            reason_types = meta["reason_types"].split(",")
 
-            # F027: Parse tags from comma-separated metadata
-            tags = None
-            if meta.get("tags"):
-                tags = meta["tags"].split(",")
+        # F027: Parse tags from comma-separated metadata
+        result_tags = None
+        if meta.get("tags"):
+            result_tags = meta["tags"].split(",")
 
-            results.append(
-                QueryResult(
-                    id=doc_id[:8] if len(doc_id) > 8 else doc_id,
-                    title=meta.get("title", "Untitled"),
-                    category=meta.get("category", ""),
-                    confidence=meta.get("confidence"),
-                    stakes=meta.get("stakes"),
-                    status=meta.get("status", ""),
-                    outcome=meta.get("outcome"),
-                    date=meta.get("date", ""),
-                    distance=round(dist, 4) if dist else 0.0,
-                    reason_types=reason_types,
-                    tags=tags,
-                    pattern=meta.get("pattern"),
-                )
+        results.append(
+            QueryResult(
+                id=vr.id[:8] if len(vr.id) > 8 else vr.id,
+                title=meta.get("title", "Untitled"),
+                category=meta.get("category", ""),
+                confidence=meta.get("confidence"),
+                stakes=meta.get("stakes"),
+                status=meta.get("status", ""),
+                outcome=meta.get("outcome"),
+                date=meta.get("date", ""),
+                distance=round(vr.distance, 4) if vr.distance else 0.0,
+                reason_types=reason_types,
+                tags=result_tags,
+                pattern=meta.get("pattern"),
             )
+        )
 
     return QueryResponse(
         results=results,

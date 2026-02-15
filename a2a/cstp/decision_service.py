@@ -11,17 +11,13 @@ from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
 
-import httpx
 import yaml
+
+from .embeddings.factory import get_embedding_provider
+from .vectordb.factory import get_vector_store
 
 # Environment configuration
 DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
-CHROMA_URL = os.getenv("CHROMA_URL", "http://localhost:8000")
-CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "decisions_gemini")
-CHROMA_TENANT = os.getenv("CHROMA_TENANT", "default_tenant")
-CHROMA_DATABASE = os.getenv("CHROMA_DATABASE", "default_database")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-EMBEDDING_MODEL = "gemini-embedding-001"
 
 logger = logging.getLogger(__name__)
 
@@ -868,28 +864,13 @@ async def get_decision(request: GetDecisionRequest) -> GetDecisionResponse:
 
 
 async def generate_embedding(text: str) -> list[float] | None:
-    """Generate embedding using Gemini API."""
-    if not GEMINI_API_KEY:
+    """Generate embedding using the configured EmbeddingProvider."""
+    try:
+        provider = get_embedding_provider()
+        return await provider.embed(text)
+    except Exception as e:
+        logger.warning("Failed to generate embedding: %s", e)
         return None
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent"
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post(
-                url,
-                headers={"x-goog-api-key": GEMINI_API_KEY},
-                json={
-                    "model": f"models/{EMBEDDING_MODEL}",
-                    "content": {"parts": [{"text": text}]},
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data.get("embedding", {}).get("values", [])
-        except Exception as e:
-            logger.warning("Failed to generate embedding: %s", e)
-            return None
 
 
 def build_embedding_text(request: RecordDecisionRequest) -> str:
@@ -942,47 +923,13 @@ def build_embedding_text(request: RecordDecisionRequest) -> str:
     return "\n".join(parts)
 
 
-async def ensure_collection_exists() -> str | None:
-    """Ensure ChromaDB collection exists, create if needed. Returns collection ID."""
-    # v2 API path
-    base = f"{CHROMA_URL}/api/v2/tenants/{CHROMA_TENANT}/databases/{CHROMA_DATABASE}"
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Check if collection exists
-        try:
-            response = await client.get(f"{base}/collections/{CHROMA_COLLECTION}")
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("id")
-        except Exception:
-            pass
-
-        # Create collection
-        try:
-            response = await client.post(
-                f"{base}/collections",
-                json={
-                    "name": CHROMA_COLLECTION,
-                    "metadata": {"hnsw:space": "cosine"},
-                },
-            )
-            if response.status_code in (200, 201):
-                data = response.json()
-                logger.info("Created ChromaDB collection: %s", CHROMA_COLLECTION)
-                return data.get("id")
-        except Exception as e:
-            logger.error("Failed to create collection: %s", e)
-
-        return None
-
-
 async def index_to_chromadb(
     decision_id: str,
     embedding_text: str,
     metadata: dict[str, Any],
     embedding: list[float] | None = None,
 ) -> bool:
-    """Index decision to ChromaDB. Returns success status."""
+    """Index decision to the configured VectorStore. Returns success status."""
     # Generate embedding if not provided
     if embedding is None:
         embedding = await generate_embedding(embedding_text)
@@ -990,48 +937,14 @@ async def index_to_chromadb(
     if embedding is None:
         return False
 
-    # Ensure collection exists and get ID
-    collection_id = await ensure_collection_exists()
-    if not collection_id:
-        logger.error("Could not get or create ChromaDB collection")
-        return False
+    store = get_vector_store()
 
-    # v2 API: upsert to collection by ID
-    base = f"{CHROMA_URL}/api/v2/tenants/{CHROMA_TENANT}/databases/{CHROMA_DATABASE}"
-    url = f"{base}/collections/{collection_id}/upsert"
+    # Ensure collection/store is initialized
+    coll_id = await store.get_collection_id()
+    if not coll_id:
+        await store.initialize()
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            response = await client.post(
-                url,
-                json={
-                    "ids": [decision_id],
-                    "documents": [embedding_text],
-                    "metadatas": [metadata],
-                    "embeddings": [embedding],
-                },
-            )
-            response.raise_for_status()
-            return True
-        except Exception as e:
-            logger.warning("ChromaDB upsert failed, trying add: %s", e)
-            # Try alternative: add instead of upsert
-            try:
-                add_url = f"{base}/collections/{collection_id}/add"
-                response = await client.post(
-                    add_url,
-                    json={
-                        "ids": [decision_id],
-                        "documents": [embedding_text],
-                        "metadatas": [metadata],
-                        "embeddings": [embedding],
-                    },
-                )
-                response.raise_for_status()
-                return True
-            except Exception as add_e:
-                logger.error("ChromaDB indexing failed: %s", add_e)
-                return False
+    return await store.upsert(decision_id, embedding_text, embedding, metadata)
 
 
 async def record_decision(
