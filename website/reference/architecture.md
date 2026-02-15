@@ -1,5 +1,7 @@
 # System Architecture
 
+![Cognition Engines Architecture](/architecture.png)
+
 ## High-Level Architecture
 
 ```mermaid
