@@ -833,19 +833,23 @@ async def _handle_debug_tracker(params: dict[str, Any], agent_id: str) -> dict[s
     """Handle cstp.debugTracker method (F126).
 
     Read-only peek at deliberation tracker state for debugging.
+    Any authenticated agent can inspect all sessions (admin-level debug tool).
 
     Args:
         params: JSON-RPC params with optional 'key' field.
-        agent_id: Authenticated agent ID.
+        agent_id: Authenticated agent ID (not scoped — intentional for debugging).
 
     Returns:
         Tracker debug info with sessions, counts, and input details.
     """
     from .deliberation_tracker import debug_tracker
-    from .models import DebugTrackerRequest
+    from .models import DebugTrackerRequest, DebugTrackerResponse
 
+    params = params or {}
     request = DebugTrackerRequest.from_params(params)
-    return debug_tracker(key=request.key)
+    raw = debug_tracker(key=request.key)
+    response = DebugTrackerResponse.from_raw(raw)
+    return response.to_dict()
 
 
 async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict[str, Any]:

@@ -1150,6 +1150,17 @@ class TrackerInputDetail:
             "ageSeconds": self.age_seconds,
         }
 
+    @classmethod
+    def from_raw(cls, raw: dict[str, Any]) -> "TrackerInputDetail":
+        """Create from raw dict (as returned by debug_sessions)."""
+        return cls(
+            id=raw["id"],
+            type=raw["type"],
+            text=raw["text"],
+            source=raw["source"],
+            age_seconds=raw["ageSeconds"],
+        )
+
 
 @dataclass(slots=True)
 class TrackerSessionDetail:
@@ -1167,6 +1178,15 @@ class TrackerSessionDetail:
             "inputs": [i.to_dict() for i in self.inputs],
         }
 
+    @classmethod
+    def from_raw(cls, key: str, raw: dict[str, Any]) -> "TrackerSessionDetail":
+        """Create from raw dict (as returned by debug_sessions)."""
+        return cls(
+            key=key,
+            input_count=raw["inputCount"],
+            inputs=[TrackerInputDetail.from_raw(i) for i in raw["inputs"]],
+        )
+
 
 @dataclass(slots=True)
 class DebugTrackerResponse:
@@ -1174,12 +1194,25 @@ class DebugTrackerResponse:
 
     sessions: list[str]
     session_count: int
-    detail: dict[str, Any] = field(default_factory=dict)
+    detail: dict[str, TrackerSessionDetail] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict with camelCase keys."""
         return {
             "sessions": self.sessions,
             "sessionCount": self.session_count,
-            "detail": self.detail,
+            "detail": {k: v.to_dict() for k, v in self.detail.items()},
         }
+
+    @classmethod
+    def from_raw(cls, raw: dict[str, Any]) -> "DebugTrackerResponse":
+        """Create from raw dict (as returned by debug_sessions)."""
+        detail = {
+            k: TrackerSessionDetail.from_raw(k, v)
+            for k, v in raw.get("detail", {}).items()
+        }
+        return cls(
+            sessions=raw["sessions"],
+            session_count=raw["sessionCount"],
+            detail=detail,
+        )

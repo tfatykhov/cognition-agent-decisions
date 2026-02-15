@@ -13,7 +13,7 @@ from a2a.cstp.deliberation_tracker import (
     track_reasoning,
 )
 from a2a.cstp.dispatcher import CstpDispatcher, register_methods
-from a2a.cstp.models import DebugTrackerRequest, DebugTrackerResponse
+from a2a.cstp.models import DebugTrackerRequest, DebugTrackerResponse, TrackerSessionDetail
 from a2a.models.jsonrpc import JsonRpcRequest
 
 
@@ -61,15 +61,17 @@ class TestDebugTrackerModels:
         assert req.key == "agent-1"
 
     def test_response_to_dict(self) -> None:
+        session_detail = TrackerSessionDetail(key="s1", input_count=1, inputs=[])
         resp = DebugTrackerResponse(
             sessions=["s1", "s2"],
             session_count=2,
-            detail={"s1": {"inputCount": 1, "inputs": []}},
+            detail={"s1": session_detail},
         )
         data = resp.to_dict()
         assert data["sessions"] == ["s1", "s2"]
         assert data["sessionCount"] == 2
         assert "s1" in data["detail"]
+        assert data["detail"]["s1"]["inputCount"] == 1
 
 
 # ---------------------------------------------------------------------------

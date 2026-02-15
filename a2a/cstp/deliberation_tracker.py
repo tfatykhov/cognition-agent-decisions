@@ -181,8 +181,8 @@ class DeliberationTracker:
             Dict with sessions list, session_count, and detail mapping.
         """
         with self._lock:
-            cutoff = time.time() - self._ttl
             now = time.time()
+            cutoff = now - self._ttl
 
             if key is not None:
                 session = self._sessions.get(key)
