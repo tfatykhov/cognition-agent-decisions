@@ -89,6 +89,19 @@ class TrackerConfig:
 
 
 @dataclass(slots=True)
+class StorageConfig:
+    """Decision storage configuration.
+
+    Attributes:
+        backend: Storage backend (yaml, sqlite, memory).
+        db_path: Path to SQLite database file.
+    """
+
+    backend: str = "yaml"
+    db_path: str = "data/decisions.db"
+
+
+@dataclass(slots=True)
 class ServerConfig:
     """HTTP server configuration.
 
@@ -117,6 +130,7 @@ class Config:
     agent: AgentConfig = field(default_factory=AgentConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
     tracker: TrackerConfig = field(default_factory=TrackerConfig)
+    storage: StorageConfig = field(default_factory=StorageConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":
@@ -180,6 +194,10 @@ class Config:
                 session_ttl_seconds=int(os.getenv("CSTP_TRACKER_SESSION_TTL", "1800")),
                 consumed_history_size=int(os.getenv("CSTP_TRACKER_HISTORY_SIZE", "50")),
             ),
+            storage=StorageConfig(
+                backend=os.getenv("CSTP_STORAGE", "yaml"),
+                db_path=os.getenv("CSTP_DB_PATH", "data/decisions.db"),
+            ),
         )
 
     @classmethod
@@ -226,6 +244,14 @@ class Config:
             config.auth = AuthConfig(
                 enabled=auth.get("enabled", True),
                 tokens=tokens,
+            )
+
+        # Storage config
+        if "storage" in data:
+            st = data["storage"]
+            config.storage = StorageConfig(
+                backend=st.get("backend", config.storage.backend),
+                db_path=st.get("db_path", config.storage.db_path),
             )
 
         # Tracker config

@@ -58,6 +58,24 @@ async def lifespan(app: FastAPI):
         consumed_history_size=app.state.config.tracker.consumed_history_size,
     )
 
+    # F050: Initialize decision store
+    try:
+        from .cstp.storage.factory import (
+            get_decision_store,
+            mark_initialized as mark_store_initialized,
+            set_decision_store,
+        )
+
+        decision_store = get_decision_store()
+        await decision_store.initialize()
+        mark_store_initialized()
+        app.state.decision_store = decision_store
+        logger.info("Decision store initialized (backend=%s)", type(decision_store).__name__)
+    except Exception:
+        logger.warning("Decision store initialization failed", exc_info=True)
+        set_decision_store(None)
+        app.state.decision_store = None
+
     # Initialize dispatcher with methods
     dispatcher = get_dispatcher()
     register_methods(dispatcher)
@@ -115,7 +133,14 @@ async def lifespan(app: FastAPI):
         app.state.mcp_session_manager = None
         yield
 
-    # Cleanup (if needed)
+    # Cleanup
+    # F050: Close decision store
+    if getattr(app.state, "decision_store", None):
+        try:
+            await app.state.decision_store.close()
+            logger.info("Decision store closed")
+        except Exception:
+            logger.warning("Decision store close failed", exc_info=True)
 
 
 def create_app(config: Config | None = None) -> FastAPI:

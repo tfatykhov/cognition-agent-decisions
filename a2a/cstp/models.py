@@ -1337,3 +1337,129 @@ class DebugTrackerResponse:
             detail=detail,
             consumed=consumed,
         )
+
+
+# ============================================================================
+# F050: listDecisions / getStats models
+# ============================================================================
+
+
+@dataclass(slots=True)
+class ListDecisionsRequest:
+    """Request for cstp.listDecisions (F050)."""
+
+    limit: int = 20
+    offset: int = 0
+    category: str | None = None
+    stakes: str | None = None
+    status: str | None = None
+    agent: str | None = None
+    tags: list[str] = field(default_factory=list)
+    project: str | None = None
+    date_from: str | None = None
+    date_to: str | None = None
+    search: str | None = None
+    sort: str = "created_at"
+    order: str = "desc"
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "ListDecisionsRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        limit = int(params.get("limit", 20))
+        limit = max(1, min(limit, 500))
+        offset = int(params.get("offset", 0))
+        offset = max(0, offset)
+
+        sort = str(params.get("sort", "created_at"))
+        allowed_sorts = {
+            "created_at", "confidence", "category", "stakes", "status",
+        }
+        if sort not in allowed_sorts:
+            sort = "created_at"
+
+        order = str(params.get("order", "desc")).lower()
+        if order not in ("asc", "desc"):
+            order = "desc"
+
+        tags_raw = params.get("tags", [])
+        tags = list(tags_raw) if isinstance(tags_raw, list) else []
+
+        return cls(
+            limit=limit,
+            offset=offset,
+            category=params.get("category"),
+            stakes=params.get("stakes"),
+            status=params.get("status"),
+            agent=params.get("agent"),
+            tags=tags,
+            project=params.get("project"),
+            date_from=params.get("dateFrom") or params.get("date_from"),
+            date_to=params.get("dateTo") or params.get("date_to"),
+            search=params.get("search"),
+            sort=sort,
+            order=order,
+        )
+
+
+@dataclass(slots=True)
+class ListDecisionsResponse:
+    """Response from cstp.listDecisions (F050)."""
+
+    decisions: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "decisions": self.decisions,
+            "total": self.total,
+            "limit": self.limit,
+            "offset": self.offset,
+        }
+
+
+@dataclass(slots=True)
+class GetStatsRequest:
+    """Request for cstp.getStats (F050)."""
+
+    date_from: str | None = None
+    date_to: str | None = None
+    project: str | None = None
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "GetStatsRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        return cls(
+            date_from=params.get("dateFrom") or params.get("date_from"),
+            date_to=params.get("dateTo") or params.get("date_to"),
+            project=params.get("project"),
+        )
+
+
+@dataclass(slots=True)
+class GetStatsResponse:
+    """Response from cstp.getStats (F050)."""
+
+    total: int = 0
+    by_category: dict[str, int] = field(default_factory=dict)
+    by_stakes: dict[str, int] = field(default_factory=dict)
+    by_status: dict[str, int] = field(default_factory=dict)
+    by_agent: dict[str, int] = field(default_factory=dict)
+    by_day: list[dict[str, Any]] = field(default_factory=list)
+    top_tags: list[dict[str, Any]] = field(default_factory=list)
+    recent_activity: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "total": self.total,
+            "byCategory": self.by_category,
+            "byStakes": self.by_stakes,
+            "byStatus": self.by_status,
+            "byAgent": self.by_agent,
+            "byDay": self.by_day,
+            "topTags": self.top_tags,
+            "recentActivity": self.recent_activity,
+        }

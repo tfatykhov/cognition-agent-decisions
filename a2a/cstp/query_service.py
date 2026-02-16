@@ -194,7 +194,10 @@ async def load_all_decisions(
     category: str | None = None,
     project: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Load all decision files from disk.
+    """Load all decisions, preferring DecisionStore over YAML rglob.
+
+    Tries DecisionStore.list() first for efficient querying.
+    Falls back to YAML rglob if store is unavailable or raises.
 
     Args:
         decisions_path: Override for decisions directory.
@@ -204,6 +207,25 @@ async def load_all_decisions(
     Returns:
         List of decision dictionaries with id and content.
     """
+    # F050: Try DecisionStore first
+    try:
+        from .storage import ListQuery
+        from .storage.factory import get_decision_store
+
+        store = get_decision_store()
+        query = ListQuery(
+            limit=500,
+            offset=0,
+            category=category,
+            project=project,
+            sort="created_at",
+            order="desc",
+        )
+        result = await store.list(query)
+        return result.decisions
+    except Exception:
+        pass  # Fall through to YAML rglob
+
     base = Path(decisions_path or DECISIONS_PATH)
     decisions: list[dict[str, Any]] = []
 
