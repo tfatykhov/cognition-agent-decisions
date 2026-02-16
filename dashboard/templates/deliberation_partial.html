@@ -1,20 +1,21 @@
 <span id="session-count" hx-swap-oob="innerHTML">{{ session_count }} active</span>
 
 {% if sessions %}
-<div class="session-list" x-data="{ expanded: {} }">
+<div class="session-list">
     {% for session in sessions %}
     <div class="session-card">
-        <div class="session-card-header" @click="expanded[{{ loop.index0 }}] = !expanded[{{ loop.index0 }}]">
+        <div class="session-card-header" @click="$store.deliberation.toggle('{{ session.key }}')">
             <div class="session-card-meta">
                 <span class="session-pulse session-pulse--{{ session.freshness }}"></span>
                 {% if session.parsed.agent_id %}
-                <span class="badge badge--info">{{ session.parsed.agent_id }}</span>
+                <span class="badge badge--info">Agent: {{ session.parsed.agent_id }}</span>
                 {% endif %}
                 {% if session.parsed.decision_id %}
-                <code class="session-decision-id">{{ session.parsed.decision_id[:8] }}</code>
+                <a href="{{ url_for('decision_detail', decision_id=session.parsed.decision_id) }}"
+                   class="session-decision-id" @click.stop>Decision: {{ session.parsed.decision_id[:8] }}</a>
                 {% endif %}
                 {% if session.parsed.transport %}
-                <span class="badge badge--neutral">{{ session.parsed.transport }}</span>
+                <span class="badge badge--warning">{{ session.parsed.transport }}</span>
                 {% endif %}
                 {% if not session.parsed.agent_id and not session.parsed.decision_id and not session.parsed.transport %}
                 <code>{{ session.key }}</code>
@@ -22,11 +23,11 @@
             </div>
             <div class="flex gap-3 items-center">
                 <span class="session-input-count">{{ session.input_count }} input{{ 's' if session.input_count != 1 }}</span>
-                <span class="session-expand-icon" :class="{ 'session-expand-icon--open': expanded[{{ loop.index0 }}] }">&#9654;</span>
+                <span class="session-expand-icon" :class="{ 'session-expand-icon--open': $store.deliberation.isOpen('{{ session.key }}') }">&#9654;</span>
             </div>
         </div>
 
-        <div class="session-card-body" x-show="expanded[{{ loop.index0 }}]" x-cloak>
+        <div class="session-card-body" x-show="$store.deliberation.isOpen('{{ session.key }}')" x-cloak>
             {% for inp in session.inputs %}
             <div class="session-input">
                 <span class="badge badge--type-{{ inp.type }}">{{ inp.type }}</span>
