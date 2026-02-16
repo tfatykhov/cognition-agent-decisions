@@ -293,6 +293,54 @@ class TestPreActionService:
         mock_record.assert_called_once()
 
     @pytest.mark.asyncio
+    @patch("a2a.cstp.graph_service.safe_auto_link", new_callable=AsyncMock)
+    @patch("a2a.cstp.preaction_service.record_decision")
+    @patch("a2a.cstp.preaction_service.get_calibration")
+    @patch("a2a.cstp.preaction_service.evaluate_guardrails")
+    @patch("a2a.cstp.preaction_service.query_decisions")
+    @patch("a2a.cstp.preaction_service.log_guardrail_check")
+    async def test_auto_record_calls_safe_auto_link(
+        self,
+        mock_log: AsyncMock,
+        mock_query: AsyncMock,
+        mock_guard: AsyncMock,
+        mock_cal: AsyncMock,
+        mock_record: AsyncMock,
+        mock_auto_link: AsyncMock,
+    ) -> None:
+        """Issue #157: auto_record should call safe_auto_link after recording."""
+        mock_query.return_value = MockQueryResponse()
+        mock_guard.return_value = MockEvalResult(allowed=True)
+        mock_cal.return_value = MockCalibrationResponse()
+        mock_record.return_value = MockRecordResponse(success=True, id="new12345")
+        mock_auto_link.return_value = 2
+
+        from a2a.cstp.preaction_service import pre_action
+
+        req = PreActionRequest.from_params({
+            "action": {
+                "description": "Use JWT for auth",
+                "category": "architecture",
+                "stakes": "high",
+                "confidence": 0.85,
+            },
+            "tags": ["auth"],
+            "pattern": "Stateless auth",
+        })
+        resp = await pre_action(req, agent_id="test-agent")
+
+        assert resp.allowed is True
+        assert resp.decision_id == "new12345"
+        mock_auto_link.assert_called_once()
+        call_kwargs = mock_auto_link.call_args.kwargs
+        assert call_kwargs["response_id"] == "new12345"
+        assert call_kwargs["category"] == "architecture"
+        assert call_kwargs["stakes"] == "high"
+        assert call_kwargs["confidence"] == 0.85
+        assert call_kwargs["tags"] == ["auth"]
+        assert call_kwargs["pattern"] == "Stateless auth"
+
+    @pytest.mark.asyncio
     @patch("a2a.cstp.preaction_service.record_decision")
     @patch("a2a.cstp.preaction_service.get_calibration")
     @patch("a2a.cstp.preaction_service.evaluate_guardrails")
