@@ -39,10 +39,10 @@
         {% if decision.bridge %}
         <button class="tab-btn" role="tab" :aria-selected="tab === 'bridge'" :class="{ 'tab-btn--active': tab === 'bridge' }" @click="tab = 'bridge'">Bridge</button>
         {% endif %}
-        {% if decision.related %}
+        {% if decision.related or graph_neighbors %}
         <button class="tab-btn" role="tab" :aria-selected="tab === 'related'" :class="{ 'tab-btn--active': tab === 'related' }" @click="tab = 'related'">
             Related
-            <span class="tab-badge">{{ decision.related|length }}</span>
+            <span class="tab-badge">{% if decision.related %}{{ decision.related|length }}s{% endif %}{% if decision.related and graph_neighbors %} + {% endif %}{% if graph_neighbors %}{{ graph_neighbors|length }}g{% endif %}</span>
         </button>
         {% endif %}
     </div>
@@ -140,6 +140,18 @@
             {% endif %}
         </div>
 
+        <!-- Full Decision Text -->
+        {% if decision.summary|length > 80 %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title" style="margin:0">Decision</h2>
+            </div>
+            <div class="card-body">
+                <p class="decision-full-text">{{ decision.summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Context -->
         {% if decision.context %}
         <div class="card mb-6">
@@ -165,6 +177,15 @@
                     <li class="reason-item">
                         <span class="reason-type">{{ reason.type }}</span>
                         <span class="reason-text">{{ reason.text }}</span>
+                        <div class="reason-strength">
+                            <div class="confidence-bar">
+                                <div class="confidence-bar-track confidence-bar-track--md">
+                                    <div class="confidence-bar-fill {% if reason.strength >= 0.9 %}confidence-bar-fill--high{% elif reason.strength >= 0.7 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
+                                         style="width: {{ (reason.strength * 100)|int }}%"></div>
+                                </div>
+                                <span class="confidence-bar-label">{{ (reason.strength * 100)|int }}%</span>
+                            </div>
+                        </div>
                     </li>
                     {% endfor %}
                 </ul>
@@ -326,12 +347,13 @@
     {% endif %}
 
     <!-- === RELATED TAB === -->
-    {% if decision.related %}
+    {% if decision.related or graph_neighbors %}
     <div x-show="tab === 'related'" x-cloak role="tabpanel">
+        {% if decision.related %}
         <div class="card mb-6">
             <div class="card-header">
-                <h2 class="card-title" style="margin:0">Related Decisions</h2>
-                <span class="text-muted text-sm">{{ decision.related|length }} linked</span>
+                <h2 class="card-title" style="margin:0">Semantic Related</h2>
+                <span class="text-muted text-sm">{{ decision.related|length }} by similarity</span>
             </div>
             <div class="card-body" style="padding: 0">
                 {% for rel in decision.related %}
@@ -347,6 +369,46 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
+
+        {% if graph_neighbors %}
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title" style="margin:0">Graph Neighbors</h2>
+                <span class="text-muted text-sm">{{ graph_neighbors|length }} linked</span>
+            </div>
+            <div class="card-body" style="padding: 0">
+                {% for n in graph_neighbors %}
+                <a href="{{ url_for('decision_detail', decision_id=n.id) }}" class="related-card">
+                    <div class="related-card-main">
+                        <code class="related-card-id">{{ n.id }}</code>
+                        <span class="badge badge--edge-{{ n.edge_type }}">{{ n.edge_type|replace('_', ' ') }}</span>
+                        {% if n.summary %}
+                        <span class="related-card-summary">{{ n.summary[:60] }}{% if n.summary|length > 60 %}...{% endif %}</span>
+                        {% endif %}
+                        {% if n.category %}
+                        <span class="badge badge--category">{{ n.category }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="neighbor-meta">
+                        {% if n.direction == 'incoming' %}
+                        <span class="neighbor-direction" title="This decision is a target">&#8592;</span>
+                        {% else %}
+                        <span class="neighbor-direction" title="This decision is a source">&#8594;</span>
+                        {% endif %}
+                        <div class="confidence-bar">
+                            <div class="confidence-bar-track confidence-bar-track--sm">
+                                <div class="confidence-bar-fill {% if n.weight >= 0.7 %}confidence-bar-fill--high{% elif n.weight >= 0.4 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
+                                     style="width: {{ (n.weight * 100)|int }}%"></div>
+                            </div>
+                            <span class="confidence-bar-label">{{ "%.0f"|format(n.weight * 100) }}%</span>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 </div>

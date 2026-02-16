@@ -543,6 +543,9 @@ tbody tr:hover {
   max-width: 60px;
 }
 
+.confidence-bar-track--sm { max-width: 50px; }
+.confidence-bar-track--md { max-width: 60px; }
+
 .confidence-bar-fill {
   height: 100%;
   border-radius: 2px;
@@ -814,6 +817,11 @@ code {
   color: var(--c-text-secondary);
 }
 
+.reason-strength {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 /* --- Project Context --- */
 .project-context {
   display: flex;
@@ -1024,6 +1032,16 @@ details > :not(summary) {
   color: var(--c-text-secondary);
   font-style: italic;
   font-size: var(--fs-sm);
+}
+
+/* --- Full Decision Text --- */
+.decision-full-text {
+  margin: 0;
+  color: var(--c-text-secondary);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-relaxed);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* --- Quality Bars --- */
@@ -1241,6 +1259,25 @@ details > :not(summary) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* --- Edge Type Badges --- */
+[class*="badge--edge-"] { background: var(--c-surface-2); color: var(--c-text-secondary); }
+.badge--edge-relates_to { background: var(--c-info-subtle); color: var(--c-info); }
+.badge--edge-supersedes { background: var(--c-warning-subtle); color: var(--c-warning); }
+.badge--edge-depends_on { background: var(--c-accent-subtle); color: var(--c-accent); }
+
+/* --- Neighbor Meta --- */
+.neighbor-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.neighbor-direction {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
 }
 
 /* --- Charts --- */
