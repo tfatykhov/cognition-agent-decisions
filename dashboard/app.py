@@ -348,6 +348,104 @@ def review(decision_id: str) -> str | Response:
     return render_template("review.html", decision=decision)
 
 
+def parse_tracker_key(key: str) -> dict[str, str | None]:
+    """Parse composite tracker key into display components."""
+    result: dict[str, str | None] = {
+        "agent_id": None, "decision_id": None,
+        "transport": None, "transport_id": None, "raw": key,
+    }
+    if key.startswith("agent:") and ":decision:" in key:
+        parts = key.split(":decision:")
+        result["agent_id"] = parts[0].removeprefix("agent:")
+        result["decision_id"] = parts[1]
+    elif key.startswith("agent:"):
+        result["agent_id"] = key.removeprefix("agent:")
+    elif key.startswith("decision:"):
+        result["decision_id"] = key.removeprefix("decision:")
+    elif ":" in key:
+        transport, _, transport_id = key.partition(":")
+        result["transport"] = transport
+        result["transport_id"] = transport_id
+    return result
+
+
+def _transform_tracker_sessions(tracker_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Transform raw debugTracker response into template-friendly dicts."""
+    sessions = []
+    detail = tracker_data.get("detail", {})
+    for key in tracker_data.get("sessions", []):
+        session_detail = detail.get(key, {})
+        parsed = parse_tracker_key(key)
+        inputs = []
+        for inp in session_detail.get("inputs", []):
+            age = inp.get("ageSeconds", 0)
+            inputs.append({
+                **inp,
+                "age_display": _format_age(age),
+                "age_class": _age_freshness_class(age),
+            })
+        sessions.append({
+            "key": key, "parsed": parsed,
+            "input_count": session_detail.get("inputCount", 0), "inputs": inputs,
+        })
+    return sessions
+
+
+def _format_age(seconds: int) -> str:
+    """Format age in seconds to human-readable string."""
+    if seconds < 60:
+        return f"{seconds}s ago"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    return f"{seconds // 3600}h ago"
+
+
+def _age_freshness_class(seconds: int) -> str:
+    """Return CSS class based on age freshness."""
+    if seconds < 30:
+        return "age--fresh"
+    if seconds < 120:
+        return "age--recent"
+    return "age--stale"
+
+
+@app.route("/deliberation")
+@auth
+def deliberation() -> str:
+    """Live deliberation tracker viewer."""
+    filter_key = request.args.get("key") or None
+    try:
+        tracker_data = cstp.debug_tracker(key=filter_key)
+    except CSTPError as e:
+        flash(f"Error loading tracker: {e}", "error")
+        tracker_data = {"sessions": [], "sessionCount": 0, "detail": {}}
+    sessions = _transform_tracker_sessions(tracker_data)
+    return render_template(
+        "deliberation.html",
+        sessions=sessions,
+        session_count=tracker_data.get("sessionCount", 0),
+        filter_key=filter_key,
+    )
+
+
+@app.route("/deliberation/partial")
+@auth
+def deliberation_partial() -> str:
+    """Partial template for HTMX auto-refresh."""
+    filter_key = request.args.get("key") or None
+    try:
+        tracker_data = cstp.debug_tracker(key=filter_key)
+    except CSTPError:
+        tracker_data = {"sessions": [], "sessionCount": 0, "detail": {}}
+    sessions = _transform_tracker_sessions(tracker_data)
+    return render_template(
+        "deliberation_partial.html",
+        sessions=sessions,
+        session_count=tracker_data.get("sessionCount", 0),
+        filter_key=filter_key,
+    )
+
+
 @app.route("/calibration")
 @auth
 def calibration() -> str:

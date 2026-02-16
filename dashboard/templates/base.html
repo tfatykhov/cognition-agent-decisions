@@ -44,6 +44,10 @@
                     <span class="sidebar-link-icon">📊</span>
                     Calibration
                 </a>
+                <a href="{{ url_for('deliberation') }}" class="sidebar-link {% if request.endpoint in ('deliberation', 'deliberation_partial') %}active{% endif %}">
+                    <span class="sidebar-link-icon">&#128161;</span>
+                    Deliberation
+                </a>
             </nav>
 
             <div class="sidebar-footer">
