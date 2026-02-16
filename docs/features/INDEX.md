@@ -30,7 +30,10 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F028 | Reasoning Capture | v0.10.0 | *(shipped as part of F023/F027)* |
 | F046 | Pre-Action Hook API | v0.11.0 | `F046-pre-action-hook.md` |
 | F047 | Session Context Endpoint | v0.11.0 | `F047-session-context.md` |
+| F041 | Memory Compaction | v0.12.0 | `F041-memory-compaction.md` |
 | F044 | Agent Work Discovery | v0.12.0 | `F044-agent-work-discovery.md` |
+| F045 | Decision Graph Storage Layer | v0.12.0 | `F045-graph-storage-layer.md` |
+| F048 | Multi-Vector-DB Support | v0.12.0 | `F048-multi-vectordb.md` |
 
 ## Roadmap
 
@@ -49,14 +52,15 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F038 | Cross-Agent Federation | Cisco IoC, README | `F038-cross-agent-federation.md` |
 | F039 | Cognition Protocol Stack | Cisco IoC (SSTP/CSTP/LSTP) | `F039-protocol-stack.md` |
 | F040 | Task-Decision Graph | Beads (steveyegge/beads) | `F040-task-decision-graph.md` |
-| F041 | Memory Compaction | Beads (steveyegge/beads) | `F041-memory-compaction.md` |
+| ~~F041~~ | ~~Memory Compaction~~ | ~~Beads~~ | *Shipped in v0.12.0* |
 | F042 | ~~Decision Dependency Graph~~ | ~~Beads~~ (merged into F045) | `F042-decision-dependencies.md` |
 | F043 | Distributed Decision Merge | Beads (steveyegge/beads) | `F043-distributed-merge.md` |
 | ~~F044~~ | ~~Agent Work Discovery~~ | ~~Beads~~ | *Shipped in v0.12.0* |
-| F045 | Decision Graph Storage Layer | GNN/KG Research (ICML 2025, MemoBrain, Context Graphs) | `F045-graph-storage-layer.md` |
+| ~~F045~~ | ~~Decision Graph Storage Layer~~ | ~~GNN/KG Research~~ | *Shipped in v0.12.0* |
 | ~~F046~~ | ~~Pre-Action Hook API~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
 | ~~F047~~ | ~~Session Context Endpoint~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
-| F048 | Multi-Vector-DB Support | Infrastructure | `F048-multi-vectordb.md` |
+| ~~F048~~ | ~~Multi-Vector-DB Support~~ | ~~Infrastructure~~ | *Shipped in v0.12.0* |
+| F049 | Live Deliberation Viewer | Dashboard + debugTracker | `F049-live-deliberation-viewer.md` |
 
 ## Retired IDs
 
