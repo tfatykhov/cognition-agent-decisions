@@ -63,6 +63,13 @@ features:
     title: Calibration & Analytics
     details: Track Brier scores, success rates, and confidence calibration over time. Reason-type analytics show which reasoning patterns predict success.
   - icon:
+      src: /icon-observability.png
+      alt: Observability
+      width: 80
+      height: 80
+    title: Decision Observability
+    details: Your monitoring stack tracks latency, tokens, and errors. Cognition Engines tracks whether your agent's decisions are actually good. Brier-scored calibration, overconfidence detection, and per-category performance trends.
+  - icon:
       src: /icon-api.png
       alt: API
       width: 80
