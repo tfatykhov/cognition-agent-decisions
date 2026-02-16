@@ -28,6 +28,7 @@ logger = logging.getLogger("cstp.preaction")
 async def pre_action(
     request: PreActionRequest,
     agent_id: str,
+    tracker_key: str | None = None,
 ) -> PreActionResponse:
     """Execute the pre-action hook.
 
@@ -41,10 +42,14 @@ async def pre_action(
     Args:
         request: Parsed PreActionRequest.
         agent_id: Authenticated agent ID.
+        tracker_key: Deliberation tracker key (e.g. "rpc:agent" or "mcp:client").
+            Defaults to ``f"rpc:{agent_id}"`` for backward compatibility.
 
     Returns:
         PreActionResponse with allowed flag, decisions, guardrails, calibration.
     """
+    if tracker_key is None:
+        tracker_key = f"rpc:{agent_id}"
     start_time = time.time()
 
     action = request.action
@@ -98,6 +103,22 @@ async def pre_action(
                 pattern=r.pattern,
             ))
 
+    # F023/F049: Track query for deliberation (issue #159)
+    if not isinstance(query_result, Exception) and not query_result.error:
+        from .deliberation_tracker import track_query
+
+        track_query(
+            key=tracker_key,
+            query=action.description,
+            result_count=len(query_result.results),
+            top_ids=[r.id for r in query_result.results[:5]],
+            retrieval_mode="hybrid",
+            top_results=[
+                {"id": r.id, "summary": r.title[:80], "distance": r.distance}
+                for r in query_result.results[:5]
+            ],
+        )
+
     # F041 P2: Always annotate with compaction level in pre_action
     if relevant_decisions:
         try:
@@ -147,6 +168,16 @@ async def pre_action(
             allowed=guardrail_result.allowed,
             violations=guardrail_result.violations,
             evaluated=guardrail_result.evaluated,
+        )
+
+        # F023/F049: Track guardrail check for deliberation (issue #159)
+        from .deliberation_tracker import track_guardrail
+
+        track_guardrail(
+            key=tracker_key,
+            description=action.description,
+            allowed=guardrail_result.allowed,
+            violation_count=len(guardrail_result.violations),
         )
 
     # --- Process calibration results ---
@@ -205,7 +236,7 @@ async def pre_action(
             )
 
             if not record_req.related_to:
-                related_raw = extract_related_from_tracker(f"rpc:{agent_id}")
+                related_raw = extract_related_from_tracker(tracker_key)
                 if related_raw:
                     from .decision_service import RelatedDecision
 
@@ -215,7 +246,7 @@ async def pre_action(
 
             # F023 Phase 2: Auto-attach deliberation from tracked inputs
             record_req.deliberation, _auto_captured = auto_attach_deliberation(
-                key=f"rpc:{agent_id}",
+                key=tracker_key,
                 deliberation=record_req.deliberation,
             )
 

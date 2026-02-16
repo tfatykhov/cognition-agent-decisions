@@ -620,7 +620,7 @@ async def _handle_pre_action(params: dict[str, Any], agent_id: str) -> dict[str,
         Pre-action results as dict.
     """
     request = PreActionRequest.from_params(params)
-    response = await pre_action(request, agent_id)
+    response = await pre_action(request, agent_id, tracker_key=f"rpc:{agent_id}")
     return response.to_dict()
 
 

@@ -961,7 +961,12 @@ async def _handle_pre_action_mcp(arguments: dict[str, Any]) -> list[TextContent]
         params["pattern"] = args.pattern
 
     request = PreActionRequest.from_params(params)
-    response = await pre_action(request, agent_id=args.agent_id or "mcp-client")
+    mcp_agent = args.agent_id or "mcp-client"
+    response = await pre_action(
+        request,
+        agent_id=mcp_agent,
+        tracker_key=f"mcp:{mcp_agent}",
+    )
 
     return [
         TextContent(
