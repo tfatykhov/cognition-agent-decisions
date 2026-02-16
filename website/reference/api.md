@@ -799,7 +799,9 @@ Validate an intended action against safety guardrails and policies.
 
 #### `log_decision`
 
-Record a decision to the immutable decision log.
+> ⚠️ **Last resort.** Prefer `pre_action` with `auto_record: true` for the standard flow.
+
+Record a decision to the immutable decision log manually. Use only when `pre_action` wasn't called (legacy clients, spontaneous decisions, no prior context).
 
 **Input Schema:**
 
@@ -815,6 +817,8 @@ Record a decision to the immutable decision log.
 | `project` | string | ❌ | — | Project in owner/repo format |
 | `feature` | string | ❌ | — | Feature or epic name |
 | `pr` | int | ❌ | — | Pull request number |
+| `agent_id` | string | ❌ | — | Agent identifier for multi-agent deliberation isolation |
+| `decision_id` | string | ❌ | — | Decision ID to scope deliberation consumption |
 
 **Maps to:** `cstp.recordDecision`
 

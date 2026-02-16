@@ -62,16 +62,31 @@ Same config in `~/Library/Application Support/Claude/claude_desktop_config.json`
 ## How It Works
 
 ```
-Session start    → get_session_context  (load cognitive context)
+Session start    → get_session_context       (load cognitive context)
        ↓
-Decision point   → pre_action           (query + guardrails + record)
+Decision point   → pre_action                (query + guardrails + record)
+                   (auto_record: true)        → returns decisionId
        ↓
-During work      → record_thought       (capture reasoning)
+During work      → record_thought            (capture reasoning)
+                   (decision_id: from above)  → thoughts attach in real-time
        ↓
-After work       → update_decision      (finalize decision text)
+After work       → update_decision           (finalize decision text)
+                   (id: decisionId)
        ↓
-Later            → review_outcome       (log success/failure)
+Later            → review_outcome            (log success/failure)
 ```
+
+### Multi-Agent Isolation
+
+When multiple agents share an MCP connection, pass `agent_id` to scope deliberation:
+
+```
+pre_action(agent_id: "planner", ...)      → decisionId: "abc123"
+record_thought(agent_id: "planner", decision_id: "abc123", ...)
+update_decision(id: "abc123", ...)
+```
+
+Each agent's thoughts are tracked separately via composite keys (`agent:{id}:decision:{id}`).
 
 ### Primary MCP Tools
 
@@ -87,7 +102,7 @@ Later            → review_outcome       (log success/failure)
 |------|---------|
 | `query_decisions` | Semantic/hybrid search over past decisions |
 | `check_action` | Standalone guardrail validation |
-| `log_decision` | Record a decision with confidence, reasons, tags, pattern |
+| `log_decision` | Record a decision manually (last resort - prefer `pre_action` with `auto_record`) |
 | `review_outcome` | Record success/failure for calibration |
 | `get_stats` | Calibration statistics (Brier score, accuracy, drift) |
 | `get_decision` | Full decision details by ID |

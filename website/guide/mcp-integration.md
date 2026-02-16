@@ -33,7 +33,7 @@ Streamable HTTP - handles both POST (tool calls) and GET (SSE events).
 |------|-------------|
 | `query_decisions` | Search past decisions with optional `bridge_side` (prefer `pre_action`) |
 | `check_action` | Validate against guardrails (prefer `pre_action`) |
-| `log_decision` | Record a new decision with reasoning (prefer `pre_action` with `auto_record`) |
+| `log_decision` | Record a decision manually — **last resort** when `pre_action` wasn't used |
 | `review_outcome` | Record what actually happened |
 | `get_stats` | Calibration statistics (prefer `get_session_context`) |
 | `get_decision` | Full decision details by ID |
@@ -44,20 +44,44 @@ Streamable HTTP - handles both POST (tool calls) and GET (SSE events).
 ## Recommended Workflow
 
 ```
-Session start    → get_session_context  (load cognitive context)
+Session start    → get_session_context       (load cognitive context)
        ↓
-Maintenance      → ready                (check for overdue reviews, drift)
+Maintenance      → ready                     (check for overdue reviews, drift)
        ↓
-Decision point   → pre_action           (query + guardrails + record)
+Decision point   → pre_action                (query + guardrails + record)
+                   (auto_record: true)        → returns decisionId
        ↓
-During work      → record_thought       (capture reasoning)
+During work      → record_thought            (capture reasoning)
+                   (decision_id: from above)  → thoughts attach in real-time
        ↓
-After work       → update_decision      (finalize decision text)
+After work       → update_decision           (finalize decision text)
+                   (id: decisionId)
        ↓
-Link related     → link_decisions       (explicit relationships)
+Link related     → link_decisions            (explicit relationships)
        ↓
-Later            → review_outcome       (record success/failure)
+Later            → review_outcome            (record success/failure)
 ```
+
+### Multi-Agent Isolation
+
+When multiple agents share a single MCP connection (e.g. Claude Code sub-agents), pass `agent_id` to isolate deliberation streams:
+
+```
+pre_action(agent_id: "planner", ...)           → decisionId: "abc123"
+record_thought(agent_id: "planner", decision_id: "abc123", text: "...")
+update_decision(id: "abc123", ...)
+```
+
+Each agent's thoughts are tracked via composite keys (`agent:{id}:decision:{id}`), preventing cross-contamination.
+
+### When to Use `log_decision`
+
+`log_decision` is a **last resort** for recording decisions without prior context. Use it only when:
+- The agent didn't call `pre_action` (legacy or spontaneous decision)
+- You need full manual control over all fields
+- No deliberation tracking is needed
+
+For the standard flow, `pre_action(auto_record: true)` + `record_thought` + `update_decision` is always preferred.
 
 ## Claude Code CLI
 
