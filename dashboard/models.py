@@ -90,6 +90,19 @@ class RelatedDecision:
 
 
 @dataclass
+class GraphNeighbor:
+    """A neighbor from the decision graph."""
+
+    id: str
+    category: str = ""
+    stakes: str = ""
+    date: str = ""
+    edge_type: str = ""
+    weight: float = 0.0
+    direction: str = ""  # "outgoing" or "incoming"
+
+
+@dataclass
 class QualityBreakdown:
     """Quality score with component breakdown."""
     
@@ -220,11 +233,17 @@ class Decision:
             lessons=data.get("lessons"),
             reviewed_at=reviewed_at,
             project_context=project_context,
-            agent_id=data.get("agent_id"),
+            agent_id=data.get("agent_id") or data.get("recorded_by"),
             tags=data.get("tags", []),
             pattern=data.get("pattern"),
-            quality_score=float(data["quality"]["score"]) if data.get("quality", {}).get("score") else None,
-            deliberation=Deliberation.from_dict(data["deliberation"]) if data.get("deliberation") else None,
+            quality_score=(
+                float(data["quality"]["score"])
+                if data.get("quality", {}).get("score") else None
+            ),
+            deliberation=(
+                Deliberation.from_dict(data["deliberation"])
+                if data.get("deliberation") else None
+            ),
             bridge=Bridge.from_dict(data["bridge"]) if data.get("bridge") else None,
             related=[
                 RelatedDecision(

@@ -3,7 +3,7 @@ from typing import Any
 
 import httpx
 
-from models import CalibrationStats, Decision
+from models import CalibrationStats, Decision, GraphNeighbor
 
 
 class CSTPError(Exception):
@@ -242,6 +242,30 @@ class CSTPClient:
         if include_consumed:
             params["includeConsumed"] = True
         return self._call("cstp.debugTracker", params)
+
+    def get_neighbors(self, decision_id: str, limit: int = 20) -> list[GraphNeighbor]:
+        """Get graph neighbors of a decision."""
+        result = self._call("cstp.getNeighbors", {
+            "nodeId": decision_id[:8],
+            "direction": "both",
+            "limit": limit,
+        })
+
+        neighbors: list[GraphNeighbor] = []
+        for item in result.get("neighbors", []):
+            node = item.get("node", {})
+            edge = item.get("edge", {})
+            direction = "outgoing" if edge.get("sourceId") == decision_id[:8] else "incoming"
+            neighbors.append(GraphNeighbor(
+                id=node.get("id", ""),
+                category=node.get("category", ""),
+                stakes=node.get("stakes", ""),
+                date=node.get("date", ""),
+                edge_type=edge.get("edgeType", ""),
+                weight=float(edge.get("weight", 0.0)),
+                direction=direction,
+            ))
+        return neighbors
 
     def health_check(self) -> bool:
         """Check if CSTP server is reachable.

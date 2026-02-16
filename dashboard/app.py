@@ -12,7 +12,6 @@ from flask_wtf.csrf import CSRFError
 from auth import requires_auth
 from config import config
 from cstp_client import CSTPClient, CSTPError
-from models import CalibrationStats, Decision
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -284,7 +283,7 @@ def decisions_partial() -> str:
 @auth
 def decision_detail(decision_id: str) -> str | Response:
     """View single decision details.
-    
+
     Args:
         decision_id: Decision ID (full or prefix)
     """
@@ -296,8 +295,17 @@ def decision_detail(decision_id: str) -> str | Response:
     except CSTPError as e:
         flash(f"Error loading decision: {e}", "error")
         return redirect(url_for("decisions"))
-    
-    return render_template("decision.html", decision=decision)
+
+    # Fetch graph neighbors (error-isolated — never break the page)
+    graph_neighbors: list = []
+    with contextlib.suppress(Exception):
+        graph_neighbors = cstp.get_neighbors(decision_id)
+
+    return render_template(
+        "decision.html",
+        decision=decision,
+        graph_neighbors=graph_neighbors,
+    )
 
 
 @app.route("/decisions/<decision_id>/review", methods=["GET", "POST"])

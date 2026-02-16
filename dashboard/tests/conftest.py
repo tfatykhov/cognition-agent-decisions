@@ -1,7 +1,7 @@
 """Pytest fixtures for dashboard tests."""
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from flask import Flask
@@ -42,13 +42,15 @@ def auth_headers() -> dict[str, str]:
 
 
 @pytest.fixture
-def mock_cstp() -> Generator[AsyncMock, None, None]:
+def mock_cstp() -> Generator[MagicMock, None, None]:
     """Mock CSTP client methods."""
     with patch("dashboard.app.cstp") as mock:
-        mock.health_check = AsyncMock(return_value=True)
-        mock.list_decisions = AsyncMock(return_value=([], 0))
-        mock.get_decision = AsyncMock(return_value=None)
-        mock.get_calibration = AsyncMock(return_value=_mock_calibration_stats())
+        mock.health_check = MagicMock(return_value=True)
+        mock.list_decisions = MagicMock(return_value=([], 0))
+        mock.get_decision = MagicMock(return_value=None)
+        mock.get_calibration = MagicMock(return_value=_mock_calibration_stats())
+        mock.get_neighbors = MagicMock(return_value=[])
+        mock.check_drift = MagicMock(return_value=None)
         yield mock
 
 
