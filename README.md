@@ -59,6 +59,17 @@ On Windows, prefix with `"command": "cmd", "args": ["/c", "npx", ...]`.
 
 Same config in `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
+### FORGE Plugin for Claude Code
+
+**[FORGE](https://github.com/tfatykhov/cognition-engines-marketplace)** is a Claude Code plugin that implements the full decision loop as a protocol: **F**etch → **O**rient → **R**esolve → **G**o → **E**xtract.
+
+```bash
+# Install the plugin
+claude --plugin-dir ./path-to-forge-plugin
+```
+
+FORGE automates the workflow via hooks - cognitive context loads at session start, guardrails check before risky operations, micro-thoughts stream during work, and reflection is enforced at session end. See the [FORGE repo](https://github.com/tfatykhov/cognition-engines-marketplace) for details.
+
 ## How It Works
 
 ```

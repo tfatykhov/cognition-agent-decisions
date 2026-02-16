@@ -202,6 +202,35 @@ Returns: `allowed` status, relevant past decisions, guardrail results, calibrati
 
 Returns: markdown-formatted cognitive context ready for system prompt injection, including agent profile, relevant decisions, guardrails, calibration by category, and confirmed patterns.
 
+## FORGE Plugin for Claude Code
+
+**[FORGE](https://github.com/tfatykhov/cognition-engines-marketplace)** is a Claude Code plugin that implements the full decision loop as a protocol:
+
+**F**etch → **O**rient → **R**esolve → **G**o → **E**xtract
+
+| Phase | What happens | Tool used |
+|-------|-------------|-----------|
+| **Fetch** | Load cognitive context at session start | `get_session_context` |
+| **Orient** | Check guardrails before non-trivial decisions | `pre_action` |
+| **Resolve** | Stream micro-thought deliberation (10+ signals/decision) | `record_thought` |
+| **Go** | Execute with confidence, gate HIGH/CRITICAL on confirmation | `update_decision` |
+| **Extract** | Review outcomes, distill patterns | `review_outcome` |
+
+### Installation
+
+```bash
+claude --plugin-dir ./path-to-forge-plugin
+```
+
+### Components
+
+- **Skill** (`skills/forge-protocol/SKILL.md`) - Protocol rules loaded contextually
+- **Hooks** (`hooks/hooks.json`) - SessionStart injects protocol, PreToolUse gates risky ops, Stop enforces reflection
+- **MCP** (`.mcp.json`) - Connects to the decisions server
+- **Commands** - `/forge:status` dashboard, `/forge:reflect` batch review
+
+→ [FORGE Repository](https://github.com/tfatykhov/cognition-engines-marketplace)
+
 ## vs JSON-RPC
 
 MCP adds session management overhead. For stateless workflows, the [JSON-RPC API](/reference/api) via `cstp.py` is simpler. Use MCP when your agent platform expects it.

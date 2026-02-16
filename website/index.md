@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Cognition Engines
   text: Decision Intelligence for AI Agents
-  tagline: "Query past decisions, enforce guardrails, and track calibration - all in two API calls. v0.11.0: Pre-Action Hook, Dashboard, and Pluggable Storage."
+  tagline: "Query past decisions, enforce guardrails, and track calibration - all in two API calls. v0.14.0: Multi-Agent Isolation, Live Deliberation, and FORGE Plugin."
   image:
     src: /logo.png
     alt: Cognition Engines
@@ -39,8 +39,8 @@ features:
     title: Calibration & Analytics
     details: Track Brier scores, success rates, and confidence calibration over time. Reason-type analytics show which reasoning patterns predict success.
   - icon: 🔌
-    title: MCP Integration
-    details: 11 MCP tools for Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent. Two PRIMARY tools (pre_action, get_session_context) handle the full workflow.
+    title: MCP + FORGE Plugin
+    details: 14+ MCP tools for Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent. FORGE plugin automates the full decision loop with hooks and commands.
   - icon: ⚡
     title: JSON-RPC API
     details: CSTP protocol over HTTP. Query, check, record, review - all via simple JSON-RPC 2.0 calls. Built on FastAPI with ChromaDB for semantic search.
