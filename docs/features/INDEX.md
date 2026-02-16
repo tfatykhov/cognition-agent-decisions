@@ -61,6 +61,7 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | ~~F047~~ | ~~Session Context Endpoint~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
 | ~~F048~~ | ~~Multi-Vector-DB Support~~ | ~~Infrastructure~~ | *Shipped in v0.12.0* |
 | F049 | Live Deliberation Viewer | Dashboard + debugTracker | `F049-live-deliberation-viewer.md` |
+| F050 | SQLite Storage Layer | Infrastructure | `F050-sqlite-storage-layer.md` |
 
 ## Retired IDs
 
