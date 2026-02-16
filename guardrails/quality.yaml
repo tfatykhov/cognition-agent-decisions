@@ -6,5 +6,5 @@
   condition:
     phase: record
     quality_score: "< 0.5"
-  action: warn
+  action: block
   message: "Low quality recording (score {quality_score}). Add --tag, --pattern, and diverse reasons for better retrieval."
