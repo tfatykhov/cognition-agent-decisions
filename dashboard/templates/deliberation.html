@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Deliberation Tracker - CSTP Dashboard{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">Deliberation Tracker</h1>
+            <p class="page-subtitle">Live view of active agent deliberation sessions</p>
+        </div>
+        <div class="flex gap-3 items-center">
+            <span class="badge badge--info" id="session-count">{{ session_count }} active</span>
+            <span class="text-muted text-sm" id="refresh-indicator">Auto-refreshing</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="flex gap-3 items-center" method="get">
+            <input type="text" name="key" class="form-input" style="max-width:400px"
+                   placeholder="Filter by session key..." value="{{ filter_key or '' }}">
+            <button type="submit" class="btn btn--secondary btn--sm">Filter</button>
+            {% if filter_key %}
+            <a href="{{ url_for('deliberation') }}" class="btn btn--ghost btn--sm">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div id="deliberation-content"
+     hx-get="{{ url_for('deliberation_partial', key=filter_key) }}"
+     hx-trigger="every 5s"
+     hx-swap="innerHTML">
+    {% include "deliberation_partial.html" %}
+</div>
+{% endblock %}

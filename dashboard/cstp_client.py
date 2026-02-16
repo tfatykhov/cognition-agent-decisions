@@ -225,6 +225,20 @@ class CSTPClient:
         
         return self._call("cstp.checkDrift", params)
     
+    def debug_tracker(self, key: str | None = None) -> dict[str, Any]:
+        """Get deliberation tracker debug state.
+
+        Args:
+            key: Optional tracker key to filter by
+
+        Returns:
+            Tracker debug data with sessions and detail
+        """
+        params: dict[str, Any] = {}
+        if key:
+            params["key"] = key
+        return self._call("cstp.debugTracker", params)
+
     def health_check(self) -> bool:
         """Check if CSTP server is reachable.
         
