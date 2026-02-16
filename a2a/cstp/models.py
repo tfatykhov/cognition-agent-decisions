@@ -1193,11 +1193,15 @@ class DebugTrackerRequest:
     """Request for cstp.debugTracker (F126)."""
 
     key: str | None = None
+    include_consumed: bool = False
 
     @classmethod
     def from_params(cls, params: dict[str, Any]) -> "DebugTrackerRequest":
         """Create from JSON-RPC params."""
-        return cls(key=params.get("key"))
+        return cls(
+            key=params.get("key"),
+            include_consumed=bool(params.get("includeConsumed", False)),
+        )
 
 
 @dataclass(slots=True)
@@ -1259,20 +1263,62 @@ class TrackerSessionDetail:
 
 
 @dataclass(slots=True)
+class ConsumedSessionDetail:
+    """A consumed/expired tracker session in debug output."""
+
+    key: str
+    consumed_at_seconds: int  # age in seconds
+    input_count: int
+    agent_id: str | None
+    decision_id: str | None
+    status: str  # "consumed" | "expired"
+    inputs_summary: list[dict[str, str]]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "key": self.key,
+            "consumedAt": self.consumed_at_seconds,
+            "inputCount": self.input_count,
+            "agentId": self.agent_id,
+            "decisionId": self.decision_id,
+            "status": self.status,
+            "inputsSummary": self.inputs_summary,
+        }
+
+    @classmethod
+    def from_raw(cls, raw: dict[str, Any]) -> "ConsumedSessionDetail":
+        """Create from raw dict."""
+        return cls(
+            key=raw["key"],
+            consumed_at_seconds=raw["consumedAt"],
+            input_count=raw["inputCount"],
+            agent_id=raw.get("agentId"),
+            decision_id=raw.get("decisionId"),
+            status=raw.get("status", "consumed"),
+            inputs_summary=raw.get("inputsSummary", []),
+        )
+
+
+@dataclass(slots=True)
 class DebugTrackerResponse:
     """Response from cstp.debugTracker (F126)."""
 
     sessions: list[str]
     session_count: int
     detail: dict[str, TrackerSessionDetail] = field(default_factory=dict)
+    consumed: list[ConsumedSessionDetail] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict with camelCase keys."""
-        return {
+        result: dict[str, Any] = {
             "sessions": self.sessions,
             "sessionCount": self.session_count,
             "detail": {k: v.to_dict() for k, v in self.detail.items()},
         }
+        if self.consumed:
+            result["consumed"] = [c.to_dict() for c in self.consumed]
+        return result
 
     @classmethod
     def from_raw(cls, raw: dict[str, Any]) -> "DebugTrackerResponse":
@@ -1281,8 +1327,13 @@ class DebugTrackerResponse:
             k: TrackerSessionDetail.from_raw(k, v)
             for k, v in raw.get("detail", {}).items()
         }
+        consumed = [
+            ConsumedSessionDetail.from_raw(c)
+            for c in raw.get("consumed", [])
+        ]
         return cls(
             sessions=raw["sessions"],
             session_count=raw["sessionCount"],
             detail=detail,
+            consumed=consumed,
         )

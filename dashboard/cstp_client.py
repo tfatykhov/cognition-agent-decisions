@@ -225,11 +225,13 @@ class CSTPClient:
         
         return self._call("cstp.checkDrift", params)
     
-    def debug_tracker(self, key: str | None = None) -> dict[str, Any]:
+    def debug_tracker(self, key: str | None = None,
+                      include_consumed: bool = False) -> dict[str, Any]:
         """Get deliberation tracker debug state.
 
         Args:
             key: Optional tracker key to filter by
+            include_consumed: Include recently consumed/expired sessions
 
         Returns:
             Tracker debug data with sessions and detail
@@ -237,6 +239,8 @@ class CSTPClient:
         params: dict[str, Any] = {}
         if key:
             params["key"] = key
+        if include_consumed:
+            params["includeConsumed"] = True
         return self._call("cstp.debugTracker", params)
 
     def health_check(self) -> bool:

@@ -1624,3 +1624,21 @@ details > :not(summary) {
   background: var(--c-text-muted);
   opacity: 0.5;
 }
+
+/* Consumed session cards */
+.session-list--consumed {
+  opacity: 0.85;
+}
+.session-card--consumed {
+  border-left: 3px solid var(--c-border);
+}
+.session-card--consumed .session-card-header {
+  background: var(--c-bg-secondary);
+}
+.section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
