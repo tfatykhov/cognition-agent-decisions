@@ -638,13 +638,22 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
         params["bridge"] = bridge_data
 
     # Create request and record
-    request = RecordDecisionRequest.from_dict(params, agent_id="mcp-client")
+    request = RecordDecisionRequest.from_dict(params, agent_id=args.agent_id or "mcp-client")
+
+    # Build composite tracker key for multi-agent isolation
+    from .cstp.deliberation_tracker import build_tracker_key
+
+    tracker_key = build_tracker_key(
+        agent_id=args.agent_id,
+        decision_id=args.decision_id,
+        transport_key="mcp-session",
+    )
 
     # F025: Extract related decisions BEFORE consuming tracker
     from .cstp.deliberation_tracker import extract_related_from_tracker
 
     if not request.related_to:
-        related_raw = extract_related_from_tracker(get_mcp_tracker_key())
+        related_raw = extract_related_from_tracker(tracker_key)
         if related_raw:
             from .cstp.decision_service import RelatedDecision
 
@@ -656,7 +665,7 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     from .cstp.deliberation_tracker import auto_attach_deliberation
 
     request.deliberation, auto_captured = auto_attach_deliberation(
-        key=get_mcp_tracker_key(),
+        key=tracker_key,
         deliberation=request.deliberation,
     )
 

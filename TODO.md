@@ -106,6 +106,12 @@ Link decisions to executable tasks with dependencies.
 - [ ] Implement Minsky Ch 27 censor for blocking bad decision patterns
 - Spec: `docs/features/F033-censor-layer.md`
 
+### Dashboard: Live Deliberation Viewer
+- [ ] Show open thought sessions from `cstp.debugTracker` in dashboard UI
+- [ ] Real-time updates (polling or SSE)
+- [ ] Per-session breakdown: agent key, input count, thought text, age
+- [ ] Visual indicator for thought accumulation and consumption
+
 ### Other improvements
 - [ ] Add date-range filtering to `cstp.queryDecisions` (`dateFrom`/`dateTo` params)
 
