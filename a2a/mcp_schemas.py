@@ -235,6 +235,16 @@ class LogDecisionInput(BaseModel):
         ge=1,
         description="Pull request number",
     )
+    agent_id: str | None = Field(
+        default=None,
+        description="Agent identifier for multi-agent deliberation isolation. "
+        "Use when multiple agents share an MCP connection.",
+    )
+    decision_id: str | None = Field(
+        default=None,
+        description="Decision ID from pre_action to scope deliberation consumption. "
+        "Ensures only thoughts tracked for THIS decision are attached.",
+    )
     deliberation: DeliberationSchema | None = Field(
         default=None,
         description="Chain-of-thought trace: inputs gathered, reasoning steps, and timing",
