@@ -113,11 +113,15 @@ Link decisions to executable tasks with dependencies.
 - [ ] Implement Minsky Ch 27 censor for blocking bad decision patterns
 - Spec: `docs/features/F033-censor-layer.md`
 
-### Dashboard: Live Deliberation Viewer
-- [ ] Show open thought sessions from `cstp.debugTracker` in dashboard UI
-- [ ] Real-time updates (polling or SSE)
-- [ ] Per-session breakdown: agent key, input count, thought text, age
-- [ ] Visual indicator for thought accumulation and consumption
+### F049: Live Deliberation Viewer
+- [ ] Add `debug_tracker()` to `cstp_client.py`
+- [ ] Create `/deliberation` route + template
+- [ ] HTMX auto-refresh (5s polling)
+- [ ] Parse composite keys (agent name, decision link)
+- [ ] Color-code by age (active/stale/orphaned)
+- [ ] Type badges for thought sources
+- [ ] P2: Consumption history tracking
+- Spec: `docs/features/F049-live-deliberation-viewer.md`
 
 ### Other improvements
 - [ ] Add date-range filtering to `cstp.queryDecisions` (`dateFrom`/`dateTo` params)
