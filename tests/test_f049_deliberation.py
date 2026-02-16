@@ -10,6 +10,7 @@ Tests cover:
 - Auth enforcement on /deliberation
 """
 
+import importlib.util
 import sys
 from base64 import b64encode
 from pathlib import Path
@@ -17,6 +18,12 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Flask is not installed in CI — skip entire module if missing
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("flask") is None,
+    reason="flask not installed (CI environment)",
+)
 
 # Add dashboard/ to sys.path so its modules can be imported
 _dashboard_dir = str(Path(__file__).resolve().parent.parent / "dashboard")
