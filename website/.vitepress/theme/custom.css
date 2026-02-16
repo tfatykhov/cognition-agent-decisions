@@ -21,3 +21,18 @@
 .VPNavBarTitle img {
   mix-blend-mode: lighten;
 }
+
+/* Feature cards: inline icon with title */
+.VPFeature .VPImage,
+.VPFeature .feature-icon {
+  mix-blend-mode: lighten;
+}
+
+.VPFeatures .VPFeature .icon {
+  margin-bottom: 0;
+}
+
+/* Make feature icon images larger and blend */
+.VPFeature .VPImage img {
+  mix-blend-mode: lighten;
+}

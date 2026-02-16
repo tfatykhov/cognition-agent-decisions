@@ -23,50 +23,50 @@ features:
   - icon:
       src: /icon-query.png
       alt: Query
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: Query Before Deciding
     details: Semantic search across past decisions. Find what worked, what failed, and why. Directional search by structure ("where did we use this pattern?") or function ("what solved this problem?").
   - icon:
       src: /icon-guardrails.png
       alt: Guardrails
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: Guardrails
     details: Policy enforcement that prevents violations before they occur. Block high-stakes decisions with low confidence. Require code review for production changes.
   - icon:
       src: /icon-deliberation.png
       alt: Deliberation
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: Deliberation Traces
     details: Every query and guardrail check automatically linked to the resulting decision. Full provenance of how each choice was made - zero client changes needed.
   - icon:
       src: /icon-bridge.png
       alt: Bridge
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: Bridge-Definitions
     details: Describe decisions by both structure (what it looks like) and function (what it solves). Inspired by Minsky's Society of Mind Ch 12 - connecting patterns to purposes.
   - icon:
       src: /icon-related.png
       alt: Related
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: Related Decisions
     details: Pre-decision query results automatically linked as lightweight graph edges. See which past decisions influenced each new choice, with semantic distance scores.
   - icon:
       src: /icon-calibration.png
       alt: Calibration
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: Calibration & Analytics
     details: Track Brier scores, success rates, and confidence calibration over time. Reason-type analytics show which reasoning patterns predict success.
   - icon:
       src: /icon-api.png
       alt: API
-      width: 48
-      height: 48
+      width: 80
+      height: 80
     title: MCP + JSON-RPC API
     details: 14+ MCP tools for Claude Code, Claude Desktop, and OpenClaw. CSTP protocol over JSON-RPC 2.0 via HTTP. Framework-agnostic - works with any agent.
 ---
@@ -86,11 +86,11 @@ Every decision flows through this loop, creating a compounding record of organiz
 
 | Phase | What happens |
 |-------|-------------|
-| **Fetch** | Load context and past decisions |
-| **Orient** | Check guardrails and constraints |
-| **Resolve** | Decide and record with reasoning |
-| **Go** | Execute |
-| **Extract** | Evaluate outcomes and distill patterns |
+| <span style="font-size:1.4em; font-weight:bold">F</span>etch | Load context and past decisions |
+| <span style="font-size:1.4em; font-weight:bold">O</span>rient | Check guardrails and constraints |
+| <span style="font-size:1.4em; font-weight:bold">R</span>esolve | Decide and record with reasoning |
+| <span style="font-size:1.4em; font-weight:bold">G</span>o | Execute |
+| <span style="font-size:1.4em; font-weight:bold">E</span>xtract | Evaluate outcomes and distill patterns |
 
 Available as a [Claude Code plugin](https://github.com/tfatykhov/cognition-engines-marketplace) with hooks, commands, and skills that automate the entire loop.
 
