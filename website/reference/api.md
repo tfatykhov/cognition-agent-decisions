@@ -858,6 +858,72 @@ Get calibration statistics to assess decision-making quality.
 
 ---
 
+#### `link_decisions`
+
+Create typed edges between decisions in the knowledge graph.
+
+**Input Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `source_id` | string | ✅ | Source decision ID |
+| `target_id` | string | ✅ | Target decision ID |
+| `edge_type` | string | ✅ | `"relates_to"`, `"supersedes"`, `"depends_on"` |
+| `weight` | float | ❌ | Edge weight (0.0-1.0, default 1.0) |
+| `context` | string | ❌ | Why these decisions are linked |
+
+**Maps to:** `cstp.linkDecisions`
+
+---
+
+#### `get_graph`
+
+Query subgraph around a decision with configurable depth.
+
+**Input Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `decision_id` | string | ✅ | Center decision ID |
+| `depth` | int | ❌ | Traversal depth (default 1) |
+| `edge_types` | string[] | ❌ | Filter by edge type |
+
+**Maps to:** `cstp.getGraph`
+
+---
+
+#### `get_neighbors`
+
+Lightweight query for direct connections of a decision.
+
+**Input Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `decision_id` | string | ✅ | Decision ID to query |
+| `edge_type` | string | ❌ | Filter by edge type |
+
+Returns neighbor IDs with edge types and weights. Faster than `get_graph` when you only need immediate connections.
+
+**Maps to:** `cstp.getNeighbors`
+
+---
+
+#### Debug: `cstp.debugTracker`
+
+Inspect live deliberation tracker state. Available via JSON-RPC only (not as MCP tool).
+
+```bash
+curl -X POST http://localhost:8100/cstp \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"cstp.debugTracker","params":{},"id":1}'
+```
+
+Returns active sessions with composite tracker keys, input counts, thought text, source, and age in seconds. Useful for debugging multi-agent deliberation isolation.
+
+---
+
 ### Error Handling
 
 MCP tool errors are returned as `TextContent` with JSON:

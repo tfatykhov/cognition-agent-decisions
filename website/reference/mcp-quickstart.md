@@ -530,3 +530,7 @@ python -m uvicorn a2a.server:app --host 0.0.0.0 --port 9991
 | `get_reason_stats` | `cstp.getReasonStats` | `a2a/cstp/reason_stats_service.py` | Granular |
 | `update_decision` | `cstp.updateDecision` | `a2a/cstp/decision_service.py` | Granular |
 | `record_thought` | `cstp.recordThought` | `a2a/cstp/deliberation_tracker.py` | Granular |
+| `ready` | `cstp.ready` | `a2a/cstp/ready_service.py` | **Primary** |
+| `link_decisions` | `cstp.linkDecisions` | `a2a/cstp/graph_service.py` | Graph |
+| `get_graph` | `cstp.getGraph` | `a2a/cstp/graph_service.py` | Graph |
+| `get_neighbors` | `cstp.getNeighbors` | `a2a/cstp/graph_service.py` | Graph |

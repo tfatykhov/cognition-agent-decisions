@@ -26,6 +26,7 @@ Streamable HTTP - handles both POST (tool calls) and GET (SSE events).
 |------|-------------|
 | `link_decisions` | Create typed edges between decisions (`relates_to`, `supersedes`, `depends_on`) with optional weight |
 | `get_graph` | Query subgraph around a decision with configurable depth and edge type filters. Returns nodes with metadata and weighted edges. |
+| `get_neighbors` | Lightweight neighbor query - direct connections for a decision with edge types and weights |
 
 ## Granular Tools (Fine-Grained Control)
 
