@@ -111,34 +111,52 @@ class DeliberationTracker:
         Returns None if no inputs were tracked.
         Called during recordDecision.
         Filters out inputs older than TTL.
+
+        Always records a ConsumedRecord to _consumed_history, even when
+        all inputs are expired — so sessions never vanish silently.
         """
         with self._lock:
             session = self._sessions.pop(key, None)
 
-        if not session or not session.inputs:
-            return None
+            if not session or not session.inputs:
+                return None
 
-        # Filter expired inputs
-        cutoff = time.time() - self._input_ttl
-        valid_inputs = [i for i in session.inputs if i.timestamp >= cutoff]
+            # Filter expired inputs
+            now = time.time()
+            cutoff = now - self._input_ttl
+            valid_inputs = [i for i in session.inputs if i.timestamp >= cutoff]
 
-        if not valid_inputs:
-            return None
+            parsed = _parse_key_components(key)
 
-        # Record consumption history
-        parsed = _parse_key_components(key)
-        self._consumed_history.append(ConsumedRecord(
-            key=key,
-            consumed_at=time.time(),
-            input_count=len(valid_inputs),
-            agent_id=parsed.get("agent_id"),
-            decision_id=None,  # backfilled later
-            status="consumed",
-            inputs_summary=[
-                {"id": i.id, "type": i.type, "text": i.text[:80]}
-                for i in valid_inputs[:10]
-            ],
-        ))
+            if not valid_inputs:
+                # All inputs expired — still record so it doesn't vanish
+                self._consumed_history.append(ConsumedRecord(
+                    key=key,
+                    consumed_at=now,
+                    input_count=0,
+                    agent_id=parsed.get("agent_id"),
+                    decision_id=None,
+                    status="consumed",
+                    inputs_summary=[
+                        {"id": "-", "type": "info",
+                         "text": "[all inputs expired at consume time]"},
+                    ],
+                ))
+                return None
+
+            # Record consumption history
+            self._consumed_history.append(ConsumedRecord(
+                key=key,
+                consumed_at=now,
+                input_count=len(valid_inputs),
+                agent_id=parsed.get("agent_id"),
+                decision_id=None,  # backfilled later
+                status="consumed",
+                inputs_summary=[
+                    {"id": i.id, "type": i.type, "text": i.text[:80]}
+                    for i in valid_inputs[:10]
+                ],
+            ))
 
         return self._build_deliberation(valid_inputs)
 

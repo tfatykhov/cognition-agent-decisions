@@ -23,5 +23,5 @@ auth:
 
 tracker:
   input_ttl_seconds: 300
-  session_ttl_minutes: 30
+  session_ttl_seconds: 1800
   consumed_history_size: 50

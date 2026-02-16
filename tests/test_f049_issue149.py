@@ -274,30 +274,38 @@ def test_tracker_config() -> None:
     # Defaults
     tc = TrackerConfig()
     assert tc.input_ttl_seconds == 300
-    assert tc.session_ttl_minutes == 30
+    assert tc.session_ttl_seconds == 1800
     assert tc.consumed_history_size == 50
 
-    # From YAML dict
+    # From YAML dict (new key: session_ttl_seconds)
     cfg = Config._from_dict({
         "tracker": {
             "input_ttl_seconds": 600,
-            "session_ttl_minutes": 60,
+            "session_ttl_seconds": 3600,
             "consumed_history_size": 100,
         }
     })
     assert cfg.tracker.input_ttl_seconds == 600
-    assert cfg.tracker.session_ttl_minutes == 60
+    assert cfg.tracker.session_ttl_seconds == 3600
     assert cfg.tracker.consumed_history_size == 100
 
-    # From env vars
+    # From YAML dict (legacy key: session_ttl_minutes -> converted to seconds)
+    cfg_legacy = Config._from_dict({
+        "tracker": {
+            "session_ttl_minutes": 60,
+        }
+    })
+    assert cfg_legacy.tracker.session_ttl_seconds == 3600  # 60 * 60
+
+    # From env vars (value is in seconds)
     with patch.dict("os.environ", {
         "CSTP_TRACKER_INPUT_TTL": "120",
-        "CSTP_TRACKER_SESSION_TTL": "15",
+        "CSTP_TRACKER_SESSION_TTL": "900",
         "CSTP_TRACKER_HISTORY_SIZE": "25",
     }):
         cfg_env = Config.from_env()
         assert cfg_env.tracker.input_ttl_seconds == 120
-        assert cfg_env.tracker.session_ttl_minutes == 15
+        assert cfg_env.tracker.session_ttl_seconds == 900
         assert cfg_env.tracker.consumed_history_size == 25
 
     # Config object includes tracker field
@@ -726,4 +734,240 @@ async def test_dispatcher_backfill_after_record() -> None:
         assert tracker._consumed_history[0].decision_id == "fake-dec-id"
 
         # Cleanup
+        reset_tracker()
+
+
+# ---------------------------------------------------------------------------
+# PR #151 P2: All-expired-inputs consumed record tests
+# ---------------------------------------------------------------------------
+
+
+# ---- 17. test_consume_all_expired_records_consumed ----
+
+
+def test_consume_all_expired_records_consumed() -> None:
+    """consume() records a ConsumedRecord even when all inputs are expired."""
+    tracker = DeliberationTracker(
+        input_ttl=2, session_ttl=1800, consumed_history_size=50,
+    )
+    key = "agent:zara"
+    now = time.time()
+
+    # Track inputs that are already expired by input TTL
+    tracker.track(key, _make_input("q-1", "query", "old query 1", ts=now - 10))
+    tracker.track(key, _make_input("q-2", "query", "old query 2", ts=now - 10))
+
+    # consume() should return None (no valid deliberation)
+    result = tracker.consume(key)
+    assert result is None
+
+    # But the session must NOT vanish — it should be in consumed history
+    assert len(tracker._consumed_history) == 1
+    record = tracker._consumed_history[0]
+    assert record.key == key
+    assert record.input_count == 0
+    assert record.agent_id == "zara"
+    assert record.status == "consumed"
+    assert len(record.inputs_summary) == 1
+    assert record.inputs_summary[0]["type"] == "info"
+    assert "expired" in record.inputs_summary[0]["text"].lower()
+
+    # Session should be removed from active sessions
+    assert key not in tracker._sessions
+
+
+# ---- 18. test_consume_all_expired_backfill_works ----
+
+
+def test_consume_all_expired_backfill_works() -> None:
+    """backfill_consumed() works on records created from all-expired consume."""
+    tracker = DeliberationTracker(
+        input_ttl=2, session_ttl=1800, consumed_history_size=50,
+    )
+    key = "agent:yuri:decision:dec999"
+    now = time.time()
+
+    tracker.track(key, _make_input("q-1", ts=now - 10))
+    tracker.consume(key)
+
+    # Backfill should find the record
+    assert tracker.backfill_consumed(key, "dec999") is True
+    assert tracker._consumed_history[0].decision_id == "dec999"
+
+
+# ---- 19. test_consume_all_expired_debug_sessions_visible ----
+
+
+def test_consume_all_expired_debug_sessions_visible() -> None:
+    """All-expired consumed records appear in debug_sessions."""
+    tracker = DeliberationTracker(
+        input_ttl=2, session_ttl=1800, consumed_history_size=50,
+    )
+    key = "agent:xena"
+    now = time.time()
+
+    tracker.track(key, _make_input("q-1", ts=now - 10))
+    tracker.consume(key)
+
+    result = tracker.debug_sessions(include_consumed=True)
+    assert "consumed" in result
+    assert len(result["consumed"]) == 1
+    assert result["consumed"][0]["key"] == key
+    assert result["consumed"][0]["inputCount"] == 0
+    assert result["consumed"][0]["status"] == "consumed"
+
+
+# ---- 20. test_consume_mixed_expired_and_valid ----
+
+
+def test_consume_mixed_expired_and_valid() -> None:
+    """When some inputs are valid and some expired, only valid ones count."""
+    tracker = DeliberationTracker(
+        input_ttl=5, session_ttl=1800, consumed_history_size=50,
+    )
+    key = "agent:wendy"
+    now = time.time()
+
+    # One expired, one valid
+    tracker.track(key, _make_input("q-old", ts=now - 20))
+    tracker.track(key, _make_input("q-new", ts=now))
+
+    result = tracker.consume(key)
+    assert result is not None  # valid deliberation built
+    assert len(result.inputs) == 1
+
+    record = tracker._consumed_history[0]
+    assert record.input_count == 1  # only the valid one
+    assert record.status == "consumed"
+    # inputs_summary should contain the valid input, not the info message
+    assert record.inputs_summary[0]["id"] == "q-new"
+
+
+# ---- 21. test_consume_no_session_no_record ----
+
+
+def test_consume_no_session_no_record() -> None:
+    """consume() on a non-existent key creates no consumed record."""
+    tracker = DeliberationTracker(
+        input_ttl=300, session_ttl=1800, consumed_history_size=50,
+    )
+    result = tracker.consume("agent:nobody")
+    assert result is None
+    assert len(tracker._consumed_history) == 0
+
+
+# ---------------------------------------------------------------------------
+# P2: Config wiring and unit mismatch tests
+# ---------------------------------------------------------------------------
+
+
+def test_tracker_config_session_ttl_seconds_replaces_minutes() -> None:
+    """TrackerConfig.session_ttl_seconds stores seconds, not minutes."""
+    tc = TrackerConfig()
+    # Default is 1800 seconds (30 minutes)
+    assert tc.session_ttl_seconds == 1800
+    # No session_ttl_minutes attribute exists
+    assert not hasattr(tc, "session_ttl_minutes")
+
+
+def test_yaml_legacy_session_ttl_minutes_converted() -> None:
+    """Legacy YAML key session_ttl_minutes is converted to seconds."""
+    cfg = Config._from_dict({
+        "tracker": {
+            "session_ttl_minutes": 45,
+        }
+    })
+    assert cfg.tracker.session_ttl_seconds == 2700  # 45 * 60
+
+
+def test_yaml_session_ttl_seconds_preferred_over_minutes() -> None:
+    """If both keys present, session_ttl_seconds takes precedence."""
+    cfg = Config._from_dict({
+        "tracker": {
+            "session_ttl_seconds": 900,
+            "session_ttl_minutes": 45,
+        }
+    })
+    assert cfg.tracker.session_ttl_seconds == 900  # seconds wins
+
+
+def test_config_wires_to_tracker() -> None:
+    """TrackerConfig values are usable by DeliberationTracker."""
+    tc = TrackerConfig(input_ttl_seconds=120, session_ttl_seconds=600, consumed_history_size=10)
+    tracker = DeliberationTracker(
+        input_ttl=tc.input_ttl_seconds,
+        session_ttl=tc.session_ttl_seconds,
+        consumed_history_size=tc.consumed_history_size,
+    )
+    assert tracker._input_ttl == 120
+    assert tracker._session_ttl == 600
+    assert tracker._consumed_history.maxlen == 10
+
+
+def test_get_tracker_with_config_values() -> None:
+    """get_tracker() accepts config values and creates tracker with them."""
+    mock_mcp_modules = {
+        "mcp": MagicMock(),
+        "mcp.server": MagicMock(),
+        "mcp.server.stdio": MagicMock(),
+        "mcp.server.streamable_http_manager": MagicMock(),
+        "mcp.types": MagicMock(),
+    }
+    with patch.dict(sys.modules, mock_mcp_modules):
+        from a2a.cstp.deliberation_tracker import get_tracker, reset_tracker
+
+        reset_tracker()
+        tc = TrackerConfig(
+            input_ttl_seconds=999,
+            session_ttl_seconds=4200,
+            consumed_history_size=77,
+        )
+        tracker = get_tracker(
+            input_ttl=tc.input_ttl_seconds,
+            session_ttl=tc.session_ttl_seconds,
+            consumed_history_size=tc.consumed_history_size,
+        )
+        assert tracker._input_ttl == 999
+        assert tracker._session_ttl == 4200
+        assert tracker._consumed_history.maxlen == 77
+
+        # Subsequent parameterless calls return the same configured instance
+        tracker2 = get_tracker()
+        assert tracker2 is tracker
+        assert tracker2._input_ttl == 999
+
+        reset_tracker()
+
+
+def test_server_lifespan_wires_tracker_config() -> None:
+    """server.py lifespan initializes tracker with config values."""
+    mock_mcp_modules = {
+        "mcp": MagicMock(),
+        "mcp.server": MagicMock(),
+        "mcp.server.stdio": MagicMock(),
+        "mcp.server.streamable_http_manager": MagicMock(),
+        "mcp.types": MagicMock(),
+    }
+    with patch.dict(sys.modules, mock_mcp_modules):
+        from a2a.cstp.deliberation_tracker import get_tracker, reset_tracker
+
+        reset_tracker()
+
+        # Simulate what server.py lifespan does
+        cfg = Config._from_dict({
+            "tracker": {
+                "input_ttl_seconds": 200,
+                "session_ttl_seconds": 3000,
+                "consumed_history_size": 25,
+            }
+        })
+        tracker = get_tracker(
+            input_ttl=cfg.tracker.input_ttl_seconds,
+            session_ttl=cfg.tracker.session_ttl_seconds,
+            consumed_history_size=cfg.tracker.consumed_history_size,
+        )
+        assert tracker._input_ttl == 200
+        assert tracker._session_ttl == 3000
+        assert tracker._consumed_history.maxlen == 25
+
         reset_tracker()
