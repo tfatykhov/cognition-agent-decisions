@@ -799,7 +799,7 @@ class GetNeighborsRequest:
 
         return cls(
             node_id=node_id,
-            direction=direction if direction in ("outgoing", "incoming", "both") else "both",
+            direction=direction,
             edge_type=edge_type,
             limit=max(1, min(limit, 100)),
         )

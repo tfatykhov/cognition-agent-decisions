@@ -670,21 +670,18 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
     # F045 follow-up: Auto-link decision in graph
     auto_linked = 0
     if response.success and response.id:
-        try:
-            from .cstp.graph_service import auto_link_decision
+        from .cstp.graph_service import safe_auto_link
 
-            related_dicts = [r.to_dict() for r in request.related_to] if request.related_to else []
-            auto_linked = await auto_link_decision(
-                decision_id=response.id,
-                category=request.category,
-                stakes=request.stakes,
-                confidence=request.confidence,
-                tags=list(request.tags),
-                pattern=request.pattern,
-                related_to=related_dicts,
-            )
-        except Exception:
-            logger.debug("Auto-link failed for %s", response.id, exc_info=True)
+        related_dicts = [r.to_dict() for r in request.related_to] if request.related_to else []
+        auto_linked = await safe_auto_link(
+            response_id=response.id,
+            category=request.category,
+            stakes=request.stakes,
+            confidence=request.confidence,
+            tags=list(request.tags),
+            pattern=request.pattern,
+            related_to=related_dicts,
+        )
 
     # Format response
     result = response.to_dict()

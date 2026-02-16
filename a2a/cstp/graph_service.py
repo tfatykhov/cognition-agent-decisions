@@ -14,6 +14,8 @@ from .graphdb.factory import get_graph_store
 
 logger = logging.getLogger(__name__)
 
+_MIN_EDGE_WEIGHT = 0.01  # Floor for auto-link edge weights (prevents zero-weight edges)
+
 
 # ---------------------------------------------------------------------------
 # Response dataclasses
@@ -278,7 +280,7 @@ async def auto_link_decision(
             source_id=decision_id[:8],
             target_id=related_id,
             edge_type="relates_to",
-            weight=round(max(0.01, 1.0 - distance), 3),
+            weight=round(max(_MIN_EDGE_WEIGHT, 1.0 - distance), 3),
             created_at=datetime.now(UTC).isoformat(),
             created_by="auto-link",
             context=f"Auto-linked from recordDecision (related: {summary[:50]})"
@@ -296,6 +298,35 @@ async def auto_link_decision(
         )
 
     return edges_created
+
+
+async def safe_auto_link(
+    response_id: str,
+    category: str,
+    stakes: str,
+    confidence: float,
+    tags: list[str],
+    pattern: str | None,
+    related_to: list[dict[str, Any]],
+) -> int:
+    """Error-isolated wrapper around auto_link_decision.
+
+    Graph failures never block the caller. Returns the number of
+    edges created, or 0 on any error.
+    """
+    try:
+        return await auto_link_decision(
+            decision_id=response_id,
+            category=category,
+            stakes=stakes,
+            confidence=confidence,
+            tags=tags,
+            pattern=pattern,
+            related_to=related_to,
+        )
+    except Exception:
+        logger.debug("Auto-link failed for %s", response_id, exc_info=True)
+        return 0
 
 
 async def initialize_graph_from_decisions(
@@ -352,7 +383,7 @@ async def initialize_graph_from_decisions(
                 source_id=decision_id,
                 target_id=related_id,
                 edge_type="relates_to",
-                weight=round(max(0.01, 1.0 - distance), 3),
+                weight=round(max(_MIN_EDGE_WEIGHT, 1.0 - distance), 3),
                 created_at=str(decision.get("created_at", "")),
                 created_by="system",
                 context="auto-imported from related_to",

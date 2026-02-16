@@ -3,6 +3,7 @@
 import json
 import sys
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -226,9 +227,12 @@ class TestGetNeighborsRequest:
         assert GetNeighborsRequest.from_params({"nodeId": "a", "limit": 999}).limit == 100
         assert GetNeighborsRequest.from_params({"nodeId": "a", "limit": 0}).limit == 1
 
-    def test_from_params_invalid_direction_defaults(self) -> None:
+    def test_from_params_invalid_direction_passes_through(self) -> None:
+        """Invalid direction is passed through; validate() catches it."""
         req = GetNeighborsRequest.from_params({"nodeId": "a", "direction": "sideways"})
-        assert req.direction == "both"
+        assert req.direction == "sideways"
+        errors = req.validate()
+        assert any("direction" in e for e in errors)
 
     def test_validate_missing_node_id(self) -> None:
         req = GetNeighborsRequest.from_params({})
@@ -452,37 +456,27 @@ class TestAutoLinkDecision:
         assert "Auto-linked" in (edge.context or "")
         assert edge.created_at is not None
 
-    async def test_error_isolation_in_dispatcher(
+    async def test_error_isolation_via_safe_auto_link(
         self, memory_store: MemoryGraphStore
     ) -> None:
-        """Graph failure doesn't block decision recording.
+        """safe_auto_link swallows exceptions and returns 0."""
+        from a2a.cstp.graph_service import safe_auto_link
 
-        We mock auto_link_decision to raise, then verify
-        recordDecision still succeeds.
-        """
-        # This test verifies the error isolation pattern in the dispatcher.
-        # Since we can't easily run the full recordDecision flow without
-        # setting up embedding providers, we test the auto_link_decision
-        # function directly to verify it doesn't propagate unexpected errors.
-        # The dispatcher wraps auto_link_decision in try/except, which we
-        # verify by checking the dispatcher source code structure.
-        #
-        # For a true integration test, we'd need the full test infrastructure.
-        # Here we verify the service function handles edge cases gracefully.
-        related = [
-            {"id": "bbb22222", "summary": "Valid", "distance": 0.3},
-        ]
-        # Normal case works
-        result = await auto_link_decision(
-            decision_id="aaa11111",
-            category="architecture",
-            stakes="medium",
-            confidence=0.9,
-            tags=[],
-            pattern=None,
-            related_to=related,
-        )
-        assert result == 1
+        with patch(
+            "a2a.cstp.graph_service.auto_link_decision",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("graph store exploded"),
+        ):
+            result = await safe_auto_link(
+                response_id="aaa11111",
+                category="architecture",
+                stakes="medium",
+                confidence=0.9,
+                tags=[],
+                pattern=None,
+                related_to=[{"id": "bbb22222", "summary": "X", "distance": 0.3}],
+            )
+            assert result == 0  # Error swallowed, not propagated
 
 
 # ===========================================================================
