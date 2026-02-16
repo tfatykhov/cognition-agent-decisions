@@ -214,6 +214,45 @@ class NetworkXGraphStore(GraphStore):
 
         return (nodes, collected_edges)
 
+    async def get_neighbors(
+        self,
+        node_id: str,
+        direction: str = "both",
+        edge_type: str | None = None,
+        limit: int = 20,
+    ) -> list[tuple[GraphNode, GraphEdge]]:
+        """Get immediate neighbors with connecting edges."""
+        if not self._graph.has_node(node_id):
+            return []
+
+        results: list[tuple[GraphNode, GraphEdge]] = []
+
+        edges_to_check: list[tuple[str, str, dict[str, object]]] = []
+
+        if direction in ("outgoing", "both"):
+            edges_to_check.extend(
+                (u, v, d) for u, v, d in self._graph.out_edges(node_id, data=True)
+            )
+        if direction in ("incoming", "both"):
+            edges_to_check.extend(
+                (u, v, d) for u, v, d in self._graph.in_edges(node_id, data=True)
+            )
+
+        for u, v, data in edges_to_check:
+            if edge_type and data.get("edge_type") != edge_type:
+                continue
+
+            neighbor_id = v if u == node_id else u
+            neighbor = await self.get_node(neighbor_id)
+            if neighbor is None:
+                continue
+
+            edge = self._edge_from_attrs(u, v, data)
+            results.append((neighbor, edge))
+
+        results.sort(key=lambda pair: pair[1].weight, reverse=True)
+        return results[:limit]
+
     async def node_count(self) -> int:
         return int(self._graph.number_of_nodes())
 

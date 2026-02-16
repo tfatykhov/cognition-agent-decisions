@@ -133,6 +133,44 @@ class MemoryGraphStore(GraphStore):
 
         return (nodes, collected_edges)
 
+    async def get_neighbors(
+        self,
+        node_id: str,
+        direction: str = "both",
+        edge_type: str | None = None,
+        limit: int = 20,
+    ) -> list[tuple[GraphNode, GraphEdge]]:
+        """Get immediate neighbors with connecting edges."""
+        if node_id not in self._nodes:
+            return []
+
+        results: list[tuple[GraphNode, GraphEdge]] = []
+
+        for edge in self._edges:
+            # Check direction filter
+            if direction == "outgoing" and edge.source_id != node_id:
+                continue
+            if direction == "incoming" and edge.target_id != node_id:
+                continue
+            if direction == "both" and node_id not in (edge.source_id, edge.target_id):
+                continue
+
+            # Check edge type filter
+            if edge_type and edge.edge_type != edge_type:
+                continue
+
+            # Determine neighbor ID
+            neighbor_id = edge.target_id if edge.source_id == node_id else edge.source_id
+            neighbor = self._nodes.get(neighbor_id)
+            if neighbor is None:
+                continue
+
+            results.append((neighbor, edge))
+
+        # Sort by weight descending, apply limit
+        results.sort(key=lambda pair: pair[1].weight, reverse=True)
+        return results[:limit]
+
     async def node_count(self) -> int:
         return len(self._nodes)
 

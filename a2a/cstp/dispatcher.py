@@ -697,6 +697,35 @@ async def _handle_get_graph(params: dict[str, Any], agent_id: str) -> dict[str, 
     return response.to_dict()
 
 
+async def _handle_get_neighbors(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.getNeighbors method (F045 follow-up).
+
+    Returns immediate neighbors of a decision node.
+
+    Args:
+        params: {"nodeId": "...", "direction": "both", "edgeType": "...", "limit": 20}
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Neighbor list with connecting edges.
+    """
+    from .graph_service import get_neighbors
+    from .models import GetNeighborsRequest
+
+    request = GetNeighborsRequest.from_params(params)
+    errors = request.validate()
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    response = await get_neighbors(
+        node_id=request.node_id,
+        direction=request.direction,
+        edge_type=request.edge_type,
+        limit=request.limit,
+    )
+    return response.to_dict()
+
+
 async def _handle_compact(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     """Handle cstp.compact method (F041 P1).
 
@@ -818,6 +847,7 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     # F045: Decision Graph Storage Layer
     dispatcher.register("cstp.linkDecisions", _handle_link_decisions)
     dispatcher.register("cstp.getGraph", _handle_get_graph)
+    dispatcher.register("cstp.getNeighbors", _handle_get_neighbors)
 
     # F041: Memory Compaction
     dispatcher.register("cstp.compact", _handle_compact)
@@ -1026,11 +1056,34 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     # Record the decision
     response = await record_decision(request)
 
+    # F045 follow-up: Auto-link decision in graph
+    auto_linked = 0
+    if response.success and response.id:
+        try:
+            from .graph_service import auto_link_decision
+
+            related_dicts = (
+                [r.to_dict() for r in request.related_to] if request.related_to else []
+            )
+            auto_linked = await auto_link_decision(
+                decision_id=response.id,
+                category=request.category,
+                stakes=request.stakes,
+                confidence=request.confidence,
+                tags=list(request.tags),
+                pattern=request.pattern,
+                related_to=related_dicts,
+            )
+        except Exception:
+            logger.debug("Auto-link failed for %s", response.id, exc_info=True)
+
     if not response.success:
         raise RuntimeError(response.error or "Failed to record decision")
 
     # Add auto-deliberation info to response only if auto-capture happened
     result = response.to_dict()
+    if auto_linked > 0:
+        result["graph_edges_created"] = auto_linked
     if auto_captured and request.deliberation:
         result["deliberation_auto"] = True
         result["deliberation_inputs_count"] = len(request.deliberation.inputs)

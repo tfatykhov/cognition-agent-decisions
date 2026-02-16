@@ -192,6 +192,31 @@ class GraphStore(ABC):
         ...
 
     @abstractmethod
+    async def get_neighbors(
+        self,
+        node_id: str,
+        direction: str = "both",
+        edge_type: str | None = None,
+        limit: int = 20,
+    ) -> list[tuple[GraphNode, GraphEdge]]:
+        """Get immediate neighbors of a node with their connecting edges.
+
+        Lighter-weight than get_subgraph(depth=1) -- returns a flat list
+        of (neighbor_node, connecting_edge) pairs.
+
+        Args:
+            node_id: Node to find neighbors of.
+            direction: "outgoing", "incoming", or "both".
+            edge_type: Filter to specific edge type. None = all.
+            limit: Maximum neighbors to return (1-100).
+
+        Returns:
+            List of (neighbor_node, edge) tuples, sorted by edge weight
+            descending. Empty list if node_id not found.
+        """
+        ...
+
+    @abstractmethod
     async def node_count(self) -> int:
         """Return total number of nodes in the graph."""
         ...

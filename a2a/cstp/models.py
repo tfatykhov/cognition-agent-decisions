@@ -779,6 +779,45 @@ class GetGraphRequest:
         return errors
 
 
+@dataclass(slots=True)
+class GetNeighborsRequest:
+    """Request for cstp.getNeighbors (F045 follow-up)."""
+
+    node_id: str
+    direction: str = "both"
+    edge_type: str | None = None
+    limit: int = 20
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "GetNeighborsRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        node_id = str(params.get("nodeId") or params.get("node_id", ""))
+        direction = str(params.get("direction", "both"))
+        edge_type_raw = params.get("edgeType") or params.get("edge_type")
+        edge_type = str(edge_type_raw) if edge_type_raw else None
+        limit = int(params.get("limit", 20))
+
+        return cls(
+            node_id=node_id,
+            direction=direction if direction in ("outgoing", "incoming", "both") else "both",
+            edge_type=edge_type,
+            limit=max(1, min(limit, 100)),
+        )
+
+    def validate(self) -> list[str]:
+        """Validate request fields. Returns list of error messages."""
+        errors: list[str] = []
+        if not self.node_id:
+            errors.append("nodeId is required")
+        if self.direction not in ("outgoing", "incoming", "both"):
+            errors.append("direction must be: outgoing, incoming, or both")
+        if self.edge_type and self.edge_type not in _GRAPH_EDGE_TYPES:
+            errors.append(
+                f"edgeType must be one of: {', '.join(sorted(_GRAPH_EDGE_TYPES))}"
+            )
+        return errors
+
+
 # ---------------------------------------------------------------------------
 # F041: Memory Compaction
 # ---------------------------------------------------------------------------

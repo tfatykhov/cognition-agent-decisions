@@ -29,9 +29,12 @@ from mcp.types import (
 from .mcp_schemas import (
     CheckActionInput,
     GetDecisionInput,
+    GetGraphInput,
+    GetNeighborsInput,
     GetReasonStatsInput,
     GetSessionContextInput,
     GetStatsInput,
+    LinkDecisionsInput,
     LogDecisionInput,
     PreActionInput,
     QueryDecisionsInput,
@@ -280,6 +283,37 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=_deref_schema(ReadyInput.model_json_schema()),
         ),
+        # F045: Graph tools
+        Tool(
+            name="link_decisions",
+            description=(
+                "Create a typed relationship edge between two decisions. "
+                "Edge types: relates_to (topical similarity), supersedes "
+                "(newer replaces older), depends_on (prerequisite). "
+                "Builds the decision knowledge graph over time."
+            ),
+            inputSchema=_deref_schema(LinkDecisionsInput.model_json_schema()),
+        ),
+        Tool(
+            name="get_graph",
+            description=(
+                "Get a subgraph of related decisions around a center node. "
+                "Traverses the decision knowledge graph up to a specified "
+                "depth. Returns nodes with metadata and edges with types. "
+                "Use for understanding decision clusters and dependencies."
+            ),
+            inputSchema=_deref_schema(GetGraphInput.model_json_schema()),
+        ),
+        Tool(
+            name="get_neighbors",
+            description=(
+                "Get immediate neighbors of a decision in the knowledge "
+                "graph. Lighter-weight than get_graph -- returns a flat "
+                "list of directly connected decisions with their "
+                "relationship edges. Use for quick context lookup."
+            ),
+            inputSchema=_deref_schema(GetNeighborsInput.model_json_schema()),
+        ),
     ]
 
 
@@ -324,6 +358,15 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "ready":
             return await _handle_ready_mcp(arguments)
+
+        if name == "link_decisions":
+            return await _handle_link_decisions_mcp(arguments)
+
+        if name == "get_graph":
+            return await _handle_get_graph_mcp(arguments)
+
+        if name == "get_neighbors":
+            return await _handle_get_neighbors_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -624,6 +667,25 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
     response = await record_decision(request)
 
+    # F045 follow-up: Auto-link decision in graph
+    auto_linked = 0
+    if response.success and response.id:
+        try:
+            from .cstp.graph_service import auto_link_decision
+
+            related_dicts = [r.to_dict() for r in request.related_to] if request.related_to else []
+            auto_linked = await auto_link_decision(
+                decision_id=response.id,
+                category=request.category,
+                stakes=request.stakes,
+                confidence=request.confidence,
+                tags=list(request.tags),
+                pattern=request.pattern,
+                related_to=related_dicts,
+            )
+        except Exception:
+            logger.debug("Auto-link failed for %s", response.id, exc_info=True)
+
     # Format response
     result = response.to_dict()
     if auto_captured and request.deliberation:
@@ -642,6 +704,9 @@ async def _handle_log_decision(arguments: dict[str, Any]) -> list[TextContent]:
 
     if request.related_to:
         result["related_count"] = len(request.related_to)
+
+    if auto_linked > 0:
+        result["graph_edges_created"] = auto_linked
 
     return [
         TextContent(
@@ -939,6 +1004,68 @@ async def _handle_ready_mcp(arguments: dict[str, Any]) -> list[TextContent]:
     request = ReadyRequest.from_params(params)
     response = await get_ready_actions(request)
 
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(response.to_dict(), indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_link_decisions_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle link_decisions tool call (F045)."""
+    from .cstp.graph_service import link_decisions
+
+    args = LinkDecisionsInput(**arguments)
+
+    response = await link_decisions(
+        source_id=args.source_id,
+        target_id=args.target_id,
+        edge_type=args.edge_type,
+        weight=args.weight,
+        context=args.context,
+        agent_id="mcp-client",
+    )
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(response.to_dict(), indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_get_graph_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle get_graph tool call (F045)."""
+    from .cstp.graph_service import get_graph
+
+    args = GetGraphInput(**arguments)
+
+    response = await get_graph(
+        node_id=args.node_id,
+        depth=args.depth,
+        edge_types=list(args.edge_types) if args.edge_types else None,
+        direction=args.direction,
+    )
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(response.to_dict(), indent=2, default=str),
+        )
+    ]
+
+
+async def _handle_get_neighbors_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle get_neighbors tool call (F045)."""
+    from .cstp.graph_service import get_neighbors
+
+    args = GetNeighborsInput(**arguments)
+
+    response = await get_neighbors(
+        node_id=args.node_id,
+        direction=args.direction,
+        edge_type=args.edge_type,
+        limit=args.limit,
+    )
     return [
         TextContent(
             type="text",
