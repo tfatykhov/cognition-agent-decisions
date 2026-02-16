@@ -67,9 +67,55 @@ The server auto-captures deliberation traces, bridge-definitions, and related de
 }
 ```
 
-## Contact
+<style>
+.contact-card {
+  margin: 2rem auto;
+  max-width: 480px;
+  padding: 2rem;
+  border-radius: 12px;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  text-align: center;
+}
+.contact-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+  border-top: none;
+}
+.contact-card p {
+  margin: 0.4rem 0;
+  color: var(--vp-c-text-2);
+}
+.contact-card a {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+  font-weight: 500;
+}
+.contact-card a:hover {
+  text-decoration: underline;
+}
+.contact-card .email {
+  font-size: 1.1rem;
+  margin: 1rem 0;
+}
+.contact-card .links {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+</style>
 
-- **Owner:** Timur Fatykhov — [timur.fatykhov@cognition-engines.ai](mailto:timur.fatykhov@cognition-engines.ai)
-- **GitHub:** [tfatykhov/cognition-agent-decisions](https://github.com/tfatykhov/cognition-agent-decisions)
-- **Website:** [cognition-engines.ai](https://cognition-engines.ai)
+<div class="contact-card">
+  <h2>📬 Get in Touch</h2>
+  <p><strong>Timur Fatykhov</strong></p>
+  <p class="email">
+    <a href="mailto:timur.fatykhov@cognition-engines.ai">timur.fatykhov@cognition-engines.ai</a>
+  </p>
+  <div class="links">
+    <a href="https://github.com/tfatykhov/cognition-agent-decisions">GitHub</a>
+    <a href="https://github.com/tfatykhov/cognition-agent-decisions/issues">Issues</a>
+    <a href="/contact">More →</a>
+  </div>
+</div>
 
