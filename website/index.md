@@ -20,28 +20,60 @@ hero:
       link: https://github.com/tfatykhov/cognition-agent-decisions
 
 features:
-  - icon: 🔍
+  - icon:
+      src: /icon-query.png
+      alt: Query
+      width: 48
+      height: 48
     title: Query Before Deciding
     details: Semantic search across past decisions. Find what worked, what failed, and why. Directional search by structure ("where did we use this pattern?") or function ("what solved this problem?").
-  - icon: 🛡️
+  - icon:
+      src: /icon-guardrails.png
+      alt: Guardrails
+      width: 48
+      height: 48
     title: Guardrails
     details: Policy enforcement that prevents violations before they occur. Block high-stakes decisions with low confidence. Require code review for production changes.
-  - icon: 🧠
+  - icon:
+      src: /icon-deliberation.png
+      alt: Deliberation
+      width: 48
+      height: 48
     title: Deliberation Traces
     details: Every query and guardrail check automatically linked to the resulting decision. Full provenance of how each choice was made - zero client changes needed.
-  - icon: 🌉
+  - icon:
+      src: /icon-bridge.png
+      alt: Bridge
+      width: 48
+      height: 48
     title: Bridge-Definitions
     details: Describe decisions by both structure (what it looks like) and function (what it solves). Inspired by Minsky's Society of Mind Ch 12 - connecting patterns to purposes.
-  - icon: 🔗
+  - icon:
+      src: /icon-related.png
+      alt: Related
+      width: 48
+      height: 48
     title: Related Decisions
     details: Pre-decision query results automatically linked as lightweight graph edges. See which past decisions influenced each new choice, with semantic distance scores.
-  - icon: 📊
+  - icon:
+      src: /icon-calibration.png
+      alt: Calibration
+      width: 48
+      height: 48
     title: Calibration & Analytics
     details: Track Brier scores, success rates, and confidence calibration over time. Reason-type analytics show which reasoning patterns predict success.
-  - icon: 🔌
+  - icon:
+      src: /icon-forge.png
+      alt: FORGE
+      width: 48
+      height: 48
     title: MCP + FORGE Plugin
     details: 14+ MCP tools for Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent. FORGE plugin automates the full decision loop with hooks and commands.
-  - icon: ⚡
+  - icon:
+      src: /icon-api.png
+      alt: API
+      width: 48
+      height: 48
     title: JSON-RPC API
     details: CSTP protocol over HTTP. Query, check, record, review - all via simple JSON-RPC 2.0 calls. Built on FastAPI with ChromaDB for semantic search.
 ---
