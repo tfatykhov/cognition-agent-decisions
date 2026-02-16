@@ -74,7 +74,7 @@ features:
 ## FORGE - The Decision Loop
 
 <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.5rem;">
-  <img src="/icon-forge.png" alt="FORGE" width="80" height="80" style="border-radius: 12px;" />
+  <img src="/icon-forge.png" alt="FORGE" width="80" height="80" class="forge-icon" />
   <div>
     <strong>F</strong>etch → <strong>O</strong>rient → <strong>R</strong>esolve → <strong>G</strong>o → <strong>E</strong>xtract
     <br/>
@@ -86,11 +86,11 @@ Every decision flows through this loop, creating a compounding record of organiz
 
 | Phase | What happens |
 |-------|-------------|
-| <span style="font-size:1.4em; font-weight:bold">F</span>etch | Load context and past decisions |
-| <span style="font-size:1.4em; font-weight:bold">O</span>rient | Check guardrails and constraints |
-| <span style="font-size:1.4em; font-weight:bold">R</span>esolve | Decide and record with reasoning |
-| <span style="font-size:1.4em; font-weight:bold">G</span>o | Execute |
-| <span style="font-size:1.4em; font-weight:bold">E</span>xtract | Evaluate outcomes and distill patterns |
+| <span style="font-size:1.2em; font-weight:bold">F</span>etch | Load context and past decisions |
+| <span style="font-size:1.2em; font-weight:bold">O</span>rient | Check guardrails and constraints |
+| <span style="font-size:1.2em; font-weight:bold">R</span>esolve | Decide and record with reasoning |
+| <span style="font-size:1.2em; font-weight:bold">G</span>o | Execute |
+| <span style="font-size:1.2em; font-weight:bold">E</span>xtract | Evaluate outcomes and distill patterns |
 
 Available as a [Claude Code plugin](https://github.com/tfatykhov/cognition-engines-marketplace) with hooks, commands, and skills that automate the entire loop.
 

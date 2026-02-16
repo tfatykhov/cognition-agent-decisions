@@ -30,6 +30,12 @@
 
 /* Light theme: add rounded corners so dark bg looks intentional */
 .VPFeature .VPImage img,
-.VPFeature img {
+.VPFeature img,
+.forge-icon {
   border-radius: 12px;
+}
+
+/* FORGE icon: blend on dark theme */
+.dark .forge-icon {
+  mix-blend-mode: lighten;
 }
