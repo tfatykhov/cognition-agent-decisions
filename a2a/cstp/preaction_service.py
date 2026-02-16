@@ -227,6 +227,25 @@ async def pre_action(
             record_result = await record_decision(record_req)
             if record_result.success:
                 decision_id = record_result.id
+
+                # F045 follow-up: Auto-link decision in graph (issue #157)
+                from .graph_service import safe_auto_link
+
+                related_dicts = (
+                    [r.to_dict() for r in record_req.related_to]
+                    if record_req.related_to
+                    else []
+                )
+                await safe_auto_link(
+                    response_id=decision_id,
+                    category=record_req.category,
+                    stakes=record_req.stakes,
+                    confidence=record_req.confidence,
+                    tags=list(record_req.tags),
+                    pattern=record_req.pattern,
+                    related_to=related_dicts,
+                    summary=str(record_req.decision)[:120],
+                )
         except Exception as e:
             logger.warning("Auto-record failed in pre_action: %s", e)
 
