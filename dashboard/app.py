@@ -1,5 +1,6 @@
 """CSTP Dashboard Flask application."""
 import contextlib
+import logging
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -298,8 +299,12 @@ def decision_detail(decision_id: str) -> str | Response:
 
     # Fetch graph neighbors (error-isolated — never break the page)
     graph_neighbors: list = []
-    with contextlib.suppress(Exception):
+    try:
         graph_neighbors = cstp.get_neighbors(decision_id)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Failed to fetch graph neighbors for %s", decision_id, exc_info=True,
+        )
 
     return render_template(
         "decision.html",

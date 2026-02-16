@@ -1123,6 +1123,7 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
             tags=list(request.tags),
             pattern=request.pattern,
             related_to=related_dicts,
+            summary=str(request.decision)[:120],
         )
 
     if not response.success:

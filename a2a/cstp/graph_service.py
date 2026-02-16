@@ -230,6 +230,7 @@ async def auto_link_decision(
     tags: list[str],
     pattern: str | None,
     related_to: list[dict[str, Any]],
+    summary: str = "",
 ) -> int:
     """Auto-create graph edges for a newly recorded decision.
 
@@ -249,6 +250,7 @@ async def auto_link_decision(
         pattern: Decision pattern (optional).
         related_to: List of related decision dicts with
             "id", "summary", "distance" keys.
+        summary: Decision summary text for graph display.
 
     Returns:
         Number of edges created.
@@ -264,6 +266,7 @@ async def auto_link_decision(
         date=datetime.now(UTC).strftime("%Y-%m-%d"),
         tags=list(tags),
         pattern=pattern,
+        summary=summary,
     )
     await store.add_node(node)
 
@@ -308,6 +311,7 @@ async def safe_auto_link(
     tags: list[str],
     pattern: str | None,
     related_to: list[dict[str, Any]],
+    summary: str = "",
 ) -> int:
     """Error-isolated wrapper around auto_link_decision.
 
@@ -323,6 +327,7 @@ async def safe_auto_link(
             tags=tags,
             pattern=pattern,
             related_to=related_to,
+            summary=summary,
         )
     except Exception:
         logger.debug("Auto-link failed for %s", response_id, exc_info=True)
@@ -368,6 +373,9 @@ async def initialize_graph_from_decisions(
             date=str(decision.get("created_at", ""))[:10],
             tags=decision.get("tags") or [],
             pattern=decision.get("pattern"),
+            summary=str(
+                decision.get("summary", decision.get("decision", ""))
+            )[:120],
         )
         await store.add_node(node)
 

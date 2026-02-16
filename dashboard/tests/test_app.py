@@ -86,6 +86,7 @@ def test_decision_detail_with_graph_neighbors(
     mock_cstp.get_neighbors = MagicMock(return_value=[
         GraphNeighbor(
             id="neigh001",
+            summary="Use cursor pagination for lists",
             category="process",
             edge_type="relates_to",
             weight=0.7,
@@ -99,6 +100,7 @@ def test_decision_detail_with_graph_neighbors(
     assert b"Graph Neighbors" in response.data
     assert b"neigh001" in response.data
     assert b"relates to" in response.data  # edge_type rendered with replace('_', ' ')
+    assert b"Use cursor pagination" in response.data  # summary text shown
 
 
 def test_decision_detail_graph_neighbors_error_isolation(

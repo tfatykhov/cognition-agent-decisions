@@ -42,7 +42,7 @@
         {% if decision.related or graph_neighbors %}
         <button class="tab-btn" role="tab" :aria-selected="tab === 'related'" :class="{ 'tab-btn--active': tab === 'related' }" @click="tab = 'related'">
             Related
-            <span class="tab-badge">{{ (decision.related|length) + (graph_neighbors|length) }}</span>
+            <span class="tab-badge">{% if decision.related %}{{ decision.related|length }}s{% endif %}{% if decision.related and graph_neighbors %} + {% endif %}{% if graph_neighbors %}{{ graph_neighbors|length }}g{% endif %}</span>
         </button>
         {% endif %}
     </div>
@@ -179,7 +179,7 @@
                         <span class="reason-text">{{ reason.text }}</span>
                         <div class="reason-strength">
                             <div class="confidence-bar">
-                                <div class="confidence-bar-track" style="max-width: 60px">
+                                <div class="confidence-bar-track confidence-bar-track--md">
                                     <div class="confidence-bar-fill {% if reason.strength >= 0.9 %}confidence-bar-fill--high{% elif reason.strength >= 0.7 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
                                          style="width: {{ (reason.strength * 100)|int }}%"></div>
                                 </div>
@@ -383,6 +383,9 @@
                     <div class="related-card-main">
                         <code class="related-card-id">{{ n.id }}</code>
                         <span class="badge badge--edge-{{ n.edge_type }}">{{ n.edge_type|replace('_', ' ') }}</span>
+                        {% if n.summary %}
+                        <span class="related-card-summary">{{ n.summary[:60] }}{% if n.summary|length > 60 %}...{% endif %}</span>
+                        {% endif %}
                         {% if n.category %}
                         <span class="badge badge--category">{{ n.category }}</span>
                         {% endif %}
@@ -394,7 +397,7 @@
                         <span class="neighbor-direction" title="This decision is a source">&#8594;</span>
                         {% endif %}
                         <div class="confidence-bar">
-                            <div class="confidence-bar-track" style="max-width: 50px">
+                            <div class="confidence-bar-track confidence-bar-track--sm">
                                 <div class="confidence-bar-fill {% if n.weight >= 0.7 %}confidence-bar-fill--high{% elif n.weight >= 0.4 %}confidence-bar-fill--mid{% else %}confidence-bar-fill--low{% endif %}"
                                      style="width: {{ (n.weight * 100)|int }}%"></div>
                             </div>

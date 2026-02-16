@@ -24,6 +24,7 @@ class GraphNode:
     date: str = ""
     tags: list[str] = field(default_factory=list)
     pattern: str | None = None
+    summary: str = ""
     in_degree: int = 0
     out_degree: int = 0
 
@@ -37,6 +38,8 @@ class GraphNode:
             "inDegree": self.in_degree,
             "outDegree": self.out_degree,
         }
+        if self.summary:
+            result["summary"] = self.summary
         if self.confidence is not None:
             result["confidence"] = self.confidence
         if self.outcome is not None:

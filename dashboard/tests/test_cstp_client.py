@@ -184,6 +184,7 @@ def test_graph_neighbor_creation() -> None:
     """Test GraphNeighbor dataclass creation with all fields."""
     neighbor = GraphNeighbor(
         id="abc12345",
+        summary="Use FastAPI for the API layer",
         category="architecture",
         stakes="high",
         date="2026-02-16",
@@ -193,6 +194,7 @@ def test_graph_neighbor_creation() -> None:
     )
 
     assert neighbor.id == "abc12345"
+    assert neighbor.summary == "Use FastAPI for the API layer"
     assert neighbor.category == "architecture"
     assert neighbor.stakes == "high"
     assert neighbor.date == "2026-02-16"
@@ -205,6 +207,7 @@ def test_graph_neighbor_defaults() -> None:
     """Test GraphNeighbor defaults."""
     neighbor = GraphNeighbor(id="def12345")
 
+    assert neighbor.summary == ""
     assert neighbor.category == ""
     assert neighbor.stakes == ""
     assert neighbor.date == ""
@@ -227,6 +230,7 @@ def test_cstp_client_get_neighbors() -> None:
             {
                 "node": {
                     "id": "neigh001",
+                    "summary": "Use cursor pagination",
                     "category": "process",
                     "stakes": "medium",
                     "date": "2026-02-15",
@@ -241,6 +245,7 @@ def test_cstp_client_get_neighbors() -> None:
             {
                 "node": {
                     "id": "neigh002",
+                    "summary": "Add Redis caching",
                     "category": "architecture",
                     "stakes": "high",
                     "date": "2026-02-14",
@@ -262,12 +267,14 @@ def test_cstp_client_get_neighbors() -> None:
 
     # First neighbor: source matches decision_id[:8] -> outgoing
     assert neighbors[0].id == "neigh001"
+    assert neighbors[0].summary == "Use cursor pagination"
     assert neighbors[0].direction == "outgoing"
     assert neighbors[0].edge_type == "relates_to"
     assert neighbors[0].weight == 0.7
 
     # Second neighbor: source != decision_id[:8] -> incoming
     assert neighbors[1].id == "neigh002"
+    assert neighbors[1].summary == "Add Redis caching"
     assert neighbors[1].direction == "incoming"
     assert neighbors[1].edge_type == "depends_on"
     assert neighbors[1].weight == 0.9

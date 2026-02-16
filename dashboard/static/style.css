@@ -543,6 +543,9 @@ tbody tr:hover {
   max-width: 60px;
 }
 
+.confidence-bar-track--sm { max-width: 50px; }
+.confidence-bar-track--md { max-width: 60px; }
+
 .confidence-bar-fill {
   height: 100%;
   border-radius: 2px;
@@ -1259,6 +1262,7 @@ details > :not(summary) {
 }
 
 /* --- Edge Type Badges --- */
+[class*="badge--edge-"] { background: var(--c-surface-2); color: var(--c-text-secondary); }
 .badge--edge-relates_to { background: var(--c-info-subtle); color: var(--c-info); }
 .badge--edge-supersedes { background: var(--c-warning-subtle); color: var(--c-warning); }
 .badge--edge-depends_on { background: var(--c-accent-subtle); color: var(--c-accent); }

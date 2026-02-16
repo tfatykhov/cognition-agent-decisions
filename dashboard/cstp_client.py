@@ -258,6 +258,7 @@ class CSTPClient:
             direction = "outgoing" if edge.get("sourceId") == decision_id[:8] else "incoming"
             neighbors.append(GraphNeighbor(
                 id=node.get("id", ""),
+                summary=node.get("summary", ""),
                 category=node.get("category", ""),
                 stakes=node.get("stakes", ""),
                 date=node.get("date", ""),

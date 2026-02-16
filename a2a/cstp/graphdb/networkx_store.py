@@ -63,6 +63,7 @@ class NetworkXGraphStore(GraphStore):
             date=node.date,
             tags=list(node.tags),
             pattern=node.pattern,
+            summary=node.summary,
         )
         return True
 
@@ -127,6 +128,7 @@ class NetworkXGraphStore(GraphStore):
             date=attrs.get("date", ""),
             tags=attrs.get("tags", []),
             pattern=attrs.get("pattern"),
+            summary=attrs.get("summary", ""),
             in_degree=self._graph.in_degree(node_id),
             out_degree=self._graph.out_degree(node_id),
         )

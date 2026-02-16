@@ -94,6 +94,7 @@ class GraphNeighbor:
     """A neighbor from the decision graph."""
 
     id: str
+    summary: str = ""
     category: str = ""
     stakes: str = ""
     date: str = ""
