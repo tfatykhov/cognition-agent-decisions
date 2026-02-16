@@ -4,7 +4,7 @@
 <div class="session-list">
     {% for session in sessions %}
     <div class="session-card">
-        <div class="session-card-header" @click="$store.deliberation.toggle('{{ session.key }}')">
+        <div class="session-card-header" @click="$store.deliberation.toggle('{{ session.key|replace("'", "\\'") }}')">
             <div class="session-card-meta">
                 <span class="session-pulse session-pulse--{{ session.freshness }}"></span>
                 {% if session.parsed.agent_id %}
@@ -14,6 +14,8 @@
                 <a href="{{ url_for('decision_detail', decision_id=session.parsed.decision_id) }}"
                    class="session-decision-id" @click.stop>Decision: {{ session.parsed.decision_id[:8] }}</a>
                 {% endif %}
+                {# Transport-only keys (rpc/mcp-session) get a warning badge because they
+                   lack agent_id/decision_id scoping, meaning thoughts may not be isolated. #}
                 {% if session.parsed.transport %}
                 <span class="badge badge--warning">{{ session.parsed.transport }}</span>
                 {% endif %}
@@ -23,11 +25,11 @@
             </div>
             <div class="flex gap-3 items-center">
                 <span class="session-input-count">{{ session.input_count }} input{{ 's' if session.input_count != 1 }}</span>
-                <span class="session-expand-icon" :class="{ 'session-expand-icon--open': $store.deliberation.isOpen('{{ session.key }}') }">&#9654;</span>
+                <span class="session-expand-icon" :class="{ 'session-expand-icon--open': $store.deliberation.isOpen('{{ session.key|replace("'", "\\'") }}') }">&#9654;</span>
             </div>
         </div>
 
-        <div class="session-card-body" x-show="$store.deliberation.isOpen('{{ session.key }}')" x-cloak>
+        <div class="session-card-body" x-show="$store.deliberation.isOpen('{{ session.key|replace("'", "\\'") }}')" x-cloak>
             {% for inp in session.inputs %}
             <div class="session-input">
                 <span class="badge badge--type-{{ inp.type }}">{{ inp.type }}</span>
