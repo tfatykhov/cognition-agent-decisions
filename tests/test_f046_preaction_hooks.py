@@ -189,7 +189,7 @@ class TestPreActionDeliberationAttachment:
     @patch("a2a.cstp.preaction_service.evaluate_guardrails")
     @patch("a2a.cstp.preaction_service.query_decisions")
     @patch("a2a.cstp.preaction_service.log_guardrail_check")
-    async def test_no_thoughts_no_deliberation(
+    async def test_no_thoughts_still_has_auto_deliberation(
         self,
         mock_log: AsyncMock,
         mock_query: AsyncMock,
@@ -197,7 +197,11 @@ class TestPreActionDeliberationAttachment:
         mock_cal: AsyncMock,
         mock_record: AsyncMock,
     ) -> None:
-        """When no thoughts are tracked, deliberation should remain None."""
+        """Even without explicit thoughts, pre_action tracks its own query/guardrail.
+
+        Issue #159: pre_action now injects track_query/track_guardrail calls,
+        so auto_attach_deliberation always has inputs to attach.
+        """
         mock_query.return_value = MockQueryResponse()
         mock_guard.return_value = MockEvalResult(allowed=True)
         mock_cal.return_value = MockCalibrationResponse()
@@ -217,11 +221,15 @@ class TestPreActionDeliberationAttachment:
         assert resp.decision_id == "nothought"
         mock_record.assert_called_once()
         record_req = mock_record.call_args[0][0]
-        # No thoughts tracked, so deliberation should be None or empty
-        assert (
-            record_req.deliberation is None
-            or not record_req.deliberation.has_content()
-        )
+        # Issue #159: pre_action now tracks its own query+guardrail calls,
+        # so deliberation should always have auto-captured content
+        assert record_req.deliberation is not None
+        assert record_req.deliberation.has_content() is True
+
+        # Should have query and guardrail auto-tracked inputs
+        sources = [inp.source for inp in record_req.deliberation.inputs]
+        assert "cstp:queryDecisions" in sources
+        assert "cstp:checkGuardrails" in sources
 
     @pytest.mark.asyncio
     @patch("a2a.cstp.preaction_service.record_decision")
