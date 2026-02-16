@@ -1,4 +1,4 @@
-# F050: SQLite Storage Layer
+# F050: Structured Storage Layer
 
 **Status:** Proposed
 **Priority:** P1
@@ -18,15 +18,95 @@ Current storage uses one YAML file per decision on disk. This works at ~200 deci
 
 ## Solution
 
-Add SQLite as the structured storage layer alongside ChromaDB (which remains for semantic/embedding search).
+Add an abstract `DecisionStore` interface (same pattern as F048's `VectorStore`) with SQLite as the default backend. ChromaDB remains for semantic/embedding search.
 
 ### Architecture
 
 ```
-Write path:  API → SQLite (primary) → ChromaDB (embeddings) → YAML (export/backup)
-Read path:   Dashboard/list queries → SQLite
+Write path:  API → DecisionStore (abstract) → ChromaDB (embeddings)
+Read path:   Dashboard/list queries → DecisionStore
              Semantic search → ChromaDB
-             Human inspection → YAML export
+
+Backends:    SQLite (default) | PostgreSQL (future) | YAML (legacy)
+```
+
+### Abstract Interface
+
+```python
+class DecisionStore(ABC):
+    """Abstract structured storage for decisions.
+
+    All storage backends (SQLite, PostgreSQL, YAML-legacy)
+    implement this interface. Services interact only through
+    these methods.
+    """
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Initialize connection, run migrations."""
+        ...
+
+    @abstractmethod
+    async def save(self, decision: DecisionRecord) -> bool:
+        """Insert or update a decision."""
+        ...
+
+    @abstractmethod
+    async def get(self, decision_id: str) -> DecisionRecord | None:
+        """Get a single decision by ID."""
+        ...
+
+    @abstractmethod
+    async def delete(self, decision_id: str) -> bool:
+        """Delete a decision by ID."""
+        ...
+
+    @abstractmethod
+    async def list(self, query: ListQuery) -> ListResult:
+        """List decisions with filters, sort, pagination.
+
+        Supports: category, stakes, status, agent, tags,
+        date range, keyword search, sort, offset/limit.
+        """
+        ...
+
+    @abstractmethod
+    async def stats(self, query: StatsQuery) -> StatsResult:
+        """Aggregate statistics (counts by category, stakes,
+        agent, day, tags)."""
+        ...
+
+    @abstractmethod
+    async def update_outcome(
+        self, decision_id: str, outcome: str, result: str
+    ) -> bool:
+        """Record review outcome for a decision."""
+        ...
+
+    @abstractmethod
+    async def count(self, **filters) -> int:
+        """Count decisions matching filters."""
+        ...
+```
+
+### Factory Pattern
+
+```python
+# a2a/cstp/storage/factory.py
+def create_decision_store() -> DecisionStore:
+    backend = os.getenv("CSTP_STORAGE", "sqlite")
+    match backend:
+        case "sqlite":
+            from .sqlite_store import SQLiteDecisionStore
+            return SQLiteDecisionStore()
+        case "yaml":
+            from .yaml_store import YAMLDecisionStore
+            return YAMLDecisionStore()
+        case "postgresql":
+            from .pg_store import PostgreSQLDecisionStore
+            return PostgreSQLDecisionStore()
+        case _:
+            raise ValueError(f"Unknown storage backend: {backend}")
 ```
 
 ### Schema
@@ -174,17 +254,21 @@ Response:
 
 ## Implementation Plan
 
-### P1: Core SQLite Layer
-- [ ] SQLite database manager (connection pooling, migrations)
+### P1: Abstract Interface + SQLite Backend
+- [ ] `DecisionStore` ABC in `a2a/cstp/storage/__init__.py`
+- [ ] Data classes: `DecisionRecord`, `ListQuery`, `ListResult`, `StatsQuery`, `StatsResult`
+- [ ] Factory pattern with `CSTP_STORAGE` env var (default: `sqlite`)
+- [ ] `SQLiteDecisionStore` implementation (WAL mode, connection pooling)
 - [ ] Schema creation and migration support
-- [ ] `DecisionStore` class with CRUD operations
-- [ ] Write-through: all `recordDecision` writes to SQLite + ChromaDB
-- [ ] `listDecisions` RPC endpoint
-- [ ] `getStats` RPC endpoint
-- [ ] YAML migration script (import existing YAMLs into SQLite)
 - [ ] FTS5 keyword search
+- [ ] `YAMLDecisionStore` wrapper (legacy, wraps existing `load_all_decisions`)
+- [ ] Wire into `decision_service.py` (replace direct YAML read/write)
+- [ ] YAML migration script (import existing YAMLs into SQLite)
 
-### P2: Dashboard Integration
+### P2: New RPC Endpoints + Dashboard
+- [ ] `cstp.listDecisions` RPC endpoint (delegates to `DecisionStore.list()`)
+- [ ] `cstp.getStats` RPC endpoint (delegates to `DecisionStore.stats()`)
+- [ ] MCP tool wrappers for both endpoints
 - [ ] Update `cstp_client.py` to use `listDecisions` for browsing
 - [ ] Working search (keyword via FTS5)
 - [ ] Date range picker
@@ -194,11 +278,11 @@ Response:
 - [ ] Proper pagination with total count
 - [ ] Stats overview cards on main page
 
-### P3: YAML Deprecation Path
+### P3: PostgreSQL Backend + YAML Deprecation
+- [ ] `PostgreSQLDecisionStore` implementation (async, pgvector potential)
 - [ ] YAML export command (for human review / git history)
 - [ ] Remove YAML as primary write path
-- [ ] Backup/restore from SQLite dump
-- [ ] Keep ChromaDB sync for semantic search
+- [ ] Backup/restore utilities
 
 ## Migration Strategy
 
@@ -212,8 +296,9 @@ Response:
 
 ```bash
 # Environment variables
+CSTP_STORAGE=sqlite                # Storage backend: sqlite | yaml | postgresql
 CSTP_DB_PATH=data/decisions.db     # SQLite database path (default)
-CSTP_STORAGE=sqlite                # Storage backend: sqlite | yaml (legacy)
+CSTP_PG_URL=postgresql://...       # PostgreSQL connection URL (P3)
 ```
 
 ## Risks
