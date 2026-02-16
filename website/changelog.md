@@ -1,5 +1,62 @@
 # Changelog
 
+## v0.14.0 - Multi-Agent Isolation & Live Deliberation
+*February 16, 2026*
+
+Multi-agent deliberation isolation, live deliberation viewer dashboard, memory compaction, decision graph with auto-linking, and quality enforcement.
+
+### Multi-Agent Deliberation Isolation
+- **Composite tracker keys** - `agent:{id}:decision:{id}` scoping prevents thought cross-contamination when multiple agents share an MCP connection
+- **`agent_id` on all MCP tools** - `pre_action`, `get_session_context`, `ready`, `record_thought`, `log_decision` all accept `agent_id` for attribution and isolation
+- **`decision_id` scoping** - `record_thought` and `log_decision` accept `decision_id` to scope deliberation consumption to specific decisions
+- **`cstp.debugTracker`** - Live inspection endpoint for in-memory deliberation state
+
+### F049: Live Deliberation Viewer
+- New `/deliberation` dashboard page with real-time tracker state
+- Session cards organized by composite key with agent/decision badges
+- HTMX auto-refresh (5s) with Alpine.js expand state preservation
+- Color-coded by age (fresh/stale), type badges for input sources
+- Composite key parsing links decision IDs to detail pages
+
+### F041: Memory Compaction
+- Semantic decay: full → summary → digest → wisdom compaction levels
+- `cstp.getCompacted` and `cstp.getWisdom` endpoints
+- Wisdom and compacted results integrated into `get_session_context`
+- Automatic compaction on startup and on review
+
+### F044: Agent Work Discovery
+- `cstp.ready` endpoint surfaces prioritized cognitive actions
+- Action types: overdue reviews, calibration drift, stale decisions
+- Filter by priority, type, category
+
+### F045: Decision Graph Storage Layer
+- `cstp.linkDecisions` - typed edges (`relates_to`, `supersedes`, `depends_on`)
+- `cstp.getGraph` - subgraph queries with depth and edge type filters
+- `cstp.getNeighbors` - lightweight neighbor queries
+- Auto-linking on `recordDecision` from related decisions
+- JSONL persistence, NetworkX backend, thread-safe
+
+### F048: Multi-Vector-DB Support
+- `VectorStore` and `EmbeddingProvider` abstractions
+- ChromaDB and MemoryStore backends
+- Factory pattern with `VECTOR_BACKEND` env var
+
+### Quality & Process
+- **`low-quality-recording` guardrail upgraded to block** - Decisions missing tags, pattern, or reasons are now rejected
+- **`log_decision` demoted to last resort** - `pre_action(auto_record: true)` is the primary recording path
+- **14+ MCP tools** (3 PRIMARY: `pre_action`, `get_session_context`, `ready`)
+
+### Documentation
+- Updated all docs with correct MCP flow: `pre_action` → `record_thought` → `update_decision`
+- Multi-agent isolation guide
+- Agent system prompt templates updated
+- All 33+ feature specs on website
+
+### No Breaking Changes
+All features are additive. `agent_id` defaults to `"mcp-client"` when not provided. Existing clients work unchanged.
+
+---
+
 ## v0.11.0 - Pre-Action API, Dashboard & Website
 *February 15, 2026*
 
