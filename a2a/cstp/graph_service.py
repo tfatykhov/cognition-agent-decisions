@@ -14,6 +14,8 @@ from .graphdb.factory import get_graph_store
 
 logger = logging.getLogger(__name__)
 
+_MIN_EDGE_WEIGHT = 0.01  # Floor for auto-link edge weights (prevents zero-weight edges)
+
 
 # ---------------------------------------------------------------------------
 # Response dataclasses
@@ -55,6 +57,27 @@ class GetGraphResponse:
             "depth": self.depth,
             "nodes": [n.to_dict() for n in self.nodes],
             "edges": [e.to_dict() for e in self.edges],
+        }
+        if self.error is not None:
+            result["error"] = self.error
+        return result
+
+
+@dataclass(slots=True)
+class GetNeighborsResponse:
+    """Response from cstp.getNeighbors."""
+
+    node_id: str
+    neighbors: list[dict[str, Any]] = field(default_factory=list)
+    total: int = 0
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        result: dict[str, Any] = {
+            "nodeId": self.node_id,
+            "neighbors": self.neighbors,
+            "total": self.total,
         }
         if self.error is not None:
             result["error"] = self.error
@@ -155,6 +178,157 @@ async def get_graph(
     )
 
 
+async def get_neighbors(
+    node_id: str,
+    direction: str,
+    edge_type: str | None,
+    limit: int,
+) -> GetNeighborsResponse:
+    """Get immediate neighbors of a decision node.
+
+    Args:
+        node_id: Node to find neighbors of.
+        direction: "outgoing", "incoming", or "both".
+        edge_type: Optional edge type filter.
+        limit: Maximum neighbors to return (1-100).
+
+    Returns:
+        GetNeighborsResponse with neighbor list.
+    """
+    store = get_graph_store()
+
+    pairs = await store.get_neighbors(
+        node_id=node_id,
+        direction=direction,
+        edge_type=edge_type,
+        limit=limit,
+    )
+
+    if not pairs and await store.get_node(node_id) is None:
+        return GetNeighborsResponse(
+            node_id=node_id,
+            error=f"Node not found: {node_id}",
+        )
+
+    neighbors = [
+        {"node": node.to_dict(), "edge": edge.to_dict()}
+        for node, edge in pairs
+    ]
+
+    return GetNeighborsResponse(
+        node_id=node_id,
+        neighbors=neighbors,
+        total=len(neighbors),
+    )
+
+
+async def auto_link_decision(
+    decision_id: str,
+    category: str,
+    stakes: str,
+    confidence: float,
+    tags: list[str],
+    pattern: str | None,
+    related_to: list[dict[str, Any]],
+) -> int:
+    """Auto-create graph edges for a newly recorded decision.
+
+    Creates a node for the new decision and relates_to edges
+    to each related decision. Called from the dispatcher after
+    a successful recordDecision.
+
+    Uses primitive types (not RecordDecisionRequest) to avoid
+    circular imports between graph_service and decision_service.
+
+    Args:
+        decision_id: The newly created decision ID (8-char hex).
+        category: Decision category.
+        stakes: Decision stakes level.
+        confidence: Decision confidence.
+        tags: Decision tags.
+        pattern: Decision pattern (optional).
+        related_to: List of related decision dicts with
+            "id", "summary", "distance" keys.
+
+    Returns:
+        Number of edges created.
+    """
+    store = get_graph_store()
+
+    # Add node for new decision
+    node = GraphNode(
+        id=decision_id[:8],
+        category=category,
+        stakes=stakes,
+        confidence=confidence,
+        date=datetime.now(UTC).strftime("%Y-%m-%d"),
+        tags=list(tags),
+        pattern=pattern,
+    )
+    await store.add_node(node)
+
+    edges_created = 0
+
+    for related in related_to:
+        related_id = str(related.get("id", ""))[:8]
+        if not related_id or related_id == decision_id[:8]:
+            continue
+
+        distance = float(related.get("distance", 0.5))
+        summary = str(related.get("summary", ""))
+        edge = GraphEdge(
+            source_id=decision_id[:8],
+            target_id=related_id,
+            edge_type="relates_to",
+            weight=round(max(_MIN_EDGE_WEIGHT, 1.0 - distance), 3),
+            created_at=datetime.now(UTC).isoformat(),
+            created_by="auto-link",
+            context=f"Auto-linked from recordDecision (related: {summary[:50]})"
+            if summary else "Auto-linked from recordDecision",
+        )
+        success = await store.add_edge(edge)
+        if success:
+            edges_created += 1
+
+    if edges_created > 0:
+        logger.info(
+            "Auto-linked decision %s: %d edges created",
+            decision_id[:8],
+            edges_created,
+        )
+
+    return edges_created
+
+
+async def safe_auto_link(
+    response_id: str,
+    category: str,
+    stakes: str,
+    confidence: float,
+    tags: list[str],
+    pattern: str | None,
+    related_to: list[dict[str, Any]],
+) -> int:
+    """Error-isolated wrapper around auto_link_decision.
+
+    Graph failures never block the caller. Returns the number of
+    edges created, or 0 on any error.
+    """
+    try:
+        return await auto_link_decision(
+            decision_id=response_id,
+            category=category,
+            stakes=stakes,
+            confidence=confidence,
+            tags=tags,
+            pattern=pattern,
+            related_to=related_to,
+        )
+    except Exception:
+        logger.debug("Auto-link failed for %s", response_id, exc_info=True)
+        return 0
+
+
 async def initialize_graph_from_decisions(
     decisions: list[dict[str, Any]] | None = None,
 ) -> int:
@@ -209,7 +383,7 @@ async def initialize_graph_from_decisions(
                 source_id=decision_id,
                 target_id=related_id,
                 edge_type="relates_to",
-                weight=round(max(0.01, 1.0 - distance), 3),
+                weight=round(max(_MIN_EDGE_WEIGHT, 1.0 - distance), 3),
                 created_at=str(decision.get("created_at", "")),
                 created_by="system",
                 context="auto-imported from related_to",

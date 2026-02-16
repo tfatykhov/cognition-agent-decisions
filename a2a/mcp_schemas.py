@@ -553,3 +553,85 @@ class ReadyInput(BaseModel):
             "integration, tooling, security"
         ),
     )
+
+
+# ============================================================================
+# F045: Graph tools
+# ============================================================================
+
+
+class LinkDecisionsInput(BaseModel):
+    """Input for the link_decisions tool."""
+
+    source_id: str = Field(
+        ...,
+        min_length=1,
+        description="Source decision ID (8-char hex)",
+    )
+    target_id: str = Field(
+        ...,
+        min_length=1,
+        description="Target decision ID (8-char hex)",
+    )
+    edge_type: Literal["relates_to", "supersedes", "depends_on"] = Field(
+        ...,
+        description="Type of relationship: relates_to, supersedes, or depends_on",
+    )
+    weight: float = Field(
+        default=1.0,
+        gt=0.0,
+        le=1.0,
+        description="Edge weight (0.0-1.0, higher = stronger relationship)",
+    )
+    context: str | None = Field(
+        default=None,
+        description="Optional context explaining the relationship",
+    )
+
+
+class GetGraphInput(BaseModel):
+    """Input for the get_graph tool."""
+
+    node_id: str = Field(
+        ...,
+        min_length=1,
+        description="Center node ID to start traversal from (8-char hex)",
+    )
+    depth: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Maximum traversal depth (1-5 hops)",
+    )
+    edge_types: list[Literal["relates_to", "supersedes", "depends_on"]] | None = Field(
+        default=None,
+        description="Filter to specific edge types. None = all types.",
+    )
+    direction: Literal["outgoing", "incoming", "both"] = Field(
+        default="both",
+        description="Traversal direction: outgoing, incoming, or both",
+    )
+
+
+class GetNeighborsInput(BaseModel):
+    """Input for the get_neighbors tool."""
+
+    node_id: str = Field(
+        ...,
+        min_length=1,
+        description="Node ID to find neighbors of (8-char hex)",
+    )
+    direction: Literal["outgoing", "incoming", "both"] = Field(
+        default="both",
+        description="Which direction to look: outgoing, incoming, or both",
+    )
+    edge_type: Literal["relates_to", "supersedes", "depends_on"] | None = Field(
+        default=None,
+        description="Filter to a specific edge type",
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum neighbors to return (1-100)",
+    )
