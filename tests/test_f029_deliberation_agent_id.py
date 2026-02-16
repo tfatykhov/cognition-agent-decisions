@@ -741,3 +741,110 @@ class TestRecordThoughtToDecisionFlow:
         texts = [i.text for i in delib.inputs]
         assert "Agent thought" in texts
         assert "Transport thought" in texts
+
+
+# ===========================================================================
+# 13. extract_related_from_tracker with multi-key
+# ===========================================================================
+
+
+class TestExtractRelatedMultiKey:
+    """extract_related_from_tracker collects from multiple composite keys."""
+
+    def test_extract_related_with_agent_id(self, tracker: DeliberationTracker) -> None:
+        """Peek at multiple keys, collect related decisions from all."""
+        from a2a.cstp.deliberation_tracker import (
+            extract_related_from_tracker,
+            track_query,
+        )
+
+        # Track a query under agent-scoped key
+        track_query(
+            "agent:dev",
+            query="architecture patterns",
+            result_count=2,
+            top_ids=["d1", "d2"],
+            retrieval_mode="hybrid",
+            top_results=[
+                {"id": "d1", "summary": "From agent key", "distance": 0.1},
+                {"id": "d2", "summary": "Also agent key", "distance": 0.2},
+            ],
+        )
+        # Track a query under transport key
+        track_query(
+            "rpc:shared",
+            query="process decisions",
+            result_count=1,
+            top_ids=["d3"],
+            retrieval_mode="hybrid",
+            top_results=[
+                {"id": "d3", "summary": "From transport", "distance": 0.15},
+            ],
+        )
+
+        related = extract_related_from_tracker(
+            "rpc:shared",
+            agent_id="dev",
+        )
+        ids = [r["id"] for r in related]
+        assert "d1" in ids
+        assert "d2" in ids
+        assert "d3" in ids
+        # Sorted by distance
+        assert related[0]["distance"] <= related[-1]["distance"]
+
+    def test_extract_related_backward_compat(self, tracker: DeliberationTracker) -> None:
+        """Without agent_id, only transport key is checked."""
+        from a2a.cstp.deliberation_tracker import (
+            extract_related_from_tracker,
+            track_query,
+        )
+
+        track_query(
+            "rpc:only-transport",
+            query="test",
+            result_count=1,
+            top_ids=["d1"],
+            retrieval_mode="hybrid",
+            top_results=[
+                {"id": "d1", "summary": "Transport result", "distance": 0.1},
+            ],
+        )
+
+        related = extract_related_from_tracker("rpc:only-transport")
+        assert len(related) == 1
+        assert related[0]["id"] == "d1"
+
+    def test_extract_related_deduplicates(self, tracker: DeliberationTracker) -> None:
+        """Same decision ID in two keys is deduplicated (best distance wins)."""
+        from a2a.cstp.deliberation_tracker import (
+            extract_related_from_tracker,
+            track_query,
+        )
+
+        track_query(
+            "agent:dev",
+            query="q1",
+            result_count=1,
+            top_ids=["d1"],
+            retrieval_mode="hybrid",
+            top_results=[
+                {"id": "d1", "summary": "Agent version", "distance": 0.3},
+            ],
+        )
+        track_query(
+            "rpc:shared",
+            query="q2",
+            result_count=1,
+            top_ids=["d1"],
+            retrieval_mode="hybrid",
+            top_results=[
+                {"id": "d1", "summary": "Transport version", "distance": 0.1},
+            ],
+        )
+
+        related = extract_related_from_tracker("rpc:shared", agent_id="dev")
+        assert len(related) == 1
+        assert related[0]["id"] == "d1"
+        # Best (lowest) distance wins
+        assert related[0]["distance"] == 0.1

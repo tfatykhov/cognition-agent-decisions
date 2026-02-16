@@ -80,19 +80,22 @@ def build_tracker_key(
 ) -> str:
     """Build a composite tracker key for deliberation tracking (F129).
 
+    Delegates to deliberation_tracker.build_tracker_key with the
+    transport-derived fallback key.
+
     Priority: most-specific composite key first.
     - agent_id + decision_id → "agent:{agent_id}:decision:{decision_id}"
     - agent_id only → "agent:{agent_id}"
     - decision_id only → "decision:{decision_id}"
     - neither → "rpc:{transport_agent_id}" (backward-compatible fallback)
     """
-    if agent_id and decision_id:
-        return f"agent:{agent_id}:decision:{decision_id}"
-    if agent_id:
-        return f"agent:{agent_id}"
-    if decision_id:
-        return f"decision:{decision_id}"
-    return f"rpc:{transport_agent_id}"
+    from .deliberation_tracker import build_tracker_key as _tracker_build_key
+
+    return _tracker_build_key(
+        agent_id=agent_id,
+        decision_id=decision_id,
+        transport_key=f"rpc:{transport_agent_id}",
+    )
 
 
 class CstpDispatcher:
@@ -975,7 +978,10 @@ async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[
     tracker_key = build_tracker_key(
         agent_id, agent_id=request.agent_id, decision_id=request.decision_id,
     )
-    track_reasoning(tracker_key, request.text)
+    track_reasoning(
+        tracker_key, request.text,
+        agent_id=request.agent_id, decision_id=request.decision_id,
+    )
     return {
         "success": True,
         "mode": "pre-decision",
@@ -1053,15 +1059,20 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     # Parse and validate request
     request = RecordDecisionRequest.from_dict(params, agent_id=agent_id)
 
-    # F129: Build composite tracker key from client-provided agent_id
+    # F129: Build composite tracker key from client-provided agent_id/decision_id
     client_agent_id = params.get("agentId") or params.get("agent_id")
-    tracker_key = build_tracker_key(agent_id, agent_id=client_agent_id)
+    client_decision_id = params.get("decisionId") or params.get("decision_id")
+    tracker_key = build_tracker_key(
+        agent_id, agent_id=client_agent_id, decision_id=client_decision_id,
+    )
 
     # F025: Extract related decisions BEFORE consuming tracker
     from .deliberation_tracker import extract_related_from_tracker
 
     if not request.related_to:
-        related_raw = extract_related_from_tracker(tracker_key)
+        related_raw = extract_related_from_tracker(
+            tracker_key, agent_id=client_agent_id, decision_id=client_decision_id,
+        )
         if related_raw:
             from .decision_service import RelatedDecision
 
@@ -1075,6 +1086,8 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     request.deliberation, auto_captured = auto_attach_deliberation(
         key=tracker_key,
         deliberation=request.deliberation,
+        agent_id=client_agent_id,
+        decision_id=client_decision_id,
     )
 
     # F027 P2: Smart bridge extraction (replaces F024 Phase 3)
