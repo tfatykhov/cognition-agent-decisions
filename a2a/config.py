@@ -74,6 +74,21 @@ class AgentConfig:
 
 
 @dataclass(slots=True)
+class TrackerConfig:
+    """Deliberation tracker configuration.
+
+    Attributes:
+        input_ttl_seconds: TTL for individual inputs within a session.
+        session_ttl_seconds: TTL for entire tracker sessions (in seconds).
+        consumed_history_size: Max consumed records to retain.
+    """
+
+    input_ttl_seconds: int = 300
+    session_ttl_seconds: int = 1800
+    consumed_history_size: int = 50
+
+
+@dataclass(slots=True)
 class ServerConfig:
     """HTTP server configuration.
 
@@ -101,6 +116,7 @@ class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    tracker: TrackerConfig = field(default_factory=TrackerConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":
@@ -159,6 +175,11 @@ class Config:
                 enabled=True,
                 tokens=_parse_auth_tokens(os.getenv("CSTP_AUTH_TOKENS", "")),
             ),
+            tracker=TrackerConfig(
+                input_ttl_seconds=int(os.getenv("CSTP_TRACKER_INPUT_TTL", "300")),
+                session_ttl_seconds=int(os.getenv("CSTP_TRACKER_SESSION_TTL", "1800")),
+                consumed_history_size=int(os.getenv("CSTP_TRACKER_HISTORY_SIZE", "50")),
+            ),
         )
 
     @classmethod
@@ -205,6 +226,22 @@ class Config:
             config.auth = AuthConfig(
                 enabled=auth.get("enabled", True),
                 tokens=tokens,
+            )
+
+        # Tracker config
+        if "tracker" in data:
+            tr = data["tracker"]
+            # Accept session_ttl_seconds (preferred) or legacy session_ttl_minutes (* 60)
+            if "session_ttl_seconds" in tr:
+                session_ttl = tr["session_ttl_seconds"]
+            elif "session_ttl_minutes" in tr:
+                session_ttl = tr["session_ttl_minutes"] * 60
+            else:
+                session_ttl = 1800
+            config.tracker = TrackerConfig(
+                input_ttl_seconds=tr.get("input_ttl_seconds", 300),
+                session_ttl_seconds=session_ttl,
+                consumed_history_size=tr.get("consumed_history_size", 50),
             )
 
         return config

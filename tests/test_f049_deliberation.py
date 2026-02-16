@@ -356,7 +356,7 @@ class TestDeliberationRoute:
 
         assert resp.status_code == 200
         # Verify the filter key was passed to the CSTP client
-        mock_cstp.debug_tracker.assert_called_once_with(key="agent:test")
+        mock_cstp.debug_tracker.assert_called_once_with(key="agent:test", include_consumed=True)
 
     def test_decision_id_linked_to_detail_page(self, client) -> None:
         """Decision ID should be rendered as a link to /decisions/<id>."""
@@ -459,7 +459,7 @@ class TestDeliberationPartialRoute:
             )
 
         assert resp.status_code == 200
-        mock_cstp.debug_tracker.assert_called_once_with(key="agent:x")
+        mock_cstp.debug_tracker.assert_called_once_with(key="agent:x", include_consumed=True)
 
     def test_partial_handles_cstp_error(self, client) -> None:
         from cstp_client import CSTPError

@@ -425,20 +425,42 @@ def _session_freshness_class(inputs: list[dict[str, Any]]) -> str:
     return _age_freshness_class(min_age)
 
 
+def _transform_consumed_sessions(consumed_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Transform consumed session records into template-friendly dicts."""
+    sessions = []
+    for item in consumed_data:
+        parsed = parse_tracker_key(item.get("key", ""))
+        age = item.get("consumedAt", 0)
+        sessions.append({
+            "key": item.get("key", ""),
+            "parsed": parsed,
+            "input_count": item.get("inputCount", 0),
+            "agent_id": item.get("agentId"),
+            "decision_id": item.get("decisionId"),
+            "status": item.get("status", "consumed"),
+            "age_display": _format_age(age),
+            "age_class": _age_freshness_class(age),
+            "inputs_summary": item.get("inputsSummary", []),
+        })
+    return sessions
+
+
 @app.route("/deliberation")
 @auth
 def deliberation() -> str:
     """Live deliberation tracker viewer."""
     filter_key = request.args.get("key") or None
     try:
-        tracker_data = cstp.debug_tracker(key=filter_key)
+        tracker_data = cstp.debug_tracker(key=filter_key, include_consumed=True)
     except CSTPError as e:
         flash(f"Error loading tracker: {e}", "error")
         tracker_data = {"sessions": [], "sessionCount": 0, "detail": {}}
     sessions = _transform_tracker_sessions(tracker_data)
+    consumed = _transform_consumed_sessions(tracker_data.get("consumed", []))
     return render_template(
         "deliberation.html",
         sessions=sessions,
+        consumed=consumed,
         session_count=tracker_data.get("sessionCount", 0),
         filter_key=filter_key,
     )
@@ -450,13 +472,15 @@ def deliberation_partial() -> str:
     """Partial template for HTMX auto-refresh."""
     filter_key = request.args.get("key") or None
     try:
-        tracker_data = cstp.debug_tracker(key=filter_key)
+        tracker_data = cstp.debug_tracker(key=filter_key, include_consumed=True)
     except CSTPError:
         tracker_data = {"sessions": [], "sessionCount": 0, "detail": {}}
     sessions = _transform_tracker_sessions(tracker_data)
+    consumed = _transform_consumed_sessions(tracker_data.get("consumed", []))
     return render_template(
         "deliberation_partial.html",
         sessions=sessions,
+        consumed=consumed,
         session_count=tracker_data.get("sessionCount", 0),
         filter_key=filter_key,
     )

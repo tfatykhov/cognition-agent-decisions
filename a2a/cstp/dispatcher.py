@@ -903,7 +903,7 @@ async def _handle_debug_tracker(params: dict[str, Any], agent_id: str) -> dict[s
 
     params = params or {}
     request = DebugTrackerRequest.from_params(params)
-    raw = debug_tracker(key=request.key)
+    raw = debug_tracker(key=request.key, include_consumed=request.include_consumed)
     response = DebugTrackerResponse.from_raw(raw)
     return response.to_dict()
 
@@ -1101,6 +1101,11 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
 
     # Record the decision
     response = await record_decision(request)
+
+    # F149: Backfill consumed history with decision_id
+    if response.success and response.id:
+        from .deliberation_tracker import get_tracker
+        get_tracker().backfill_consumed(tracker_key, response.id)
 
     # F045 follow-up: Auto-link decision in graph
     auto_linked = 0

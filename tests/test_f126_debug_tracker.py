@@ -210,7 +210,7 @@ class TestDebugTrackerKeyNotFound:
 class TestDebugTrackerExpiredInputs:
     def test_debug_tracker_expired_inputs(self) -> None:
         """Inputs past TTL are filtered out of debug output."""
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
 
         # Input created 120 seconds ago (past 60s TTL)
         old_time = time.time() - 120

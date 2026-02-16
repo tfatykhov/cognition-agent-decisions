@@ -24,7 +24,7 @@ class TestDeliberationTracker:
     """Core tracker tests."""
 
     def test_track_and_consume(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         tracker.track(
             "agent:test",
             TrackedInput(
@@ -46,7 +46,7 @@ class TestDeliberationTracker:
         assert delib.steps[0].inputs_used == ["q-abc"]
 
     def test_consume_clears(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         tracker.track(
             "agent:test",
             TrackedInput(
@@ -68,7 +68,7 @@ class TestDeliberationTracker:
         assert delib2 is None
 
     def test_multiple_agents_isolated(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         now = time.time()
 
         tracker.track(
@@ -107,7 +107,7 @@ class TestDeliberationTracker:
         assert delib_cr.inputs[0].id == "q-cr"
 
     def test_ttl_expiry(self):
-        tracker = DeliberationTracker(ttl_seconds=1)
+        tracker = DeliberationTracker(input_ttl=1, session_ttl=1)
         tracker.track(
             "agent:test",
             TrackedInput(
@@ -132,7 +132,7 @@ class TestDeliberationTracker:
         assert delib is None
 
     def test_auto_steps_generated(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         now = time.time()
 
         tracker.track(
@@ -176,12 +176,12 @@ class TestDeliberationTracker:
         assert delib.total_duration_ms >= 900  # ~1000ms
 
     def test_no_deliberation_when_empty(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         delib = tracker.consume("agent:nobody")
         assert delib is None
 
     def test_single_input_no_duration(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         tracker.track(
             "agent:test",
             TrackedInput(
@@ -199,7 +199,7 @@ class TestDeliberationTracker:
         assert delib.total_duration_ms is None  # Can't calc from 1 input
 
     def test_session_count(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         assert tracker.session_count == 0
 
         tracker.track(
@@ -222,7 +222,7 @@ class TestDeliberationTracker:
         assert tracker.session_count == 1
 
     def test_get_inputs_peek(self):
-        tracker = DeliberationTracker(ttl_seconds=60)
+        tracker = DeliberationTracker(input_ttl=60)
         tracker.track(
             "agent:test",
             TrackedInput(

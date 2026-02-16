@@ -49,6 +49,15 @@ async def lifespan(app: FastAPI):
     set_auth_manager(auth_manager)
     app.state.auth_manager = auth_manager
 
+    # Initialize deliberation tracker with config values
+    from .cstp.deliberation_tracker import get_tracker
+
+    get_tracker(
+        input_ttl=app.state.config.tracker.input_ttl_seconds,
+        session_ttl=app.state.config.tracker.session_ttl_seconds,
+        consumed_history_size=app.state.config.tracker.consumed_history_size,
+    )
+
     # Initialize dispatcher with methods
     dispatcher = get_dispatcher()
     register_methods(dispatcher)

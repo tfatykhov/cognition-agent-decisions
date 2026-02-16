@@ -1590,6 +1590,7 @@ details > :not(summary) {
 .badge--type-lookup { background: var(--c-info-subtle); color: var(--c-info); }
 .badge--type-stats { background: var(--c-success-subtle); color: var(--c-success); }
 .badge--type-reasoning { background: rgba(168, 85, 247, 0.12); color: #a855f7; }
+.badge--type-info { background: var(--c-bg-subtle); color: var(--c-text-muted); }
 
 /* Age freshness colors (spec: <60s active, 60-300s stale, >300s orphaned) */
 .age--fresh { color: var(--c-success); }
@@ -1623,4 +1624,22 @@ details > :not(summary) {
 .session-pulse--age--orphaned {
   background: var(--c-text-muted);
   opacity: 0.5;
+}
+
+/* Consumed session cards */
+.session-list--consumed {
+  opacity: 0.85;
+}
+.session-card--consumed {
+  border-left: 3px solid var(--c-border);
+}
+.session-card--consumed .session-card-header {
+  background: var(--c-bg-secondary);
+}
+.section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }

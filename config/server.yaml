@@ -20,3 +20,8 @@ auth:
       token: "${CSTP_TOKEN_EMERSON}"
     - agent: "test"
       token: "test-token-for-development"
+
+tracker:
+  input_ttl_seconds: 300
+  session_ttl_seconds: 1800
+  consumed_history_size: 50

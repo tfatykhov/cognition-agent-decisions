@@ -16,6 +16,7 @@ import logging
 import random
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -46,15 +47,49 @@ class TrackerSession:
     last_activity: float = field(default_factory=time.time)
 
 
+@dataclass(slots=True)
+class ConsumedRecord:
+    """Record of a consumed (or expired) tracker session."""
+
+    key: str
+    consumed_at: float  # time.time()
+    input_count: int
+    agent_id: str | None
+    decision_id: str | None  # backfilled after record_decision
+    status: str  # "consumed" | "expired"
+    inputs_summary: list[dict[str, str]]  # [{id, type, text}] - brief snapshot
+
+
+def _parse_key_components(key: str) -> dict[str, str | None]:
+    """Extract agent_id/decision_id from composite key."""
+    result: dict[str, str | None] = {"agent_id": None, "decision_id": None}
+    if key.startswith("agent:") and ":decision:" in key:
+        parts = key.split(":decision:")
+        result["agent_id"] = parts[0].removeprefix("agent:")
+        result["decision_id"] = parts[1]
+    elif key.startswith("agent:"):
+        result["agent_id"] = key.removeprefix("agent:")
+    elif key.startswith("decision:"):
+        result["decision_id"] = key.removeprefix("decision:")
+    return result
+
+
 class DeliberationTracker:
     """Tracks API calls per agent/session for auto-deliberation capture.
 
     Thread-safe. Singleton instance shared across dispatcher and MCP server.
     """
 
-    def __init__(self, ttl_seconds: int = 300) -> None:
+    def __init__(
+        self,
+        input_ttl: int = 300,
+        session_ttl: int = 1800,
+        consumed_history_size: int = 50,
+    ) -> None:
         self._sessions: dict[str, TrackerSession] = {}
-        self._ttl = ttl_seconds
+        self._input_ttl = input_ttl
+        self._session_ttl = session_ttl
+        self._consumed_history: deque[ConsumedRecord] = deque(maxlen=consumed_history_size)
         self._lock = threading.Lock()
 
     def track(self, key: str, tracked_input: TrackedInput) -> None:
@@ -76,19 +111,52 @@ class DeliberationTracker:
         Returns None if no inputs were tracked.
         Called during recordDecision.
         Filters out inputs older than TTL.
+
+        Always records a ConsumedRecord to _consumed_history, even when
+        all inputs are expired — so sessions never vanish silently.
         """
         with self._lock:
             session = self._sessions.pop(key, None)
 
-        if not session or not session.inputs:
-            return None
+            if not session or not session.inputs:
+                return None
 
-        # Filter expired inputs
-        cutoff = time.time() - self._ttl
-        valid_inputs = [i for i in session.inputs if i.timestamp >= cutoff]
+            # Filter expired inputs
+            now = time.time()
+            cutoff = now - self._input_ttl
+            valid_inputs = [i for i in session.inputs if i.timestamp >= cutoff]
 
-        if not valid_inputs:
-            return None
+            parsed = _parse_key_components(key)
+
+            if not valid_inputs:
+                # All inputs expired — still record so it doesn't vanish
+                self._consumed_history.append(ConsumedRecord(
+                    key=key,
+                    consumed_at=now,
+                    input_count=0,
+                    agent_id=parsed.get("agent_id"),
+                    decision_id=None,
+                    status="consumed",
+                    inputs_summary=[
+                        {"id": "-", "type": "info",
+                         "text": "[all inputs expired at consume time]"},
+                    ],
+                ))
+                return None
+
+            # Record consumption history
+            self._consumed_history.append(ConsumedRecord(
+                key=key,
+                consumed_at=now,
+                input_count=len(valid_inputs),
+                agent_id=parsed.get("agent_id"),
+                decision_id=None,  # backfilled later
+                status="consumed",
+                inputs_summary=[
+                    {"id": i.id, "type": i.type, "text": i.text[:80]}
+                    for i in valid_inputs[:10]
+                ],
+            ))
 
         return self._build_deliberation(valid_inputs)
 
@@ -99,7 +167,7 @@ class DeliberationTracker:
             if not session:
                 return []
             # Filter expired inputs
-            cutoff = time.time() - self._ttl
+            cutoff = time.time() - self._input_ttl
             return [i for i in session.inputs if i.timestamp >= cutoff]
 
     def cleanup_expired(self) -> int:
@@ -108,16 +176,37 @@ class DeliberationTracker:
             return self._cleanup_expired_locked()
 
     def _cleanup_expired_locked(self) -> int:
-        """Internal cleanup (must hold lock)."""
-        cutoff = time.time() - self._ttl
-        expired = [
-            k
-            for k, s in self._sessions.items()
-            if s.last_activity < cutoff
-        ]
-        for k in expired:
-            del self._sessions[k]
-        return len(expired)
+        """Internal cleanup (must hold lock). Handles session-level TTL."""
+        now = time.time()
+        session_cutoff = now - self._session_ttl
+        expired_keys: list[str] = []
+
+        for k, s in self._sessions.items():
+            if s.last_activity < session_cutoff:
+                expired_keys.append(k)
+
+        for k in expired_keys:
+            session = self._sessions.pop(k)
+            # Move to consumed history with 'expired' status
+            parsed = _parse_key_components(k)
+            valid_inputs = [
+                i for i in session.inputs
+                if i.timestamp >= (now - self._input_ttl)
+            ]
+            self._consumed_history.append(ConsumedRecord(
+                key=k,
+                consumed_at=now,
+                input_count=len(valid_inputs),
+                agent_id=parsed.get("agent_id"),
+                decision_id=None,
+                status="expired",
+                inputs_summary=[
+                    {"id": i.id, "type": i.type, "text": i.text[:80]}
+                    for i in valid_inputs[:10]
+                ],
+            ))
+
+        return len(expired_keys)
 
     def _build_deliberation(
         self, inputs: list[TrackedInput]
@@ -170,24 +259,40 @@ class DeliberationTracker:
             convergence_point=None,
         )
 
-    def debug_sessions(self, key: str | None = None) -> dict[str, Any]:
+    def debug_sessions(
+        self,
+        key: str | None = None,
+        include_consumed: bool = False,
+    ) -> dict[str, Any]:
         """Peek at tracker state for debugging. Read-only, does not consume.
 
         Args:
             key: If provided, return detail for just that session.
                  If None, return all sessions.
+            include_consumed: If True, include consumed/expired session history.
 
         Returns:
-            Dict with sessions list, session_count, and detail mapping.
+            Dict with sessions list, session_count, detail mapping, and
+            optionally consumed history.
         """
         with self._lock:
+            # Deterministic cleanup on read
+            self._cleanup_expired_locked()
+
             now = time.time()
-            cutoff = now - self._ttl
+            cutoff = now - self._input_ttl
 
             if key is not None:
                 session = self._sessions.get(key)
                 if session is None:
-                    return {"sessions": [], "sessionCount": 0, "detail": {}}
+                    result: dict[str, Any] = {
+                        "sessions": [],
+                        "sessionCount": 0,
+                        "detail": {},
+                    }
+                    if include_consumed:
+                        result["consumed"] = self._get_consumed_history_locked()
+                    return result
                 valid = [i for i in session.inputs if i.timestamp >= cutoff]
                 inputs = [
                     {
@@ -200,11 +305,14 @@ class DeliberationTracker:
                     for i in valid
                 ]
                 detail = {key: {"inputCount": len(inputs), "inputs": inputs}}
-                return {
+                result = {
                     "sessions": [key],
                     "sessionCount": 1,
                     "detail": detail,
                 }
+                if include_consumed:
+                    result["consumed"] = self._get_consumed_history_locked()
+                return result
 
             # All sessions
             sessions: list[str] = []
@@ -224,11 +332,55 @@ class DeliberationTracker:
                 ]
                 detail[k] = {"inputCount": len(inputs), "inputs": inputs}
 
-            return {
+            result = {
                 "sessions": sessions,
                 "sessionCount": len(sessions),
                 "detail": detail,
             }
+
+            if include_consumed:
+                result["consumed"] = self._get_consumed_history_locked()
+
+            return result
+
+    def backfill_consumed(self, key: str, decision_id: str) -> bool:
+        """Backfill decision_id on the most recent ConsumedRecord matching key.
+
+        Called from dispatcher after record_decision returns the decision ID.
+
+        Returns True if a record was found and updated.
+        """
+        with self._lock:
+            for record in reversed(self._consumed_history):
+                if record.key == key and record.decision_id is None:
+                    record.decision_id = decision_id
+                    return True
+        return False
+
+    def get_consumed_history(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return recent consumed sessions for the dashboard.
+
+        Returns newest-first list of consumed record dicts.
+        """
+        with self._lock:
+            return self._get_consumed_history_locked(limit)
+
+    def _get_consumed_history_locked(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Return consumed history (must hold lock or be called under lock)."""
+        now = time.time()
+        records = list(reversed(self._consumed_history))[:limit]
+        return [
+            {
+                "key": r.key,
+                "consumedAt": int(now - r.consumed_at),
+                "inputCount": r.input_count,
+                "agentId": r.agent_id,
+                "decisionId": r.decision_id,
+                "status": r.status,
+                "inputsSummary": r.inputs_summary,
+            }
+            for r in records
+        ]
 
     @property
     def session_count(self) -> int:
@@ -350,14 +502,22 @@ _tracker: DeliberationTracker | None = None
 _tracker_lock = threading.Lock()
 
 
-def get_tracker(ttl_seconds: int = 300) -> DeliberationTracker:
+def get_tracker(
+    input_ttl: int = 300,
+    session_ttl: int = 1800,
+    consumed_history_size: int = 50,
+) -> DeliberationTracker:
     """Get or create the global tracker instance."""
     global _tracker
     if _tracker is not None:
         return _tracker
     with _tracker_lock:
         if _tracker is None:
-            _tracker = DeliberationTracker(ttl_seconds=ttl_seconds)
+            _tracker = DeliberationTracker(
+                input_ttl=input_ttl,
+                session_ttl=session_ttl,
+                consumed_history_size=consumed_history_size,
+            )
         return _tracker
 
 
@@ -368,17 +528,21 @@ def reset_tracker() -> None:
         _tracker = None
 
 
-def debug_tracker(key: str | None = None) -> dict[str, Any]:
+def debug_tracker(
+    key: str | None = None,
+    include_consumed: bool = False,
+) -> dict[str, Any]:
     """Convenience wrapper for debugging tracker state.
 
     Args:
         key: Optional session key to inspect. None returns all sessions.
+        include_consumed: If True, include consumed/expired session history.
 
     Returns:
-        Dict with sessions, sessionCount, and detail.
+        Dict with sessions, sessionCount, detail, and optionally consumed.
     """
     tracker = get_tracker()
-    return tracker.debug_sessions(key)
+    return tracker.debug_sessions(key, include_consumed=include_consumed)
 
 
 # ---------------------------------------------------------------------------
@@ -657,7 +821,7 @@ def extract_related_from_tracker(
 
         with tracker._lock:
             seen: dict[str, dict] = {}
-            cutoff = time.time() - tracker._ttl
+            cutoff = time.time() - tracker._input_ttl
 
             for k in keys:
                 session = tracker._sessions.get(k)

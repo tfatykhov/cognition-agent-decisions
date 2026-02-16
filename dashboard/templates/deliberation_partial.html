@@ -1,4 +1,4 @@
-<span id="session-count" hx-swap-oob="innerHTML">{{ session_count }} active</span>
+<span id="session-count" hx-swap-oob="innerHTML">{{ session_count }} active{% if consumed %} &middot; {{ consumed|length }} consumed{% endif %}</span>
 
 {% if sessions %}
 <div class="session-list">
@@ -18,6 +18,9 @@
                    lack agent_id/decision_id scoping, meaning thoughts may not be isolated. #}
                 {% if session.parsed.transport %}
                 <span class="badge badge--warning">{{ session.parsed.transport }}</span>
+                {% endif %}
+                {% if session.parsed.transport_id %}
+                <span class="badge badge--neutral">{{ session.parsed.transport_id }}</span>
                 {% endif %}
                 {% if not session.parsed.agent_id and not session.parsed.decision_id and not session.parsed.transport %}
                 <code>{{ session.key }}</code>
@@ -45,5 +48,52 @@
 <div class="empty-state">
     <div class="empty-state-icon">&#128172;</div>
     <p class="empty-state-text">No active deliberation sessions.{% if filter_key %} Try clearing the filter.{% endif %}</p>
+</div>
+{% endif %}
+
+{% if consumed %}
+<h3 class="section-title mt-4">Recently Consumed</h3>
+<div class="session-list session-list--consumed">
+    {% for item in consumed %}
+    <div class="session-card session-card--consumed">
+        <div class="session-card-header" @click="$store.deliberation.toggle('consumed:{{ item.key|replace("'", "\\'") }}')">
+            <div class="session-card-meta">
+                <span class="badge badge--{{ 'success' if item.status == 'consumed' else 'warning' }}">
+                    {{ item.status }}
+                </span>
+                {% if item.parsed.agent_id %}
+                <span class="badge badge--info">Agent: {{ item.parsed.agent_id }}</span>
+                {% endif %}
+                {% if item.decision_id %}
+                <a href="{{ url_for('decision_detail', decision_id=item.decision_id) }}"
+                   class="session-decision-id" @click.stop>Decision: {{ item.decision_id[:8] }}</a>
+                {% endif %}
+                {% if item.parsed.transport %}
+                <span class="badge badge--warning">{{ item.parsed.transport }}</span>
+                {% endif %}
+                {% if item.parsed.transport_id %}
+                <span class="badge badge--neutral">{{ item.parsed.transport_id }}</span>
+                {% endif %}
+            </div>
+            <div class="flex gap-3 items-center">
+                <span class="session-input-count">{{ item.input_count }} input{{ 's' if item.input_count != 1 }}</span>
+                <span class="session-input-age {{ item.age_class }}">{{ item.age_display }}</span>
+                <span class="session-expand-icon"
+                      :class="{ 'session-expand-icon--open': $store.deliberation.isOpen('consumed:{{ item.key|replace("'", "\\'") }}') }">
+                    &#9654;
+                </span>
+            </div>
+        </div>
+        <div class="session-card-body"
+             x-show="$store.deliberation.isOpen('consumed:{{ item.key|replace("'", "\\'") }}')" x-cloak>
+            {% for inp in item.inputs_summary %}
+            <div class="session-input">
+                <span class="badge badge--type-{{ inp.type }}">{{ inp.type }}</span>
+                <span class="session-input-text">{{ inp.text }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
 </div>
 {% endif %}
