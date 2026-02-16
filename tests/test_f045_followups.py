@@ -1,6 +1,7 @@
 """Tests for F045 follow-up features: getNeighbors, auto-linking, MCP graph tools."""
 
 import json
+import sys
 from typing import Any
 
 import pytest
@@ -489,12 +490,15 @@ class TestAutoLinkDecision:
 # ===========================================================================
 
 
+_has_mcp = bool(sys.modules.get("mcp") or __import__("importlib").util.find_spec("mcp"))
+
+
+@pytest.mark.skipif(not _has_mcp, reason="mcp package not installed (CI)")
 class TestMcpGraphTools:
     """Tests for MCP graph tool registration and handlers."""
 
     async def test_tools_listed(self, memory_store: MemoryGraphStore) -> None:
         """All 3 graph tools appear in list_tools() with correct schemas."""
-        # Import inside test to allow mocking if needed
         from a2a.mcp_server import list_tools
 
         tools = await list_tools()
@@ -554,7 +558,6 @@ class TestMcpGraphTools:
         self, memory_store: MemoryGraphStore
     ) -> None:
         """get_graph MCP tool call returns subgraph."""
-        # Set up some graph data
         await link_decisions("a", "b", "relates_to", 1.0, None, "agent")
         await link_decisions("b", "c", "depends_on", 0.8, None, "agent")
 
