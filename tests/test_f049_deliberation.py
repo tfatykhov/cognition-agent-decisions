@@ -358,6 +358,69 @@ class TestDeliberationRoute:
         # Verify the filter key was passed to the CSTP client
         mock_cstp.debug_tracker.assert_called_once_with(key="agent:test")
 
+    def test_decision_id_linked_to_detail_page(self, client) -> None:
+        """Decision ID should be rendered as a link to /decisions/<id>."""
+        with patch("app.cstp") as mock_cstp:
+            mock_cstp.debug_tracker.return_value = _sample_tracker_data()
+            resp = client.get("/deliberation", headers=_auth_headers())
+
+        html = resp.data.decode()
+        assert 'href="/decisions/abc12345"' in html
+        assert "Decision: abc12345" in html
+
+    def test_agent_id_shows_label_prefix(self, client) -> None:
+        """Agent ID badge should include 'Agent:' label prefix."""
+        with patch("app.cstp") as mock_cstp:
+            mock_cstp.debug_tracker.return_value = _sample_tracker_data()
+            resp = client.get("/deliberation", headers=_auth_headers())
+
+        html = resp.data.decode()
+        assert "Agent: planner" in html
+        assert "Agent: tester" in html
+
+    def test_transport_shows_warning_badge(self, client) -> None:
+        """Transport-only keys should show a warning badge."""
+        with patch("app.cstp") as mock_cstp:
+            mock_cstp.debug_tracker.return_value = _sample_tracker_data()
+            resp = client.get("/deliberation", headers=_auth_headers())
+
+        html = resp.data.decode()
+        assert "badge--warning" in html
+
+    def test_alpine_store_defined_outside_swap_target(self, client) -> None:
+        """Alpine.store for expand state must live outside the HTMX swap div."""
+        with patch("app.cstp") as mock_cstp:
+            mock_cstp.debug_tracker.return_value = _sample_tracker_data()
+            resp = client.get("/deliberation", headers=_auth_headers())
+
+        html = resp.data.decode()
+        # Store initialization script should be in <head> (outside swap target)
+        assert "Alpine.store('deliberation'" in html
+        assert "expandedKeys" in html
+
+    def test_expand_uses_session_key_not_index(self, client) -> None:
+        """Expand/collapse must use session key for stable identity across refreshes."""
+        with patch("app.cstp") as mock_cstp:
+            mock_cstp.debug_tracker.return_value = _sample_tracker_data()
+            resp = client.get("/deliberation", headers=_auth_headers())
+
+        html = resp.data.decode()
+        # Should use session key strings, not numeric loop indices
+        assert "$store.deliberation.toggle(" in html
+        assert "$store.deliberation.isOpen(" in html
+        # Should reference actual session keys
+        assert "agent:planner:decision:abc12345" in html
+
+    def test_partial_has_no_local_alpine_state(self, client) -> None:
+        """Partial template must NOT define local x-data expanded state."""
+        with patch("app.cstp") as mock_cstp:
+            mock_cstp.debug_tracker.return_value = _sample_tracker_data()
+            resp = client.get("/deliberation/partial", headers=_auth_headers())
+
+        html = resp.data.decode()
+        assert 'x-data="{ expanded:' not in html
+        assert "x-data='{" not in html
+
     def test_handles_cstp_error(self, client) -> None:
         from cstp_client import CSTPError
 

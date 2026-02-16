@@ -16,6 +16,24 @@
 </div>
 {% endblock %}
 
+{% block head_scripts %}
+<script>
+    // Persist expanded-session state outside the HTMX swap target so it
+    // survives the every-5s innerHTML replacement of #deliberation-content.
+    document.addEventListener('alpine:init', function () {
+        Alpine.store('deliberation', {
+            expandedKeys: {},
+            toggle(key) {
+                this.expandedKeys[key] = !this.expandedKeys[key];
+            },
+            isOpen(key) {
+                return !!this.expandedKeys[key];
+            }
+        });
+    });
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="card mb-4">
     <div class="card-body">
@@ -30,7 +48,7 @@
     </div>
 </div>
 
-<div id="deliberation-content"
+<div id="deliberation-content" x-data
      hx-get="{{ url_for('deliberation_partial', key=filter_key) }}"
      hx-trigger="every 5s"
      hx-swap="innerHTML">
