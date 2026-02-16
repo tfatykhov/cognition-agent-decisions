@@ -52,6 +52,7 @@ _config_mod.config = _mock_config
 from app import (  # noqa: E402
     _age_freshness_class,
     _format_age,
+    _session_freshness_class,
     _transform_tracker_sessions,
     app,
     parse_tracker_key,
@@ -210,25 +211,44 @@ class TestFormatAge:
 # ---------------------------------------------------------------------------
 
 class TestAgeFreshnessClass:
-    """Tests for _age_freshness_class() — CSS class thresholds."""
+    """Tests for _age_freshness_class() — CSS class thresholds per spec."""
 
     def test_zero_is_fresh(self) -> None:
         assert _age_freshness_class(0) == "age--fresh"
 
-    def test_29_is_fresh(self) -> None:
-        assert _age_freshness_class(29) == "age--fresh"
+    def test_59_is_fresh(self) -> None:
+        assert _age_freshness_class(59) == "age--fresh"
 
-    def test_30_is_recent(self) -> None:
-        assert _age_freshness_class(30) == "age--recent"
+    def test_60_is_stale(self) -> None:
+        assert _age_freshness_class(60) == "age--stale"
 
-    def test_119_is_recent(self) -> None:
-        assert _age_freshness_class(119) == "age--recent"
+    def test_299_is_stale(self) -> None:
+        assert _age_freshness_class(299) == "age--stale"
 
-    def test_120_is_stale(self) -> None:
-        assert _age_freshness_class(120) == "age--stale"
+    def test_300_is_orphaned(self) -> None:
+        assert _age_freshness_class(300) == "age--orphaned"
 
-    def test_large_value_is_stale(self) -> None:
-        assert _age_freshness_class(9999) == "age--stale"
+    def test_large_value_is_orphaned(self) -> None:
+        assert _age_freshness_class(9999) == "age--orphaned"
+
+
+class TestSessionFreshnessClass:
+    """Tests for _session_freshness_class() — session-level freshness."""
+
+    def test_empty_inputs_is_orphaned(self) -> None:
+        assert _session_freshness_class([]) == "age--orphaned"
+
+    def test_uses_newest_input(self) -> None:
+        inputs = [{"ageSeconds": 200}, {"ageSeconds": 10}, {"ageSeconds": 500}]
+        assert _session_freshness_class(inputs) == "age--fresh"
+
+    def test_all_stale(self) -> None:
+        inputs = [{"ageSeconds": 100}, {"ageSeconds": 250}]
+        assert _session_freshness_class(inputs) == "age--stale"
+
+    def test_all_orphaned(self) -> None:
+        inputs = [{"ageSeconds": 400}, {"ageSeconds": 600}]
+        assert _session_freshness_class(inputs) == "age--orphaned"
 
 
 # ---------------------------------------------------------------------------
@@ -254,19 +274,22 @@ class TestTransformTrackerSessions:
         assert s0["inputs"][0]["age_display"] == "10s ago"
         assert s0["inputs"][0]["age_class"] == "age--fresh"
         assert s0["inputs"][1]["age_display"] == "45s ago"
-        assert s0["inputs"][1]["age_class"] == "age--recent"
+        assert s0["inputs"][1]["age_class"] == "age--fresh"
+        assert s0["freshness"] == "age--fresh"
 
-        # Second session: agent:tester
+        # Second session: agent:tester (200s = stale)
         s1 = sessions[1]
         assert s1["parsed"]["agent_id"] == "tester"
         assert s1["parsed"]["decision_id"] is None
         assert s1["inputs"][0]["age_class"] == "age--stale"
+        assert s1["freshness"] == "age--stale"
 
-        # Third session: mcp:default (empty inputs)
+        # Third session: mcp:default (empty inputs = orphaned)
         s2 = sessions[2]
         assert s2["parsed"]["transport"] == "mcp"
         assert s2["input_count"] == 0
         assert s2["inputs"] == []
+        assert s2["freshness"] == "age--orphaned"
 
     def test_empty_response(self) -> None:
         data: dict[str, Any] = {"sessions": [], "sessionCount": 0, "detail": {}}
@@ -284,6 +307,7 @@ class TestTransformTrackerSessions:
         assert len(sessions) == 1
         assert sessions[0]["input_count"] == 0
         assert sessions[0]["inputs"] == []
+        assert sessions[0]["freshness"] == "age--orphaned"
 
 
 # ---------------------------------------------------------------------------

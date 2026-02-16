@@ -1571,6 +1571,11 @@ details > :not(summary) {
   flex: 1;
   color: var(--c-text-secondary);
   line-height: var(--lh-relaxed);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .session-input-age {
@@ -1586,10 +1591,10 @@ details > :not(summary) {
 .badge--type-stats { background: var(--c-success-subtle); color: var(--c-success); }
 .badge--type-reasoning { background: rgba(168, 85, 247, 0.12); color: #a855f7; }
 
-/* Age freshness colors */
+/* Age freshness colors (spec: <60s active, 60-300s stale, >300s orphaned) */
 .age--fresh { color: var(--c-success); }
-.age--recent { color: var(--c-text-muted); }
-.age--stale { color: var(--c-text-muted); opacity: 0.6; }
+.age--stale { color: var(--c-warning); }
+.age--orphaned { color: var(--c-text-muted); opacity: 0.6; }
 
 /* Pulse animation */
 @keyframes pulse-dot {
@@ -1599,10 +1604,23 @@ details > :not(summary) {
 
 .session-pulse {
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
+  margin-right: var(--sp-2);
+  flex-shrink: 0;
+}
+
+.session-pulse--age--fresh {
   background: var(--c-success);
   animation: pulse-dot 2s ease-in-out infinite;
-  margin-right: var(--sp-2);
+}
+
+.session-pulse--age--stale {
+  background: var(--c-warning);
+}
+
+.session-pulse--age--orphaned {
+  background: var(--c-text-muted);
+  opacity: 0.5;
 }

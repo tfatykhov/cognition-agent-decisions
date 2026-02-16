@@ -4,8 +4,9 @@
 <div class="session-list" x-data="{ expanded: {} }">
     {% for session in sessions %}
     <div class="session-card">
-        <div class="session-card-header" @click="expanded['{{ session.key }}'] = !expanded['{{ session.key }}']">
+        <div class="session-card-header" @click="expanded[{{ loop.index0 }}] = !expanded[{{ loop.index0 }}]">
             <div class="session-card-meta">
+                <span class="session-pulse session-pulse--{{ session.freshness }}"></span>
                 {% if session.parsed.agent_id %}
                 <span class="badge badge--info">{{ session.parsed.agent_id }}</span>
                 {% endif %}
@@ -21,11 +22,11 @@
             </div>
             <div class="flex gap-3 items-center">
                 <span class="session-input-count">{{ session.input_count }} input{{ 's' if session.input_count != 1 }}</span>
-                <span class="session-expand-icon" :class="{ 'session-expand-icon--open': expanded['{{ session.key }}'] }">&#9654;</span>
+                <span class="session-expand-icon" :class="{ 'session-expand-icon--open': expanded[{{ loop.index0 }}] }">&#9654;</span>
             </div>
         </div>
 
-        <div class="session-card-body" x-show="expanded['{{ session.key }}']" x-cloak>
+        <div class="session-card-body" x-show="expanded[{{ loop.index0 }}]" x-cloak>
             {% for inp in session.inputs %}
             <div class="session-input">
                 <span class="badge badge--type-{{ inp.type }}">{{ inp.type }}</span>

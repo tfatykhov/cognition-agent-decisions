@@ -384,9 +384,11 @@ def _transform_tracker_sessions(tracker_data: dict[str, Any]) -> list[dict[str, 
                 "age_display": _format_age(age),
                 "age_class": _age_freshness_class(age),
             })
+        raw_inputs = session_detail.get("inputs", [])
         sessions.append({
             "key": key, "parsed": parsed,
             "input_count": session_detail.get("inputCount", 0), "inputs": inputs,
+            "freshness": _session_freshness_class(raw_inputs),
         })
     return sessions
 
@@ -401,12 +403,26 @@ def _format_age(seconds: int) -> str:
 
 
 def _age_freshness_class(seconds: int) -> str:
-    """Return CSS class based on age freshness."""
-    if seconds < 30:
+    """Return CSS class based on age freshness.
+
+    Thresholds per F049 spec:
+    - active (green): < 60s
+    - stale (yellow): 60-300s
+    - orphaned (red): > 300s (5min)
+    """
+    if seconds < 60:
         return "age--fresh"
-    if seconds < 120:
-        return "age--recent"
-    return "age--stale"
+    if seconds < 300:
+        return "age--stale"
+    return "age--orphaned"
+
+
+def _session_freshness_class(inputs: list[dict[str, Any]]) -> str:
+    """Return session-level CSS class based on newest input age."""
+    if not inputs:
+        return "age--orphaned"
+    min_age = min(inp.get("ageSeconds", 0) for inp in inputs)
+    return _age_freshness_class(min_age)
 
 
 @app.route("/deliberation")
