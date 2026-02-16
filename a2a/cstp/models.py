@@ -1153,6 +1153,37 @@ class GetWisdomResponse:
 
 
 # ============================================================================
+# F129: RecordThought params (agent_id + decision_id for multi-agent isolation)
+# ============================================================================
+
+
+@dataclass(slots=True)
+class RecordThoughtParams:
+    """Parsed params for cstp.recordThought (F129).
+
+    Supports optional agent_id and decision_id for composite tracker keys,
+    enabling multi-agent deliberation isolation.
+    """
+
+    text: str
+    decision_id: str | None = None
+    agent_id: str | None = None
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "RecordThoughtParams":
+        """Create from JSON-RPC params (camelCase support)."""
+        text = params.get("text", "")
+        if not text:
+            raise ValueError("Missing required parameter: text")
+
+        return cls(
+            text=text,
+            decision_id=params.get("decisionId") or params.get("decision_id"),
+            agent_id=params.get("agentId") or params.get("agent_id"),
+        )
+
+
+# ============================================================================
 # F126: Debug Tracker models
 # ============================================================================
 

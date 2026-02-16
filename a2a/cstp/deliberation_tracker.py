@@ -257,6 +257,92 @@ def _input_type_to_step_type(input_type: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Composite key helpers (issue #129)
+# ---------------------------------------------------------------------------
+
+
+def build_tracker_key(
+    agent_id: str | None = None,
+    decision_id: str | None = None,
+    transport_key: str | None = None,
+) -> str:
+    """Build a composite tracker key from optional components.
+
+    Priority:
+    - agent_id + decision_id -> "agent:{agent_id}:decision:{decision_id}"
+    - agent_id only -> "agent:{agent_id}"
+    - decision_id only -> "decision:{decision_id}"
+    - neither -> transport_key (e.g. "rpc:myagent" or "mcp:default")
+
+    Args:
+        agent_id: Optional explicit agent identifier.
+        decision_id: Optional decision identifier.
+        transport_key: Fallback transport-derived key.
+
+    Returns:
+        Composite tracker key string.
+
+    Raises:
+        ValueError: If all three are None/empty.
+    """
+    if agent_id and decision_id:
+        return f"agent:{agent_id}:decision:{decision_id}"
+    if agent_id:
+        return f"agent:{agent_id}"
+    if decision_id:
+        return f"decision:{decision_id}"
+    if transport_key:
+        return transport_key
+    raise ValueError(
+        "At least one of agent_id, decision_id, or transport_key is required"
+    )
+
+
+def resolve_tracker_keys(
+    agent_id: str | None = None,
+    decision_id: str | None = None,
+    transport_key: str | None = None,
+) -> list[str]:
+    """Return priority-ordered list of tracker keys to try for consumption.
+
+    Matches most-specific first (exact composite), then decision-scoped,
+    then agent-scoped, then transport fallback.
+    Deduplicates while preserving order.
+
+    Args:
+        agent_id: Optional explicit agent identifier.
+        decision_id: Optional decision identifier.
+        transport_key: Fallback transport-derived key.
+
+    Returns:
+        List of keys to try, most-specific first.
+    """
+    keys: list[str] = []
+
+    # Most specific: exact composite
+    if agent_id and decision_id:
+        keys.append(f"agent:{agent_id}:decision:{decision_id}")
+    # Decision-scoped (any agent)
+    if decision_id:
+        keys.append(f"decision:{decision_id}")
+    # Agent-scoped (any decision)
+    if agent_id:
+        keys.append(f"agent:{agent_id}")
+    # Transport fallback
+    if transport_key:
+        keys.append(transport_key)
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+            result.append(k)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------
 
@@ -420,6 +506,7 @@ def track_reasoning(
     key: str,
     text: str,
     decision_id: str | None = None,
+    agent_id: str | None = None,
 ) -> None:
     """Track a reasoning/chain-of-thought step. Fail-open.
 
@@ -427,18 +514,30 @@ def track_reasoning(
     step. Can be used pre-decision (accumulated in tracker) or
     post-decision (appended to existing deliberation via update).
 
+    When agent_id and/or decision_id are provided, a composite tracker
+    key is built for multi-agent isolation (issue #129). The ``key``
+    parameter serves as the transport fallback.
+
     Args:
-        key: Agent or session ID.
+        key: Transport-derived key (e.g. "rpc:myagent", "mcp:default").
         text: The reasoning/thought text.
-        decision_id: Optional decision ID if reasoning is for an existing decision.
+        decision_id: Optional decision ID for scoping the thought.
+        agent_id: Optional agent ID for multi-agent isolation.
     """
     try:
         tracker = get_tracker()
+        storage_key = build_tracker_key(
+            agent_id=agent_id,
+            decision_id=decision_id,
+            transport_key=key,
+        )
         raw_data: dict[str, Any] = {"text": text}
         if decision_id:
             raw_data["decision_id"] = decision_id
+        if agent_id:
+            raw_data["agent_id"] = agent_id
         tracker.track(
-            key,
+            storage_key,
             TrackedInput(
                 id=f"r-{uuid4().hex[:8]}",
                 type="reasoning",
@@ -455,11 +554,22 @@ def track_reasoning(
 def auto_attach_deliberation(
     key: str,
     deliberation: Deliberation | None,
+    agent_id: str | None = None,
+    decision_id: str | None = None,
 ) -> tuple[Deliberation | None, bool]:
     """Consume tracked inputs and attach/merge with deliberation. Fail-open.
 
+    When agent_id/decision_id are provided, tries multiple composite keys
+    in priority order (most-specific first) and merges all found inputs.
+
+    Args:
+        key: Transport-derived key (fallback).
+        deliberation: Explicit deliberation from the client, or None.
+        agent_id: Optional agent ID for multi-agent key resolution.
+        decision_id: Optional decision ID for decision-scoped key resolution.
+
     Returns:
-        (deliberation, auto_captured) — auto_captured is True only if
+        (deliberation, auto_captured) -- auto_captured is True only if
         tracked inputs were actually consumed and attached.
 
     - If no explicit deliberation: return auto-built from tracker
@@ -468,7 +578,29 @@ def auto_attach_deliberation(
     """
     try:
         tracker = get_tracker()
-        auto_delib = tracker.consume(key)
+        keys = resolve_tracker_keys(agent_id, decision_id, key)
+
+        # Try consuming from each key in priority order, merge all found
+        combined_delib: Deliberation | None = None
+        for k in keys:
+            auto_delib = tracker.consume(k)
+            if auto_delib:
+                if combined_delib is None:
+                    combined_delib = auto_delib
+                else:
+                    # Merge into combined
+                    existing_ids = {i.id for i in combined_delib.inputs}
+                    for inp in auto_delib.inputs:
+                        if inp.id not in existing_ids:
+                            combined_delib.inputs.append(inp)
+                    if auto_delib.steps:
+                        max_step = max(
+                            (s.step for s in combined_delib.steps), default=0
+                        )
+                        for step in auto_delib.steps:
+                            step.step = max_step + step.step
+                            combined_delib.steps.append(step)
+        auto_delib = combined_delib
     except Exception:
         logger.debug("Failed to consume deliberation", exc_info=True)
         return deliberation, False
@@ -498,41 +630,57 @@ def auto_attach_deliberation(
     return deliberation, True
 
 
-def extract_related_from_tracker(key: str) -> list[dict]:
+def extract_related_from_tracker(
+    key: str,
+    agent_id: str | None = None,
+    decision_id: str | None = None,
+) -> list[dict]:
     """Extract related decisions from tracked inputs BEFORE consumption.
 
     Call this before auto_attach_deliberation to capture top_results
     from query inputs while they're still in the tracker.
 
-    Returns list of dicts with id, summary, distance - deduplicated and sorted.
+    When agent_id/decision_id are provided, checks multiple composite
+    keys in priority order and collects from all matching sessions.
+
+    Args:
+        key: Transport-derived key (fallback).
+        agent_id: Optional agent ID for multi-agent key resolution.
+        decision_id: Optional decision ID for decision-scoped key resolution.
+
+    Returns:
+        List of dicts with id, summary, distance - deduplicated and sorted.
     """
     try:
         tracker = get_tracker()
-        with tracker._lock:
-            session = tracker._sessions.get(key)
-            if not session:
-                return []
+        keys = resolve_tracker_keys(agent_id, decision_id, key)
 
+        with tracker._lock:
             seen: dict[str, dict] = {}
             cutoff = time.time() - tracker._ttl
 
-            for inp in session.inputs:
-                if inp.timestamp < cutoff:
+            for k in keys:
+                session = tracker._sessions.get(k)
+                if not session:
                     continue
-                if inp.type != "query" or not inp.raw_data:
-                    continue
-                top_results = inp.raw_data.get("top_results", [])
-                for r in top_results:
-                    rid = r.get("id", "")
-                    if not rid:
+
+                for inp in session.inputs:
+                    if inp.timestamp < cutoff:
                         continue
-                    dist = r.get("distance", 0.0)
-                    if rid not in seen or dist < seen[rid]["distance"]:
-                        seen[rid] = {
-                            "id": rid,
-                            "summary": r.get("summary", ""),
-                            "distance": dist,
-                        }
+                    if inp.type != "query" or not inp.raw_data:
+                        continue
+                    top_results = inp.raw_data.get("top_results", [])
+                    for r in top_results:
+                        rid = r.get("id", "")
+                        if not rid:
+                            continue
+                        dist = r.get("distance", 0.0)
+                        if rid not in seen or dist < seen[rid]["distance"]:
+                            seen[rid] = {
+                                "id": rid,
+                                "summary": r.get("summary", ""),
+                                "distance": dist,
+                            }
 
             # Sort by distance (closest first) and return
             return sorted(seen.values(), key=lambda x: x["distance"])
