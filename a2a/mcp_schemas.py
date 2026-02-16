@@ -402,11 +402,21 @@ class RecordThoughtInput(BaseModel):
         min_length=1,
         description="Reasoning/chain-of-thought text to record",
     )
+    agent_id: str | None = Field(
+        default=None,
+        description=(
+            "Agent identifier for multi-agent isolation. "
+            "Thoughts from different agent_ids are tracked separately. "
+            "Required when multiple agents share an MCP connection."
+        ),
+    )
     decision_id: str | None = Field(
         default=None,
         description=(
-            "Decision ID to append thought to (post-decision mode). "
-            "Omit for pre-decision mode (auto-attached on next recordDecision)."
+            "Decision ID to scope thought to. In post-decision mode "
+            "(decision already recorded), appends to existing deliberation. "
+            "In pre-decision mode, scopes the tracker bucket so only "
+            "recordDecision with matching decision_id consumes these thoughts."
         ),
     )
 

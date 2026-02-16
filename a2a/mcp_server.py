@@ -885,24 +885,36 @@ async def _handle_record_thought_mcp(arguments: dict[str, Any]) -> list[TextCont
     input_data = RecordThoughtInput(**arguments)
 
     if input_data.decision_id:
-        # Post-decision: append-only via shared service function
-        from .cstp.decision_service import append_thought
+        # Try post-decision append first (decision already exists)
+        from .cstp.decision_service import append_thought, find_decision
 
-        result = await append_thought(input_data.decision_id, input_data.text)
-        if not result.get("success"):
-            return [TextContent(type="text", text=json.dumps({"error": result.get("error", "Unknown error")}))]
-        return [TextContent(type="text", text=json.dumps({
-            "success": True,
-            "mode": "post-decision",
-            "decision_id": input_data.decision_id,
-            "step_number": result["step_number"],
-        }))]
+        found = await find_decision(input_data.decision_id)
+        if found:
+            result = await append_thought(input_data.decision_id, input_data.text)
+            if not result.get("success"):
+                return [TextContent(type="text", text=json.dumps({"error": result.get("error", "Unknown error")}))]
+            return [TextContent(type="text", text=json.dumps({
+                "success": True,
+                "mode": "post-decision",
+                "decision_id": input_data.decision_id,
+                "step_number": result["step_number"],
+            }))]
+        # Decision not found — fall through to pre-decision tracker
+        # with decision_id scoping (decision will be recorded later)
 
-    # Pre-decision: accumulate in tracker (use MCP session key)
-    track_reasoning("mcp-session", input_data.text)
+    # Pre-decision: accumulate in tracker with composite key
+    from .cstp.deliberation_tracker import build_tracker_key
+
+    tracker_key = build_tracker_key(
+        agent_id=input_data.agent_id,
+        decision_id=input_data.decision_id,
+        transport_key="mcp-session",
+    )
+    track_reasoning(tracker_key, input_data.text)
     return [TextContent(type="text", text=json.dumps({
         "success": True,
         "mode": "pre-decision",
+        "tracker_key": tracker_key,
     }))]
 
 
