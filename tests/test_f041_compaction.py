@@ -531,7 +531,7 @@ class TestRunCompaction:
     async def test_counts_levels_correctly(self) -> None:
         decisions = _sample_decisions()
         req = CompactRequest()
-        resp = await run_compaction(req, preloaded_decisions=decisions)
+        resp = await run_compaction(req, preloaded_decisions=decisions, now=NOW)
         assert resp.compacted == 12
         assert resp.levels.full == 3
         assert resp.levels.summary == 3
@@ -546,7 +546,7 @@ class TestRunCompaction:
             _make_decision(decision_id="c", age_days=100),
         ]
         req = CompactRequest()
-        resp = await run_compaction(req, preloaded_decisions=decisions)
+        resp = await run_compaction(req, preloaded_decisions=decisions, now=NOW)
         assert resp.preserved == 2
         # Preserved decisions are counted as full
         assert resp.levels.full == 2
@@ -555,13 +555,13 @@ class TestRunCompaction:
     @pytest.mark.asyncio
     async def test_dry_run_flag(self) -> None:
         req = CompactRequest(dry_run=True)
-        resp = await run_compaction(req, preloaded_decisions=[])
+        resp = await run_compaction(req, preloaded_decisions=[], now=NOW)
         assert resp.dry_run is True
 
     @pytest.mark.asyncio
     async def test_empty_decisions(self) -> None:
         req = CompactRequest()
-        resp = await run_compaction(req, preloaded_decisions=[])
+        resp = await run_compaction(req, preloaded_decisions=[], now=NOW)
         assert resp.compacted == 0
         assert resp.levels.full == 0
 
@@ -569,7 +569,7 @@ class TestRunCompaction:
     async def test_pending_counted_as_full(self) -> None:
         decisions = [_make_decision(status="pending", age_days=100)]
         req = CompactRequest()
-        resp = await run_compaction(req, preloaded_decisions=decisions)
+        resp = await run_compaction(req, preloaded_decisions=decisions, now=NOW)
         assert resp.levels.full == 1
 
 
@@ -583,7 +583,7 @@ class TestGetCompactedDecisions:
     async def test_returns_shaped_decisions(self) -> None:
         decisions = _sample_decisions()
         req = GetCompactedRequest()
-        resp = await get_compacted_decisions(req, preloaded_decisions=decisions)
+        resp = await get_compacted_decisions(req, preloaded_decisions=decisions, now=NOW)
         assert resp.total > 0
         for cd in resp.decisions:
             assert cd.level in ("full", "summary", "digest")
@@ -593,7 +593,7 @@ class TestGetCompactedDecisions:
         """Wisdom-level decisions not returned individually."""
         decisions = _sample_decisions()
         req = GetCompactedRequest()
-        resp = await get_compacted_decisions(req, preloaded_decisions=decisions)
+        resp = await get_compacted_decisions(req, preloaded_decisions=decisions, now=NOW)
         levels_returned = {cd.level for cd in resp.decisions}
         assert "wisdom" not in levels_returned
 
@@ -601,14 +601,14 @@ class TestGetCompactedDecisions:
     async def test_forced_level_filter(self) -> None:
         decisions = _sample_decisions()
         req = GetCompactedRequest(level="summary")
-        resp = await get_compacted_decisions(req, preloaded_decisions=decisions)
+        resp = await get_compacted_decisions(req, preloaded_decisions=decisions, now=NOW)
         assert all(cd.level == "summary" for cd in resp.decisions)
 
     @pytest.mark.asyncio
     async def test_limit_respected(self) -> None:
         decisions = _sample_decisions()
         req = GetCompactedRequest(limit=2)
-        resp = await get_compacted_decisions(req, preloaded_decisions=decisions)
+        resp = await get_compacted_decisions(req, preloaded_decisions=decisions, now=NOW)
         assert len(resp.decisions) <= 2
 
     @pytest.mark.asyncio
@@ -618,7 +618,7 @@ class TestGetCompactedDecisions:
             _make_decision(decision_id="b"),
         ]
         req = GetCompactedRequest(include_preserved=False)
-        resp = await get_compacted_decisions(req, preloaded_decisions=decisions)
+        resp = await get_compacted_decisions(req, preloaded_decisions=decisions, now=NOW)
         ids = [cd.id for cd in resp.decisions]
         assert "a" not in [i[:1] for i in ids] or not any(
             cd.preserved for cd in resp.decisions
@@ -628,14 +628,14 @@ class TestGetCompactedDecisions:
     async def test_sorted_by_date_descending(self) -> None:
         decisions = _sample_decisions()
         req = GetCompactedRequest()
-        resp = await get_compacted_decisions(req, preloaded_decisions=decisions)
+        resp = await get_compacted_decisions(req, preloaded_decisions=decisions, now=NOW)
         dates = [cd.date for cd in resp.decisions]
         assert dates == sorted(dates, reverse=True)
 
     @pytest.mark.asyncio
     async def test_empty_decisions(self) -> None:
         req = GetCompactedRequest()
-        resp = await get_compacted_decisions(req, preloaded_decisions=[])
+        resp = await get_compacted_decisions(req, preloaded_decisions=[], now=NOW)
         assert resp.total == 0
         assert resp.decisions == []
 

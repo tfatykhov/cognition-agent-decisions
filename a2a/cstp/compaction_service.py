@@ -201,6 +201,8 @@ def compact_decision(
 async def run_compaction(
     request: CompactRequest,
     preloaded_decisions: list[dict[str, Any]] | None = None,
+    *,
+    now: datetime | None = None,
 ) -> CompactResponse:
     """Run a compaction cycle — recalculate levels for all decisions.
 
@@ -227,7 +229,7 @@ async def run_compaction(
             preserved += 1
 
         try:
-            level = determine_compaction_level(d)
+            level = determine_compaction_level(d, now=now)
             match level:
                 case "full":
                     levels.full += 1
@@ -255,6 +257,8 @@ async def run_compaction(
 async def get_compacted_decisions(
     request: GetCompactedRequest,
     preloaded_decisions: list[dict[str, Any]] | None = None,
+    *,
+    now: datetime | None = None,
 ) -> GetCompactedResponse:
     """Get decisions shaped at their appropriate compaction level.
 
@@ -273,7 +277,7 @@ async def get_compacted_decisions(
     shaped: list[CompactedDecision] = []
 
     for d in decisions:
-        level = determine_compaction_level(d)
+        level = determine_compaction_level(d, now=now)
 
         # Skip preserved if not included
         if d.get("preserve") and not request.include_preserved:
