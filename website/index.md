@@ -63,28 +63,26 @@ features:
     title: Calibration & Analytics
     details: Track Brier scores, success rates, and confidence calibration over time. Reason-type analytics show which reasoning patterns predict success.
   - icon:
-      src: /icon-forge.png
-      alt: FORGE
-      width: 48
-      height: 48
-    title: MCP + FORGE Plugin
-    details: 14+ MCP tools for Claude Code, Claude Desktop, OpenClaw, and any MCP-compliant agent. FORGE plugin automates the full decision loop with hooks and commands.
-  - icon:
       src: /icon-api.png
       alt: API
       width: 48
       height: 48
-    title: JSON-RPC API
-    details: CSTP protocol over HTTP. Query, check, record, review - all via simple JSON-RPC 2.0 calls. Built on FastAPI with ChromaDB for semantic search.
+    title: MCP + JSON-RPC API
+    details: 14+ MCP tools for Claude Code, Claude Desktop, and OpenClaw. CSTP protocol over JSON-RPC 2.0 via HTTP. Framework-agnostic - works with any agent.
 ---
-
-## How It Works
 
 ## FORGE - The Decision Loop
 
-**F**etch → **O**rient → **R**esolve → **G**o → **E**xtract
+<div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.5rem;">
+  <img src="/icon-forge.png" alt="FORGE" width="80" height="80" style="border-radius: 12px;" />
+  <div>
+    <strong>F</strong>etch → <strong>O</strong>rient → <strong>R</strong>esolve → <strong>G</strong>o → <strong>E</strong>xtract
+    <br/>
+    <em>You forge decisions in the Cognition Engine - deliberately, under pressure, with intention.</em>
+  </div>
+</div>
 
-You forge decisions in the Cognition Engine - deliberately, under pressure, with intention. Every decision flows through this loop, creating a compounding record of organizational judgment.
+Every decision flows through this loop, creating a compounding record of organizational judgment.
 
 | Phase | What happens |
 |-------|-------------|
