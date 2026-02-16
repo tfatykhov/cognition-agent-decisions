@@ -50,6 +50,7 @@ from .models import (
     PreActionRequest,
     QueryDecisionsRequest,
     QueryDecisionsResponse,
+    RecordThoughtParams,
     SessionContextRequest,
 )
 from .preaction_service import pre_action
@@ -70,6 +71,28 @@ RECORD_FAILED = -32005
 ATTRIBUTION_FAILED = -32008
 REVIEW_FAILED = -32006
 DECISION_NOT_FOUND = -32007
+
+
+def build_tracker_key(
+    transport_agent_id: str,
+    agent_id: str | None = None,
+    decision_id: str | None = None,
+) -> str:
+    """Build a composite tracker key for deliberation tracking (F129).
+
+    Priority: most-specific composite key first.
+    - agent_id + decision_id → "agent:{agent_id}:decision:{decision_id}"
+    - agent_id only → "agent:{agent_id}"
+    - decision_id only → "decision:{decision_id}"
+    - neither → "rpc:{transport_agent_id}" (backward-compatible fallback)
+    """
+    if agent_id and decision_id:
+        return f"agent:{agent_id}:decision:{decision_id}"
+    if agent_id:
+        return f"agent:{agent_id}"
+    if decision_id:
+        return f"decision:{decision_id}"
+    return f"rpc:{transport_agent_id}"
 
 
 class CstpDispatcher:
@@ -908,50 +931,56 @@ async def _handle_update_decision(params: dict[str, Any], agent_id: str) -> dict
 
 
 async def _handle_record_thought(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
-    """Handle cstp.recordThought method (F028).
+    """Handle cstp.recordThought method (F028 + F129).
 
     Records a reasoning/chain-of-thought step in the deliberation tracker.
-    Two modes:
-    - Pre-decision: no decision_id - thought accumulates in tracker,
-      auto-attached when recordDecision is called.
-    - Post-decision: decision_id provided - thought is appended to
-      the existing decision's deliberation trace (append-only).
+    Three modes:
+    - Post-decision (legacy): bare "id" param without F129 scoping params
+      — appends thought to existing decision's deliberation trace.
+    - Pre-decision with F129 scoping: agent_id and/or decision_id provided
+      — thought accumulates under composite tracker key.
+    - Pre-decision (legacy): no params — uses transport-derived key.
+
+    F129: agent_id and decision_id are scoping keys for multi-agent
+    deliberation isolation, NOT triggers for post-decision append.
 
     Args:
-        params: {"text": "reasoning...", "decision_id": "optional"}
-        agent_id: Authenticated agent ID.
+        params: {"text": "...", "agentId": "optional", "decisionId": "optional"}
+        agent_id: Authenticated agent ID (from transport/auth).
 
     Returns:
         Acknowledgment with tracked input ID.
     """
     from .deliberation_tracker import track_reasoning
 
-    text = params.get("text", "")
-    if not text:
-        raise ValueError("Missing required parameter: text")
+    request = RecordThoughtParams.from_params(params)
 
-    decision_id = params.get("decision_id") or params.get("id")
-
-    if decision_id:
-        # Post-decision: append-only via shared service function
+    # Post-decision append: only when bare "id" param is used WITHOUT
+    # F129 scoping params (backward-compatible legacy path)
+    legacy_decision_id = params.get("id")
+    if legacy_decision_id and not request.agent_id and not request.decision_id:
         from .decision_service import append_thought
 
-        result = await append_thought(decision_id, text)
+        result = await append_thought(legacy_decision_id, request.text)
         if not result.get("success"):
             raise ValueError(result.get("error", "Unknown error"))
         return {
             "success": True,
             "mode": "post-decision",
-            "decision_id": decision_id,
+            "decision_id": legacy_decision_id,
             "step_number": result["step_number"],
         }
 
-    # Pre-decision: accumulate in tracker
-    track_reasoning(f"rpc:{agent_id}", text)
+    # Pre-decision: accumulate in tracker using composite key
+    tracker_key = build_tracker_key(
+        agent_id, agent_id=request.agent_id, decision_id=request.decision_id,
+    )
+    track_reasoning(tracker_key, request.text)
     return {
         "success": True,
         "mode": "pre-decision",
-        "agent_id": agent_id,
+        "tracker_key": tracker_key,
+        "agent_id": request.agent_id or agent_id,
     }
 
 
@@ -1024,11 +1053,15 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     # Parse and validate request
     request = RecordDecisionRequest.from_dict(params, agent_id=agent_id)
 
+    # F129: Build composite tracker key from client-provided agent_id
+    client_agent_id = params.get("agentId") or params.get("agent_id")
+    tracker_key = build_tracker_key(agent_id, agent_id=client_agent_id)
+
     # F025: Extract related decisions BEFORE consuming tracker
     from .deliberation_tracker import extract_related_from_tracker
 
     if not request.related_to:
-        related_raw = extract_related_from_tracker(f"rpc:{agent_id}")
+        related_raw = extract_related_from_tracker(tracker_key)
         if related_raw:
             from .decision_service import RelatedDecision
 
@@ -1040,7 +1073,7 @@ async def _handle_record_decision(params: dict[str, Any], agent_id: str) -> dict
     from .deliberation_tracker import auto_attach_deliberation
 
     request.deliberation, auto_captured = auto_attach_deliberation(
-        key=f"rpc:{agent_id}",
+        key=tracker_key,
         deliberation=request.deliberation,
     )
 
