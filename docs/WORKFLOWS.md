@@ -36,40 +36,37 @@ Returns past decisions with outcomes:
 - 3 async API decisions: 2 success (high-traffic), 1 failure (overkill for CRUD)
 - Pattern emerges: "async wins when >100 req/s expected"
 
-**Step 2: Check guardrails**
+**Steps 2+3: Check guardrails + Record (via `pre_action` — preferred)**
 ```json
 {
-  "method": "cstp.checkGuardrails",
+  "method": "cstp.preAction",
   "params": {
-    "context": { "stakes": "medium", "confidence": 0.8 }
+    "action": {
+      "description": "Use sync for /users endpoint - low traffic CRUD",
+      "category": "architecture",
+      "stakes": "medium",
+      "confidence": 0.85
+    },
+    "auto_record": true,
+    "reasons": [
+      { "type": "pattern", "text": "async overkill for simple CRUD" },
+      { "type": "analysis", "text": "<50 req/s expected" }
+    ],
+    "tags": ["api-design", "sync-vs-async"],
+    "pattern": "Sync is simpler when throughput is low"
   }
 }
 ```
 
-**Step 3: Record the decision**
-```json
-{
-  "method": "cstp.recordDecision",
-  "params": {
-    "summary": "Use sync for /users endpoint - low traffic CRUD",
-    "confidence": 0.85,
-    "category": "architecture",
-    "stakes": "medium",
-    "reasons": [
-      { "type": "precedent", "text": "async overkill for simple CRUD" },
-      { "type": "analysis", "text": "<50 req/s expected" }
-    ]
-  }
-}
-```
+Returns `decisionId` for use in subsequent `record_thought` and `update_decision` calls.
 
 ### Phase 2: Implementation (During Coding)
 
-Log smaller decisions inline as you code:
+Capture reasoning as you code using `record_thought`:
 
 ```json
-{ "summary": "Use Pydantic for validation over manual checks", "confidence": 0.9 }
-{ "summary": "Add retry logic with exponential backoff", "confidence": 0.75 }
+{ "method": "cstp.recordThought", "params": { "text": "Using Pydantic for validation - type safety + auto-docs", "decision_id": "<decisionId>" } }
+{ "method": "cstp.recordThought", "params": { "text": "Adding retry logic with exponential backoff for DB calls", "decision_id": "<decisionId>" } }
 ```
 
 ### Phase 3: Post-Merge (Outcome Tracking)

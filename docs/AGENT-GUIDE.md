@@ -45,28 +45,53 @@ Content-Type: application/json
 },"id":2}
 ```
 
-### 3. After Deciding: Record
+### 3. After Deciding: Record (via `pre_action` — preferred)
 
 ```json
-{"jsonrpc":"2.0","method":"cstp.recordDecision","params":{
-  "decision":"Added exponential backoff with jitter to payment API",
-  "confidence":0.85,
-  "category":"architecture",
-  "stakes":"high",
-  "context":"Payment API returning 503s during peak. Needed resilience without circuit breaker complexity.",
+{"jsonrpc":"2.0","method":"cstp.preAction","params":{
+  "action":{
+    "description":"Add exponential backoff with jitter to payment API",
+    "category":"architecture",
+    "stakes":"high",
+    "confidence":0.85
+  },
+  "auto_record":true,
   "reasons":[
     {"type":"analysis","text":"Backoff handles transient failures; jitter prevents thundering herd"},
     {"type":"empirical","text":"Similar pattern succeeded in order-service (decision abc123)"}
-  ]
+  ],
+  "tags":["resilience","retry","payment"],
+  "pattern":"Exponential backoff with jitter for transient failures"
 },"id":3}
 ```
 
-### 4. What You Get Back
+This queries + checks guardrails + records in **one call**, returning a `decisionId`.
+
+### 4. During Work: Capture Reasoning
+
+```json
+{"jsonrpc":"2.0","method":"cstp.recordThought","params":{
+  "text":"Chose 3 retries with base 500ms - matches P99 latency recovery window",
+  "decision_id":"<decisionId from step 3>"
+},"id":4}
+```
+
+### 5. After Work: Finalize
+
+```json
+{"jsonrpc":"2.0","method":"cstp.updateDecision","params":{
+  "id":"<decisionId>",
+  "decision":"Added exponential backoff (3 retries, 500ms base, jitter) to payment API",
+  "context":"Deployed to staging, 503 rate dropped from 2.1% to 0.03%"
+},"id":5}
+```
+
+### 6. What You Get Back
 
 The server automatically attaches:
-- **Deliberation trace**: Your Step 1-2 queries linked to this decision
+- **Deliberation trace**: Your queries and reasoning steps linked to this decision
 - **Bridge-definition**: Structure (what it looks like) + function (what it solves) extracted from your text
-- **Related decisions**: The decisions found in Step 1, linked with distance scores
+- **Related decisions**: Past decisions found during pre_action, linked with distance scores
 
 ```json
 {
@@ -90,17 +115,20 @@ Paste this into your agent's AGENTS.md or system prompt:
 
 Before making significant decisions (architecture, tooling, process):
 
-1. **Query**: Search past decisions for similar context
-   POST /cstp {"method":"cstp.queryDecisions","params":{"query":"your context"}}
+1. **Decide + Record**: Use pre_action with auto_record to query, check guardrails, and record in one call
+   POST /cstp {"method":"cstp.preAction","params":{"action":{"description":"what you want to do","category":"architecture","stakes":"medium","confidence":0.85},"auto_record":true,"reasons":[{"type":"analysis","text":"why"}],"tags":["keyword"],"pattern":"abstract principle"}}
 
-2. **Check**: Validate against guardrails
-   POST /cstp {"method":"cstp.checkGuardrails","params":{"action":{"description":"what you want to do","stakes":"medium"}}}
+2. **Think**: Capture reasoning during work (use decisionId from step 1)
+   POST /cstp {"method":"cstp.recordThought","params":{"text":"reasoning...","decision_id":"<decisionId>"}}
 
-3. **Record**: Log the decision with reasons
-   POST /cstp {"method":"cstp.recordDecision","params":{"decision":"what you chose","confidence":0.85,"category":"architecture","reasons":[{"type":"analysis","text":"why"}]}}
+3. **Finalize**: Update the decision with what actually happened
+   POST /cstp {"method":"cstp.updateDecision","params":{"id":"<decisionId>","decision":"what you actually did","context":"outcome details"}}
 
-The server auto-captures your query and check as deliberation inputs.
+4. **Review** (later): Record success/failure for calibration
+   POST /cstp {"method":"cstp.reviewDecision","params":{"id":"<decisionId>","outcome":"success","result":"what happened"}}
+
 Use at least 2 different reason types for robustness.
+For multi-agent setups, pass agent_id to isolate deliberation streams.
 ```
 
 ## Tips

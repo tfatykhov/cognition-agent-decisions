@@ -305,7 +305,7 @@ The skill provides a `SKILL.md` with decision workflow instructions, and `cstp.p
 
 ## Method 5: MCP Quick Start
 
-Connect any MCP-compliant agent to CSTP decision intelligence. The MCP server exposes 7 tools (`query_decisions`, `check_action`, `log_decision`, `review_outcome`, `get_stats`, `get_decision`, `get_reason_stats`) via two transports.
+Connect any MCP-compliant agent to CSTP decision intelligence. The MCP server exposes 14+ tools via two transports. Primary tools: `pre_action`, `get_session_context`, `ready`. Granular tools for fine-grained control.
 
 ### Streamable HTTP (Remote)
 

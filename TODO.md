@@ -28,6 +28,13 @@ Extract ChromaDB coupling behind a provider abstraction.
 - [ ] Add `cstp.py ready` CLI command
 - Spec: `docs/features/F044-agent-work-discovery.md`
 
+### Multi-Agent Deliberation Isolation ✅
+- [x] `cstp.debugTracker` endpoint for live tracker inspection — PR #127
+- [x] `agent_id` + `decision_id` in `recordThought` (composite tracker keys) — PR #131
+- [x] `agent_id` in MCP `record_thought` tool — PR #137
+- [x] `agent_id` + `decision_id` in MCP `log_decision` tool — PR #139
+- [x] Updated all docs: pre_action as primary flow, log_decision as last resort — PR #140
+
 ### Bug fixes / improvements
 - [x] Fix F047 MCP handler: `format` param not forwarded to `SessionContextRequest` (returns JSON instead of markdown via MCP)
 - [x] Merge F046/F047 feature branch PR if still open (`fix/session-context-format-param`)
@@ -43,7 +50,7 @@ Semantic decay for old resolved decisions.
 - [x] Add `cstp.getWisdom` for category-level distilled principles
 - [x] `preserve: true` flag via `cstp.setPreserve`
 - [ ] LLM-generated summaries for summary/digest levels (P2)
-- [ ] Integrate compacted results into `get_session_context`
+- [x] Integrate compacted results into `get_session_context` — PR #125
 - Spec: `docs/features/F041-memory-compaction.md`
 
 ### F045: Decision Graph Storage Layer ✅
@@ -55,9 +62,9 @@ Semantic decay for old resolved decisions.
 - [x] Edge types: `relates_to`, `supersedes`, `depends_on`
 - [x] Thread safety (asyncio.Lock)
 - [x] GraphStore ABC + factory pattern
-- [ ] Add `cstp.getNeighbors` (lightweight neighbor query)
-- [ ] Auto-linking in `recordDecision` flow
-- [ ] MCP tool registration for graph endpoints
+- [x] Add `cstp.getNeighbors` (lightweight neighbor query) — PR #130
+- [x] Auto-linking in `recordDecision` flow — PR #130
+- [x] MCP tool registration for graph endpoints — PR #130
 - Spec: `docs/features/F045-graph-storage-layer.md`
 
 ### F030: Circuit Breaker Guardrails
@@ -150,10 +157,14 @@ Link decisions to executable tasks with dependencies.
 - [ ] F032: Error Amplification Tracking
 
 ## Website / Docs
-- [ ] Update website for custom domain (cognition-engines.ai) — done ✅
+- [x] Update website for custom domain (cognition-engines.ai)
 - [ ] Add F046/F047 guide pages
 - [x] Add F048 architecture diagram
-- [ ] Version badge update to v0.11.0+
+- [ ] Version badge update to v0.12.0+
+- [ ] Document `get_neighbors` MCP tool
+- [ ] Document `debugTracker` endpoint
+- [ ] Document `auto-linking` (graph)
+- [x] Update MCP flow docs (pre_action primary, log_decision last resort) — PR #140
 
 ## Done ✅
 - [x] F001-F011: Core CSTP server (v0.8.0)

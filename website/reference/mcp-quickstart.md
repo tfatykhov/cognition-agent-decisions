@@ -346,9 +346,9 @@ Validate an intended action against safety guardrails and policies. Returns whet
 
 ### `log_decision`
 
-Record a decision to the immutable decision log. Include what you decided, your confidence level, category, and supporting reasons.
+> ⚠️ **Last resort.** Prefer `pre_action` with `auto_record: true`, which queries similar decisions, checks guardrails, and records in one call. Use `log_decision` only when no prior context exists (legacy clients, spontaneous decisions).
 
-**Use after making a decision to build calibration history.**
+Record a decision to the immutable decision log manually.
 
 ```json
 {

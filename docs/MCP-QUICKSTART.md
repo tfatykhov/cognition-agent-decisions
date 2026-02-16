@@ -97,7 +97,9 @@ Validate an intended action against safety guardrails.
 
 ### `log_decision`
 
-Record a decision to the immutable decision log.
+> ⚠️ **Last resort.** Prefer `pre_action` with `auto_record: true` for the standard flow.
+
+Record a decision manually when `pre_action` wasn't used (legacy clients, spontaneous decisions).
 
 **Input:**
 ```json
@@ -112,7 +114,9 @@ Record a decision to the immutable decision log.
     {"type": "pattern", "text": "Team has strong PostgreSQL expertise"}
   ],
   "project": "owner/repo",
-  "pr": 42
+  "pr": 42,
+  "agent_id": "optional-agent-name",
+  "decision_id": "optional-decision-id"
 }
 ```
 
