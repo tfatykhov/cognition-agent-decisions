@@ -26,7 +26,13 @@ __pycache__/
 **/__pycache__/
 /src/cognition_engines/__pycache__
 *.pyc
+**/*.pyc
 .env
 website/node_modules/
 website/.vitepress/dist/
 website/.vitepress/cache/
+.claude
+.coverage
+.uv.lock
+uv.lock
+*.lock
