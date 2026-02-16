@@ -961,7 +961,7 @@ async def _handle_pre_action_mcp(arguments: dict[str, Any]) -> list[TextContent]
         params["pattern"] = args.pattern
 
     request = PreActionRequest.from_params(params)
-    response = await pre_action(request, agent_id="mcp-client")
+    response = await pre_action(request, agent_id=args.agent_id or "mcp-client")
 
     return [
         TextContent(
@@ -993,7 +993,7 @@ async def _handle_get_session_context_mcp(
         params["include"] = args.include
 
     request = SessionContextRequest.from_params(params)
-    response = await get_session_context(request, agent_id="mcp-client")
+    response = await get_session_context(request, agent_id=args.agent_id or "mcp-client")
 
     return [
         TextContent(
@@ -1020,7 +1020,7 @@ async def _handle_ready_mcp(arguments: dict[str, Any]) -> list[TextContent]:
         params["category"] = args.category
 
     request = ReadyRequest.from_params(params)
-    response = await get_ready_actions(request)
+    response = await get_ready_actions(request, agent_id=args.agent_id or "mcp-client")
 
     return [
         TextContent(

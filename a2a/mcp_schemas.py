@@ -500,6 +500,13 @@ class PreActionInput(BaseModel):
         default=None,
         description="Abstract pattern this action represents",
     )
+    agent_id: str | None = Field(
+        default=None,
+        description=(
+            "Agent identifier for multi-agent attribution. "
+            "Use when multiple agents share an MCP connection."
+        ),
+    )
 
 
 # ============================================================================
@@ -539,6 +546,13 @@ class GetSessionContextInput(BaseModel):
         default="markdown",
         description="Response format: 'json' for structured data, 'markdown' for system prompt injection",
     )
+    agent_id: str | None = Field(
+        default=None,
+        description=(
+            "Agent identifier for multi-agent attribution. "
+            "Use when multiple agents share an MCP connection."
+        ),
+    )
 
 
 # ============================================================================
@@ -571,6 +585,13 @@ class ReadyInput(BaseModel):
         description=(
             "Filter to specific category: architecture, process, "
             "integration, tooling, security"
+        ),
+    )
+    agent_id: str | None = Field(
+        default=None,
+        description=(
+            "Agent identifier for multi-agent attribution. "
+            "Use when multiple agents share an MCP connection."
         ),
     )
 
