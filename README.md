@@ -116,6 +116,7 @@ Each agent's thoughts are tracked separately via composite keys (`agent:{id}:dec
 |------|---------|
 | `link_decisions` | Create typed edges between decisions (`relates_to`, `supersedes`, `depends_on`) |
 | `get_graph` | Query subgraph around a decision with configurable depth and edge type filters |
+| `get_neighbors` | Lightweight neighbor query - direct connections for a decision with edge types and weights |
 
 ## JSON-RPC API
 
@@ -142,7 +143,24 @@ curl -X POST http://localhost:8100/cstp \
   }'
 ```
 
-**Available methods:** `cstp.queryDecisions`, `cstp.checkGuardrails`, `cstp.recordDecision`, `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getDecision`, `cstp.getReasonStats`, `cstp.updateDecision`, `cstp.recordThought`, `cstp.preAction`, `cstp.getSessionContext`, `cstp.ready`, `cstp.linkDecisions`, `cstp.getGraph`, `cstp.checkDrift`, `cstp.reindex`, `cstp.listGuardrails`, `cstp.attributeOutcomes`
+**Available methods:** `cstp.queryDecisions`, `cstp.checkGuardrails`, `cstp.recordDecision`, `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getDecision`, `cstp.getReasonStats`, `cstp.updateDecision`, `cstp.recordThought`, `cstp.preAction`, `cstp.getSessionContext`, `cstp.ready`, `cstp.linkDecisions`, `cstp.getGraph`, `cstp.getNeighbors`, `cstp.debugTracker`, `cstp.checkDrift`, `cstp.reindex`, `cstp.listGuardrails`, `cstp.attributeOutcomes`
+
+### Auto-Linking
+
+When `recordDecision` is called with related decisions (from `pre_action` or explicit `related_to`), the graph is automatically updated with `relates_to` edges. No manual `linkDecisions` call needed for common relationships.
+
+### Debug Tracker
+
+Inspect live deliberation state for debugging multi-agent flows:
+
+```bash
+curl -X POST http://localhost:8100/cstp \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"cstp.debugTracker","params":{},"id":1}'
+```
+
+Returns active tracker sessions with composite keys, input counts, thought text, and age.
 
 ## Architecture
 
