@@ -67,3 +67,9 @@ The server auto-captures deliberation traces, bridge-definitions, and related de
 }
 ```
 
+## Contact
+
+- **Owner:** Timur Fatykhov — [timur.fatykhov@cognition-engines.ai](mailto:timur.fatykhov@cognition-engines.ai)
+- **GitHub:** [tfatykhov/cognition-agent-decisions](https://github.com/tfatykhov/cognition-agent-decisions)
+- **Website:** [cognition-engines.ai](https://cognition-engines.ai)
+
