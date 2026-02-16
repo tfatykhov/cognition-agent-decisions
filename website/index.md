@@ -48,6 +48,24 @@ features:
 
 ## How It Works
 
+## FORGE - The Decision Loop
+
+**F**etch → **O**rient → **R**esolve → **G**o → **E**xtract
+
+You forge decisions in the Cognition Engine - deliberately, under pressure, with intention. Every decision flows through this loop, creating a compounding record of organizational judgment.
+
+| Phase | What happens |
+|-------|-------------|
+| **Fetch** | Load context and past decisions |
+| **Orient** | Check guardrails and constraints |
+| **Resolve** | Decide and record with reasoning |
+| **Go** | Execute |
+| **Extract** | Evaluate outcomes and distill patterns |
+
+Available as a [Claude Code plugin](https://github.com/tfatykhov/cognition-engines-marketplace) with hooks, commands, and skills that automate the entire loop.
+
+## How It Works
+
 Two calls cover the full agent workflow:
 
 ```
