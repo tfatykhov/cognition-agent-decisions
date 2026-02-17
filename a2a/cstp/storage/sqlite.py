@@ -205,7 +205,7 @@ class SQLiteDecisionStore(DecisionStore):
     def _save_sync(self, decision_id: str, data: dict[str, Any]) -> bool:
         assert self._conn is not None  # noqa: S101
         now = _now()
-        created_at = data.get("created_at") or now
+        created_at = data.get("created_at") or data.get("date") or now
         updated_at = now
 
         try:
@@ -744,13 +744,19 @@ class SQLiteDecisionStore(DecisionStore):
         # Handle child-table fields separately
         tags = fields.pop("tags", None)
         delib = fields.pop("deliberation", None)
+        reasons = fields.pop("reasons", None)
+        bridge = fields.pop("bridge", None)
 
         # Filter to allowed columns only
         safe_fields = {
             k: v for k, v in fields.items() if k in _UPDATABLE_FIELDS
         }
 
-        if not safe_fields and tags is None and delib is None:
+        has_child = (
+            tags is not None or delib is not None
+            or reasons is not None or bridge is not None
+        )
+        if not safe_fields and not has_child:
             return False
 
         try:
@@ -768,7 +774,7 @@ class SQLiteDecisionStore(DecisionStore):
                         return False
 
                 # Verify the decision exists for child-table-only updates
-                if not safe_fields and (tags is not None or delib is not None):
+                if not safe_fields and has_child:
                     row = self._conn.execute(
                         "SELECT 1 FROM decisions WHERE id = ?",
                         (decision_id,),
@@ -808,8 +814,53 @@ class SQLiteDecisionStore(DecisionStore):
                         ),
                     )
 
+                if reasons is not None:
+                    self._conn.execute(
+                        "DELETE FROM decision_reasons "
+                        "WHERE decision_id = ?",
+                        (decision_id,),
+                    )
+                    for r in reasons:
+                        if isinstance(r, dict):
+                            self._conn.execute(
+                                "INSERT INTO decision_reasons "
+                                "(decision_id, type, text, strength) "
+                                "VALUES (?, ?, ?, ?)",
+                                (
+                                    decision_id,
+                                    r.get("type", ""),
+                                    r.get("text", ""),
+                                    r.get("strength", 0.8),
+                                ),
+                            )
+
+                if bridge is not None:
+                    self._conn.execute(
+                        "DELETE FROM decision_bridge "
+                        "WHERE decision_id = ?",
+                        (decision_id,),
+                    )
+                    if isinstance(bridge, dict) and bridge:
+                        self._conn.execute(
+                            "INSERT INTO decision_bridge "
+                            "(decision_id, structure, function, "
+                            "tolerance, enforcement, prevention) "
+                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            (
+                                decision_id,
+                                bridge.get("structure"),
+                                bridge.get("function"),
+                                json.dumps(bridge["tolerance"])
+                                if bridge.get("tolerance") else None,
+                                json.dumps(bridge["enforcement"])
+                                if bridge.get("enforcement") else None,
+                                json.dumps(bridge["prevention"])
+                                if bridge.get("prevention") else None,
+                            ),
+                        )
+
                 # Update timestamp when child-table-only changes were made
-                if not safe_fields and (tags is not None or delib is not None):
+                if not safe_fields and has_child:
                     self._conn.execute(
                         "UPDATE decisions SET updated_at = ? WHERE id = ?",
                         (_now(), decision_id),

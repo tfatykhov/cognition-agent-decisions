@@ -920,3 +920,56 @@ class TestRegressionPR162:
         # Filtered stats should have fewer or equal total than unfiltered
         assert result_alpha.total <= result_all.total
         assert result_alpha.total == 1
+
+    # P1-1 regression (review round 2): created_at should use data["date"] fallback
+    async def test_save_uses_date_field_as_created_at(
+        self, store: DecisionStore,
+    ) -> None:
+        """save() should use data['date'] as created_at when 'created_at' absent."""
+        data = _sample({
+            "decision": "Date fallback test",
+            "date": "2025-06-15T12:00:00",
+        })
+        # Remove created_at so date is the only timestamp source
+        data.pop("created_at", None)
+        await store.save("caf1", data)
+        got = await store.get("caf1")
+        assert got is not None
+        created = got.get("created_at") or got.get("date", "")
+        assert created.startswith("2025-06-15"), (
+            f"expected created_at from date field, got {created}"
+        )
+
+    # P1-2 regression (review round 2): update_fields should handle reasons
+    async def test_update_fields_reasons(self, store: DecisionStore) -> None:
+        """update_fields with reasons should persist in child table."""
+        await store.save("rsn1", _sample({"decision": "Reasons update test"}))
+        new_reasons = [
+            {"type": "analysis", "text": "Reason A", "strength": 0.9},
+            {"type": "pattern", "text": "Reason B"},
+        ]
+        ok = await store.update_fields("rsn1", reasons=new_reasons)
+        assert ok is True
+        got = await store.get("rsn1")
+        assert got is not None
+        reasons = got.get("reasons", [])
+        assert len(reasons) == 2
+        assert reasons[0]["type"] == "analysis"
+        assert reasons[1]["text"] == "Reason B"
+
+    # P1-2 regression (review round 2): update_fields should handle bridge
+    async def test_update_fields_bridge(self, store: DecisionStore) -> None:
+        """update_fields with bridge dict should persist in child table."""
+        await store.save("brg1", _sample({"decision": "Bridge update test"}))
+        new_bridge = {
+            "structure": "Factory pattern",
+            "function": "Decouples creation from use",
+        }
+        ok = await store.update_fields("brg1", bridge=new_bridge)
+        assert ok is True
+        got = await store.get("brg1")
+        assert got is not None
+        bridge = got.get("bridge")
+        assert bridge is not None
+        assert bridge["structure"] == "Factory pattern"
+        assert bridge["function"] == "Decouples creation from use"

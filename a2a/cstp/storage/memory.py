@@ -44,9 +44,9 @@ class MemoryDecisionStore(DecisionStore):
     async def save(self, decision_id: str, data: dict[str, Any]) -> bool:
         """Store a decision in memory."""
         now = datetime.now(UTC).isoformat()
-        # Set timestamps if not present
-        if "created_at" not in data and "date" not in data:
-            data["created_at"] = now
+        # Set timestamps if not present; prefer created_at, fallback to date
+        if "created_at" not in data:
+            data["created_at"] = data.get("date") or now
         data["updated_at"] = now
         data["id"] = decision_id
         self._data[decision_id] = data
