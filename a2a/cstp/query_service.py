@@ -4,6 +4,7 @@ Uses VectorStore and EmbeddingProvider abstractions for backend-agnostic
 querying. The where-clause building and result parsing remain here.
 """
 
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ import yaml
 
 from .embeddings.factory import get_embedding_provider
 from .vectordb.factory import get_vector_store
+
+logger = logging.getLogger(__name__)
 
 # Configuration (only decisions path remains — vector/embedding config moved to backends)
 DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
@@ -214,7 +217,7 @@ async def load_all_decisions(
 
         store = get_decision_store()
         query = ListQuery(
-            limit=500,
+            limit=10_000,
             offset=0,
             category=category,
             project=project,
@@ -224,7 +227,7 @@ async def load_all_decisions(
         result = await store.list(query)
         return result.decisions
     except Exception:
-        pass  # Fall through to YAML rglob
+        logger.debug("Store list() failed, falling back to YAML", exc_info=True)
 
     base = Path(decisions_path or DECISIONS_PATH)
     decisions: list[dict[str, Any]] = []

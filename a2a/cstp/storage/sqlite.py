@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import sqlite3
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -347,6 +348,21 @@ class SQLiteDecisionStore(DecisionStore):
             return False
 
     # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_row(d: dict[str, Any]) -> dict[str, Any]:
+        """Normalize DB column names to YAML/API convention."""
+        if "outcome_result" in d:
+            d["actual_result"] = d.pop("outcome_result")
+        if "outcome_lessons" in d:
+            d["lessons"] = d.pop("outcome_lessons")
+        if "outcome_notes" in d:
+            d["review_notes"] = d.pop("outcome_notes")
+        return d
+
+    # ------------------------------------------------------------------
     # get
     # ------------------------------------------------------------------
 
@@ -363,15 +379,7 @@ class SQLiteDecisionStore(DecisionStore):
         if row is None:
             return None
 
-        result = dict(row)
-
-        # Normalize outcome field names to match YAML convention
-        if "outcome_result" in result:
-            result["actual_result"] = result.pop("outcome_result")
-        if "outcome_lessons" in result:
-            result["lessons"] = result.pop("outcome_lessons")
-        if "outcome_notes" in result:
-            result["review_notes"] = result.pop("outcome_notes")
+        result = self._normalize_row(dict(row))
 
         # Tags
         tag_rows = self._conn.execute(
@@ -476,8 +484,11 @@ class SQLiteDecisionStore(DecisionStore):
             conditions.append("d.created_at >= ?")
             params.append(query.date_from)
         if query.date_to:
+            date_to_val = query.date_to
+            if "T" not in date_to_val:
+                date_to_val += "T23:59:59"
             conditions.append("d.created_at <= ?")
-            params.append(query.date_to)
+            params.append(date_to_val)
         if query.tags:
             placeholders = ",".join("?" for _ in query.tags)
             conditions.append(
@@ -513,16 +524,27 @@ class SQLiteDecisionStore(DecisionStore):
             select_sql, [*params, query.limit, query.offset]
         ).fetchall()
 
-        decisions: list[dict[str, Any]] = []
-        for row in rows:
-            d = dict(row)
-            # Attach tags for each decision
+        decisions: list[dict[str, Any]] = [
+            self._normalize_row(dict(row)) for row in rows
+        ]
+
+        # Batch-fetch tags for all decisions (avoids N+1 queries)
+        ids = [d["id"] for d in decisions]
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
             tag_rows = self._conn.execute(
-                "SELECT tag FROM decision_tags WHERE decision_id = ?",
-                (d["id"],),
+                f"SELECT decision_id, tag FROM decision_tags "  # noqa: S608
+                f"WHERE decision_id IN ({placeholders})",
+                ids,
             ).fetchall()
-            d["tags"] = [r["tag"] for r in tag_rows]
-            decisions.append(d)
+            tags_by_id: dict[str, list[str]] = defaultdict(list)
+            for r in tag_rows:
+                tags_by_id[r["decision_id"]].append(r["tag"])
+            for d in decisions:
+                d["tags"] = tags_by_id.get(d["id"], [])
+        else:
+            for d in decisions:
+                d["tags"] = []
 
         return ListResult(
             decisions=decisions,
@@ -549,8 +571,11 @@ class SQLiteDecisionStore(DecisionStore):
             conditions.append("created_at >= ?")
             params.append(query.date_from)
         if query.date_to:
+            date_to_val = query.date_to
+            if "T" not in date_to_val:
+                date_to_val += "T23:59:59"
             conditions.append("created_at <= ?")
-            params.append(query.date_to)
+            params.append(date_to_val)
         if query.project:
             conditions.append("project = ?")
             params.append(query.project)
@@ -627,17 +652,22 @@ class SQLiteDecisionStore(DecisionStore):
         for row in self._conn.execute(tag_sql, params):
             top_tags.append({"tag": row["tag"], "count": row["count"]})
 
-        # Recent activity
+        # Recent activity (respects the same project/date filters)
         recent_activity: dict[str, int] = {}
         for label, interval in [
             ("last24h", "-1 day"),
             ("last7d", "-7 days"),
             ("last30d", "-30 days"),
         ]:
+            activity_conditions = list(conditions)
+            activity_params = list(params)
+            activity_conditions.append("created_at >= datetime('now', ?)")
+            activity_params.append(interval)
+            activity_where = " AND ".join(activity_conditions)
             row = self._conn.execute(
-                "SELECT COUNT(*) FROM decisions "
-                "WHERE created_at >= datetime('now', ?)",
-                (interval,),
+                f"SELECT COUNT(*) FROM decisions "  # noqa: S608
+                f"WHERE {activity_where}",
+                activity_params,
             ).fetchone()
             recent_activity[label] = row[0]
 
@@ -711,15 +741,16 @@ class SQLiteDecisionStore(DecisionStore):
     ) -> bool:
         assert self._conn is not None  # noqa: S101
 
-        # Handle tags separately
+        # Handle child-table fields separately
         tags = fields.pop("tags", None)
+        delib = fields.pop("deliberation", None)
 
         # Filter to allowed columns only
         safe_fields = {
             k: v for k, v in fields.items() if k in _UPDATABLE_FIELDS
         }
 
-        if not safe_fields and tags is None:
+        if not safe_fields and tags is None and delib is None:
             return False
 
         try:
@@ -736,16 +767,16 @@ class SQLiteDecisionStore(DecisionStore):
                     if cursor.rowcount == 0:
                         return False
 
-                if tags is not None:
-                    # Verify the decision exists if we haven't already
-                    if not safe_fields:
-                        row = self._conn.execute(
-                            "SELECT 1 FROM decisions WHERE id = ?",
-                            (decision_id,),
-                        ).fetchone()
-                        if row is None:
-                            return False
+                # Verify the decision exists for child-table-only updates
+                if not safe_fields and (tags is not None or delib is not None):
+                    row = self._conn.execute(
+                        "SELECT 1 FROM decisions WHERE id = ?",
+                        (decision_id,),
+                    ).fetchone()
+                    if row is None:
+                        return False
 
+                if tags is not None:
                     self._conn.execute(
                         "DELETE FROM decision_tags WHERE decision_id = ?",
                         (decision_id,),
@@ -756,7 +787,29 @@ class SQLiteDecisionStore(DecisionStore):
                             "(decision_id, tag) VALUES (?, ?)",
                             [(decision_id, t) for t in tags],
                         )
-                    # Also update updated_at when only tags changed
+
+                if delib is not None and isinstance(delib, dict):
+                    self._conn.execute(
+                        "DELETE FROM decision_deliberation "
+                        "WHERE decision_id = ?",
+                        (decision_id,),
+                    )
+                    self._conn.execute(
+                        "INSERT INTO decision_deliberation "
+                        "(decision_id, inputs_json, steps_json, "
+                        "total_duration_ms) VALUES (?, ?, ?, ?)",
+                        (
+                            decision_id,
+                            json.dumps(delib.get("inputs"))
+                            if delib.get("inputs") else None,
+                            json.dumps(delib.get("steps"))
+                            if delib.get("steps") else None,
+                            delib.get("total_duration_ms"),
+                        ),
+                    )
+
+                # Update timestamp when child-table-only changes were made
+                if not safe_fields and (tags is not None or delib is not None):
                     self._conn.execute(
                         "UPDATE decisions SET updated_at = ? WHERE id = ?",
                         (_now(), decision_id),
