@@ -973,3 +973,107 @@ class TestRegressionPR162:
         assert bridge is not None
         assert bridge["structure"] == "Factory pattern"
         assert bridge["function"] == "Decouples creation from use"
+
+    # Issue #175 regression: list() should include bridge
+    async def test_list_includes_bridge(self, store: DecisionStore) -> None:
+        """list() should batch-fetch bridge data for all decisions."""
+        await store.save("lb01", _sample({
+            "decision": "Bridge in list test",
+            "bridge": {
+                "structure": "Adapter pattern",
+                "function": "Wraps legacy API",
+                "tolerance": ["implementation language"],
+                "enforcement": ["interface contract"],
+                "prevention": ["direct coupling"],
+            },
+            "created_at": "2026-02-16T10:00:00",
+        }))
+        result = await store.list(ListQuery(limit=10))
+        item = [d for d in result.decisions if d["id"] == "lb01"][0]
+        bridge = item.get("bridge")
+        assert bridge is not None, "list() should include bridge"
+        assert bridge["structure"] == "Adapter pattern"
+        assert bridge["function"] == "Wraps legacy API"
+        assert bridge["tolerance"] == ["implementation language"]
+        assert bridge["enforcement"] == ["interface contract"]
+        assert bridge["prevention"] == ["direct coupling"]
+
+    # Issue #175 regression: list() should include reasons
+    async def test_list_includes_reasons(self, store: DecisionStore) -> None:
+        """list() should batch-fetch reasons for all decisions."""
+        await store.save("lr01", _sample({
+            "decision": "Reasons in list test",
+            "reasons": [
+                {"type": "analysis", "text": "Perf benchmarks", "strength": 0.9},
+                {"type": "pattern", "text": "Team convention", "strength": 0.8},
+            ],
+            "created_at": "2026-02-16T11:00:00",
+        }))
+        result = await store.list(ListQuery(limit=10))
+        item = [d for d in result.decisions if d["id"] == "lr01"][0]
+        reasons = item.get("reasons")
+        assert reasons is not None, "list() should include reasons"
+        assert len(reasons) == 2
+        assert reasons[0]["type"] == "analysis"
+        assert reasons[0]["text"] == "Perf benchmarks"
+        assert reasons[1]["type"] == "pattern"
+
+    # Issue #175 regression: list() should include date (explicit or derived)
+    async def test_list_includes_date(self, store: DecisionStore) -> None:
+        """list() should include date field — explicit or derived from created_at."""
+        await store.save("ld01", _sample({
+            "decision": "Date in list test",
+            "date": "2026-02-17",
+            "created_at": "2026-02-17T14:30:00",
+        }))
+        result = await store.list(ListQuery(limit=10))
+        item = [d for d in result.decisions if d["id"] == "ld01"][0]
+        assert item.get("date") == "2026-02-17", (
+            f"list() should include date, got {item.get('date')}"
+        )
+
+    # Issue #175 regression: SQLite should derive date from created_at when absent
+    async def test_list_derives_date_from_created_at(
+        self, store: DecisionStore,
+    ) -> None:
+        """SQLite _normalize_row should derive date from created_at when absent."""
+        from a2a.cstp.storage.sqlite import SQLiteDecisionStore
+
+        data = _sample({
+            "decision": "Derived date test",
+            "created_at": "2026-02-18T09:15:00",
+        })
+        data.pop("date", None)
+        await store.save("ld02", data)
+        result = await store.list(ListQuery(limit=10))
+        item = [d for d in result.decisions if d["id"] == "ld02"][0]
+        if isinstance(store, SQLiteDecisionStore):
+            assert item.get("date") == "2026-02-18", (
+                f"SQLite should derive date from created_at, got {item.get('date')}"
+            )
+
+    # Issue #175 regression: list() bridge/reasons/date should match get()
+    async def test_list_bridge_reasons_date_match_get(
+        self, store: DecisionStore,
+    ) -> None:
+        """list() and get() should return consistent bridge, reasons, and date."""
+        await store.save("cm01", _sample({
+            "decision": "Consistency check",
+            "bridge": {"structure": "MVC", "function": "Separation of concerns"},
+            "reasons": [
+                {"type": "authority", "text": "Industry standard", "strength": 0.95},
+            ],
+            "created_at": "2026-02-18T09:00:00",
+        }))
+        got = await store.get("cm01")
+        result = await store.list(ListQuery(limit=10))
+        listed = [d for d in result.decisions if d["id"] == "cm01"][0]
+        # Bridge
+        assert got is not None
+        assert listed.get("bridge", {}).get("structure") == got["bridge"]["structure"]
+        assert listed.get("bridge", {}).get("function") == got["bridge"]["function"]
+        # Reasons
+        assert len(listed.get("reasons", [])) == len(got.get("reasons", []))
+        assert listed["reasons"][0]["type"] == got["reasons"][0]["type"]
+        # Date
+        assert listed.get("date") == got.get("date", got.get("created_at", ""))[:10]

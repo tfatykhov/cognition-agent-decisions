@@ -369,6 +369,9 @@ class SQLiteDecisionStore(DecisionStore):
             d["lessons"] = d.pop("outcome_lessons")
         if "outcome_notes" in d:
             d["review_notes"] = d.pop("outcome_notes")
+        # Derive date from created_at when not already present
+        if "created_at" in d and "date" not in d:
+            d["date"] = str(d["created_at"])[:10] if d["created_at"] else ""
         return d
 
     # ------------------------------------------------------------------
@@ -554,6 +557,44 @@ class SQLiteDecisionStore(DecisionStore):
                 tags_by_id[r["decision_id"]].append(r["tag"])
             for d in decisions:
                 d["tags"] = tags_by_id.get(d["id"], [])
+
+            # Batch-fetch bridge (1:1 with decisions)
+            bridge_rows = self._conn.execute(
+                f"SELECT decision_id, structure, function, "  # noqa: S608
+                f"tolerance, enforcement, prevention "
+                f"FROM decision_bridge WHERE decision_id IN ({placeholders})",
+                ids,
+            ).fetchall()
+            bridge_by_id: dict[str, dict[str, Any]] = {}
+            for r in bridge_rows:
+                bridge_by_id[r["decision_id"]] = {
+                    "structure": r["structure"],
+                    "function": r["function"],
+                    "tolerance": json.loads(r["tolerance"])
+                    if r["tolerance"] else None,
+                    "enforcement": json.loads(r["enforcement"])
+                    if r["enforcement"] else None,
+                    "prevention": json.loads(r["prevention"])
+                    if r["prevention"] else None,
+                }
+            for d in decisions:
+                bridge = bridge_by_id.get(d["id"])
+                if bridge:
+                    d["bridge"] = bridge
+
+            # Batch-fetch reasons (1:N with decisions)
+            reason_rows = self._conn.execute(
+                f"SELECT decision_id, type, text, strength "  # noqa: S608
+                f"FROM decision_reasons WHERE decision_id IN ({placeholders})",
+                ids,
+            ).fetchall()
+            reasons_by_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            for r in reason_rows:
+                reasons_by_id[r["decision_id"]].append(
+                    {"type": r["type"], "text": r["text"], "strength": r["strength"]}
+                )
+            for d in decisions:
+                d["reasons"] = reasons_by_id.get(d["id"], [])
         else:
             for d in decisions:
                 d["tags"] = []
