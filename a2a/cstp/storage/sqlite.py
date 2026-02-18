@@ -209,6 +209,15 @@ class SQLiteDecisionStore(DecisionStore):
         updated_at = now
 
         try:
+            # Handle project field: may be a dict {"name": ..., "pr": ...} or string
+            raw_project = data.get("project")
+            if isinstance(raw_project, dict):
+                project_str = raw_project.get("name", json.dumps(raw_project))
+                pr_val = data.get("pr") or raw_project.get("pr")
+            else:
+                project_str = raw_project
+                pr_val = data.get("pr")
+
             with self._conn:
                 # Upsert the core decision row
                 self._conn.execute(
@@ -243,16 +252,7 @@ class SQLiteDecisionStore(DecisionStore):
                         reviewed_at=excluded.reviewed_at,
                         updated_at=excluded.updated_at
                     """,
-                # Handle project field: may be a dict {"name": ..., "pr": ...} or string
-                raw_project = data.get("project")
-                if isinstance(raw_project, dict):
-                    project_str = raw_project.get("name", json.dumps(raw_project))
-                    pr_val = data.get("pr") or raw_project.get("pr")
-                else:
-                    project_str = raw_project
-                    pr_val = data.get("pr")
-
-                (
+                    (
                         decision_id,
                         data.get("decision", ""),
                         data.get("confidence", 0.0),
