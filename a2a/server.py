@@ -71,6 +71,16 @@ async def lifespan(app: FastAPI):
         mark_store_initialized()
         app.state.decision_store = decision_store
         logger.info("Decision store initialized (backend=%s)", type(decision_store).__name__)
+
+        # Auto-migrate YAML to SQLite if store is empty
+        from .cstp.storage.sqlite import SQLiteDecisionStore
+
+        if isinstance(decision_store, SQLiteDecisionStore):
+            from .cstp.storage.migrate import auto_migrate_if_empty
+
+            migrated = await auto_migrate_if_empty(decision_store)
+            if migrated > 0:
+                logger.info("Auto-migrated %d decisions from YAML to SQLite", migrated)
     except Exception:
         logger.warning("Decision store initialization failed", exc_info=True)
         set_decision_store(None)
