@@ -40,6 +40,9 @@ class MockQueryResult:
     reason_types: list[str] | None = None
     tags: list[str] | None = None
     pattern: str | None = None
+    lessons: str | None = None
+    actual_result: str | None = None
+    reasons: list[dict[str, str]] | None = None
 
 
 @dataclass

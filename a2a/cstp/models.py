@@ -62,6 +62,8 @@ class QueryDecisionsRequest:
     bridge_side: str | None = None  # structure | function | None (both)
     # F041 P2: Compaction level annotation
     compacted: bool = False  # When true, annotate results with compaction level
+    # F163 P3: Include actual_result in results
+    include_detail: bool = False
 
     @property
     def effective_query(self) -> str:
@@ -112,6 +114,9 @@ class QueryDecisionsRequest:
             hybrid_weight=hybrid_weight,
             bridge_side=bridge_side,
             compacted=bool(params.get("compacted", False)),
+            include_detail=bool(
+                params.get("includeDetail", params.get("include_detail", False))
+            ),
         )
 
 
@@ -128,12 +133,15 @@ class DecisionSummary:
     outcome: str | None
     date: str
     distance: float
-    reasons: list[str] | None = None
+    reasons: list[dict[str, Any]] | None = None
     # F027: Tags and pattern in results
     tags: list[str] | None = None
     pattern: str | None = None
     # F041 P2: Compaction level annotation
     compaction_level: str | None = None
+    # F163: Enrichment fields
+    lessons: str | None = None
+    actual_result: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON response."""
@@ -157,6 +165,10 @@ class DecisionSummary:
             result["pattern"] = self.pattern
         if self.compaction_level:
             result["compactionLevel"] = self.compaction_level
+        if self.lessons:
+            result["lessons"] = self.lessons
+        if self.actual_result:
+            result["actualResult"] = self.actual_result
         return result
 
 

@@ -99,8 +99,10 @@ async def pre_action(
                 outcome=r.outcome,
                 date=r.date,
                 distance=r.distance,
+                reasons=r.reasons,
                 tags=r.tags,
                 pattern=r.pattern,
+                lessons=r.lessons,
             ))
 
     # F023/F049: Track query for deliberation (issue #159)

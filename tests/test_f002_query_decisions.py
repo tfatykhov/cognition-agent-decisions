@@ -168,11 +168,11 @@ class TestDecisionSummary:
             outcome="success",
             date="2026-01-20T14:00:00Z",
             distance=0.23,
-            reasons=["pattern", "analysis"],
+            reasons=[{"type": "pattern", "text": "Matches known pattern"}, {"type": "analysis", "text": "Analyzed alternatives"}],
         )
         data = summary.to_dict()
         assert data["outcome"] == "success"
-        assert data["reasons"] == ["pattern", "analysis"]
+        assert data["reasons"] == [{"type": "pattern", "text": "Matches known pattern"}, {"type": "analysis", "text": "Analyzed alternatives"}]
 
 
 class TestQueryDecisionsResponse:

@@ -10,7 +10,12 @@ import sys
 from unittest.mock import AsyncMock, MagicMock
 
 # Skip entire module if mcp is not installed (CI environment)
-if not importlib.util.find_spec("mcp"):
+_mcp_available = False
+try:
+    _mcp_available = importlib.util.find_spec("mcp") is not None
+except (ValueError, ModuleNotFoundError):
+    pass
+if not _mcp_available:
     mock_mcp = MagicMock()
     sys.modules["mcp"] = mock_mcp
     sys.modules["mcp.server"] = mock_mcp.server
@@ -23,9 +28,9 @@ if not importlib.util.find_spec("mcp"):
         {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
     )
 
-from unittest.mock import patch
+from unittest.mock import patch  # noqa: E402
 
-import pytest
+import pytest  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
