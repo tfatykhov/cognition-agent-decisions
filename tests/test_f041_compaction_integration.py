@@ -101,6 +101,10 @@ class MockQueryResult:
     reason_types: list[str] | None = None
     tags: list[str] | None = None
     pattern: str | None = None
+    # F163: Enrichment fields
+    lessons: str | None = None
+    actual_result: str | None = None
+    reasons: list[dict[str, str]] | None = None
 
 
 @dataclass

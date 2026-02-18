@@ -4,6 +4,7 @@ Uses VectorStore and EmbeddingProvider abstractions for backend-agnostic
 querying. The where-clause building and result parsing remain here.
 """
 
+import json
 import logging
 import os
 import time
@@ -39,6 +40,10 @@ class QueryResult:
     # F027: Tags and pattern
     tags: list[str] | None = None
     pattern: str | None = None
+    # F163: Enrichment fields for pre_action consumers
+    lessons: str | None = None
+    actual_result: str | None = None
+    reasons: list[dict[str, str]] | None = None
 
 
 @dataclass(slots=True)
@@ -168,6 +173,14 @@ async def query_decisions(
         if meta.get("tags"):
             result_tags = meta["tags"].split(",")
 
+        # F163: Parse full reasons from JSON metadata
+        reasons_list: list[dict[str, str]] | None = None
+        if meta.get("reasons_json"):
+            try:
+                reasons_list = json.loads(meta["reasons_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         results.append(
             QueryResult(
                 id=vr.id[:8] if len(vr.id) > 8 else vr.id,
@@ -182,6 +195,9 @@ async def query_decisions(
                 reason_types=reason_types,
                 tags=result_tags,
                 pattern=meta.get("pattern"),
+                lessons=meta.get("lessons"),
+                actual_result=meta.get("actual_result"),
+                reasons=reasons_list,
             )
         )
 

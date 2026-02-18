@@ -265,9 +265,13 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                     outcome=d.get("outcome"),
                     date=d.get("created_at", "")[:10],
                     distance=0.0,
-                    reasons=None,
+                    reasons=d.get("reasons") if request.include_reasons else None,
                     tags=d.get("tags"),
                     pattern=d.get("pattern"),
+                    lessons=d.get("lessons"),
+                    actual_result=(
+                        d.get("actual_result") if request.include_detail else None
+                    ),
                 )
             )
 
@@ -332,9 +336,13 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                     outcome=d.get("outcome"),
                     date=d.get("created_at", "")[:10],
                     distance=round(1.0 - score / 10.0, 4),  # Approximate distance
-                    reasons=None,
+                    reasons=d.get("reasons") if request.include_reasons else None,
                     tags=d.get("tags"),
                     pattern=d.get("pattern"),
+                    lessons=d.get("lessons"),
+                    actual_result=(
+                        d.get("actual_result") if request.include_detail else None
+                    ),
                 )
             )
             scores[doc_id[:8] if len(doc_id) > 8 else doc_id] = {
@@ -413,9 +421,13 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                         outcome=r.outcome,
                         date=r.date,
                         distance=round(1.0 - score_dict["combined"], 4),
-                        reasons=r.reason_types if request.include_reasons else None,
+                        reasons=r.reasons if request.include_reasons else None,
                         tags=r.tags,
                         pattern=r.pattern,
+                        lessons=r.lessons,
+                        actual_result=(
+                            r.actual_result if request.include_detail else None
+                        ),
                     )
                 )
             elif doc_id in decision_map:
@@ -431,9 +443,13 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                         outcome=d.get("outcome"),
                         date=d.get("created_at", "")[:10],
                         distance=round(1.0 - score_dict["combined"], 4),
-                        reasons=None,
+                        reasons=d.get("reasons") if request.include_reasons else None,
                         tags=d.get("tags"),
                         pattern=d.get("pattern"),
+                        lessons=d.get("lessons"),
+                        actual_result=(
+                            d.get("actual_result") if request.include_detail else None
+                        ),
                     )
                 )
             scores[doc_id] = score_dict
@@ -471,9 +487,11 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                 outcome=r.outcome,
                 date=r.date,
                 distance=r.distance,
-                reasons=r.reason_types if request.include_reasons else None,
+                reasons=r.reasons if request.include_reasons else None,
                 tags=r.tags,
                 pattern=r.pattern,
+                lessons=r.lessons,
+                actual_result=r.actual_result if request.include_detail else None,
             )
             for r in response.results
         ]

@@ -3,6 +3,7 @@
 Creates decision YAML files and indexes them to ChromaDB.
 """
 
+import json
 import logging
 import os
 import uuid
@@ -1029,6 +1030,18 @@ async def record_decision(
     if request.pattern:
         metadata["pattern"] = request.pattern[:500]
 
+    # F163: reason_types and reasons_json at record time
+    if request.reasons:
+        rtypes = {r.type for r in request.reasons if r.type}
+        if rtypes:
+            metadata["reason_types"] = ",".join(sorted(rtypes))
+        reason_objs = [
+            {"type": r.type, "text": r.text}
+            for r in request.reasons if r.type
+        ]
+        if reason_objs:
+            metadata["reasons_json"] = json.dumps(reason_objs)[:2000]
+
     indexed = await index_to_chromadb(decision_id, embedding_text, metadata)
 
     # F027 P3: Score recording quality
@@ -1229,6 +1242,23 @@ async def reindex_decision(
 
     if data.get("outcome"):
         metadata["outcome"] = data["outcome"]
+
+    # F163: Enrichment — lessons, actual_result, reasons in metadata
+    if data.get("lessons"):
+        metadata["lessons"] = str(data["lessons"])[:500]
+    if data.get("actual_result"):
+        metadata["actual_result"] = str(data["actual_result"])[:500]
+    reasons = data.get("reasons")
+    if reasons and isinstance(reasons, list):
+        rtypes = {r.get("type") for r in reasons if isinstance(r, dict) and r.get("type")}
+        if rtypes:
+            metadata["reason_types"] = ",".join(sorted(rtypes))
+        reason_objs = [
+            {"type": r.get("type", ""), "text": r.get("text", "")}
+            for r in reasons if isinstance(r, dict) and r.get("type")
+        ]
+        if reason_objs:
+            metadata["reasons_json"] = json.dumps(reason_objs)[:2000]
 
     if data.get("recorded_by"):
         metadata["agent"] = data["recorded_by"]
