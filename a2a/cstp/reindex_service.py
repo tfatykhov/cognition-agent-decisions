@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from .embeddings.factory import get_embedding_provider
+from .decision_service import reindex_decision
 from .query_service import load_all_decisions
 from .vectordb.factory import get_vector_store
 
@@ -51,7 +51,6 @@ async def reindex_decisions() -> ReindexResult:
     start_time = time.time()
 
     store = get_vector_store()
-    provider = get_embedding_provider()
 
     # Step 1: Reset collection (delete + recreate)
     if not await store.reset():
@@ -84,47 +83,15 @@ async def reindex_decisions() -> ReindexResult:
             errors += 1
             continue
 
-        # Build text for embedding
-        summary = decision.get("summary", decision.get("decision", ""))
-        context = decision.get("context", "")
-        category = decision.get("category", "")
-
-        text = f"{summary}\n{context}\nCategory: {category}"
+        file_path = decision.get("_file", "")
 
         try:
-            embedding = await provider.embed(text)
+            if await reindex_decision(doc_id, decision, file_path):
+                indexed += 1
+            else:
+                errors += 1
         except Exception as e:
-            logger.error("Failed to generate embedding for %s: %s", doc_id, e)
-            errors += 1
-            continue
-
-        # Build metadata
-        title = (
-            decision.get("title")
-            or decision.get("decision")
-            or decision.get("summary")
-            or ""
-        )
-        date_raw = decision.get("date") or decision.get("timestamp") or ""
-        date_str = str(date_raw)[:10] if date_raw else ""
-
-        metadata: dict[str, Any] = {
-            "title": title[:500] if title else "",
-            "date": date_str,
-            "category": decision.get("category", ""),
-            "stakes": decision.get("stakes", ""),
-            "confidence": float(decision.get("confidence", 0.5)),
-            "status": decision.get("status", "pending"),
-            "created_at": decision.get("created_at", ""),
-        }
-
-        # Filter None/empty values (some backends don't accept them)
-        metadata = {k: v for k, v in metadata.items() if v is not None and v != ""}
-
-        # Upsert to store
-        if await store.upsert(doc_id, text, embedding, metadata):
-            indexed += 1
-        else:
+            logger.error("Failed to reindex decision %s: %s", doc_id, e)
             errors += 1
 
     duration_ms = int((time.time() - start_time) * 1000)
