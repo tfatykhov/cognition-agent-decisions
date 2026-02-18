@@ -1042,6 +1042,16 @@ async def record_decision(
         if reason_objs:
             metadata["reasons_json"] = json.dumps(reason_objs)[:2000]
 
+    # F169: Bridge (structure/function) in metadata
+    if request.bridge and request.bridge.has_content():
+        bridge_obj: dict[str, str] = {}
+        if request.bridge.structure:
+            bridge_obj["structure"] = request.bridge.structure
+        if request.bridge.function:
+            bridge_obj["function"] = request.bridge.function
+        if bridge_obj:
+            metadata["bridge_json"] = json.dumps(bridge_obj)[:1000]
+
     indexed = await index_to_chromadb(decision_id, embedding_text, metadata)
 
     # F027 P3: Score recording quality
@@ -1272,6 +1282,17 @@ async def reindex_decision(
             metadata["tags"] = tags
     if data.get("pattern"):
         metadata["pattern"] = str(data["pattern"])[:500]
+
+    # F169: Bridge (structure/function) in metadata
+    bridge_data = data.get("bridge")
+    if bridge_data and isinstance(bridge_data, dict):
+        bridge_obj: dict[str, str] = {}
+        if bridge_data.get("structure"):
+            bridge_obj["structure"] = bridge_data["structure"]
+        if bridge_data.get("function"):
+            bridge_obj["function"] = bridge_data["function"]
+        if bridge_obj:
+            metadata["bridge_json"] = json.dumps(bridge_obj)[:1000]
 
     return await index_to_chromadb(decision_id, embedding_text, metadata)
 

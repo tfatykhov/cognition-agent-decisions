@@ -44,6 +44,8 @@ class QueryResult:
     lessons: str | None = None
     actual_result: str | None = None
     reasons: list[dict[str, str]] | None = None
+    # F169: Bridge (structure/function) in search results
+    bridge: dict[str, str] | None = None
 
 
 @dataclass(slots=True)
@@ -181,6 +183,16 @@ async def query_decisions(
             except (json.JSONDecodeError, TypeError):
                 pass
 
+        # F169: Parse bridge from JSON metadata
+        bridge_dict: dict[str, str] | None = None
+        if meta.get("bridge_json"):
+            try:
+                parsed = json.loads(meta["bridge_json"])
+                if isinstance(parsed, dict):
+                    bridge_dict = parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         results.append(
             QueryResult(
                 id=vr.id[:8] if len(vr.id) > 8 else vr.id,
@@ -198,6 +210,7 @@ async def query_decisions(
                 lessons=meta.get("lessons"),
                 actual_result=meta.get("actual_result"),
                 reasons=reasons_list,
+                bridge=bridge_dict,
             )
         )
 
