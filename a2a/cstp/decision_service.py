@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from .embeddings.factory import get_embedding_provider
+from .storage.factory import get_decision_store
 from .vectordb.factory import get_vector_store
 
 # Environment configuration
@@ -804,9 +805,9 @@ class GetDecisionResponse:
 
 
 async def get_decision(request: GetDecisionRequest) -> GetDecisionResponse:
-    """Get a single decision by ID, returning full YAML contents.
+    """Get a single decision by ID, returning full contents.
 
-    Searches the decisions directory for a file matching the ID.
+    Tries DecisionStore first, falls back to YAML rglob if not found.
 
     Args:
         request: Contains the decision ID to look up.
@@ -814,6 +815,15 @@ async def get_decision(request: GetDecisionRequest) -> GetDecisionResponse:
     Returns:
         Full decision data if found, or error.
     """
+    # F050: Try DecisionStore first
+    try:
+        store = get_decision_store()
+        data = await store.get(request.decision_id)
+        if data:
+            return GetDecisionResponse(found=True, decision=data)
+    except Exception as e:
+        logger.debug("DecisionStore get failed, falling back to YAML: %s", e)
+
     base = Path(DECISIONS_PATH)
     if not base.exists():
         return GetDecisionResponse(found=False, error="Decisions directory not found")
@@ -979,6 +989,13 @@ async def record_decision(
             timestamp=now.isoformat(),
             error=f"Failed to write decision file: {e}",
         )
+
+    # F050: Dual-write to DecisionStore
+    try:
+        store = get_decision_store()
+        await store.save(decision_id, decision_data)
+    except Exception as e:
+        logger.warning("DecisionStore save failed (YAML write succeeded): %s", e)
 
     # Index to ChromaDB
     embedding_text = build_embedding_text(request)
@@ -1276,6 +1293,13 @@ async def update_decision(
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
 
+    # F050: Dual-write to DecisionStore
+    try:
+        store = get_decision_store()
+        await store.update_fields(decision_id, **{k: updates[k] for k in applied})
+    except Exception as e:
+        logger.warning("DecisionStore update_fields failed: %s", e)
+
     # Re-index
     indexed = await reindex_decision(decision_id, data, str(file_path))
 
@@ -1333,6 +1357,13 @@ async def append_thought(
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
+
+    # F050: Dual-write deliberation to DecisionStore
+    try:
+        store = get_decision_store()
+        await store.update_fields(decision_id, deliberation=delib)
+    except Exception as e:
+        logger.warning("DecisionStore deliberation update failed: %s", e)
 
     return {
         "success": True,
@@ -1417,6 +1448,19 @@ async def review_decision(
             reindexed=False,
             error=f"Failed to write updated decision: {e}",
         )
+
+    # F050: Dual-write outcome to DecisionStore
+    try:
+        store = get_decision_store()
+        await store.update_outcome(
+            decision_id=request.id,
+            outcome=request.outcome,
+            result=request.actual_result,
+            lessons=request.lessons,
+            notes=request.notes,
+        )
+    except Exception as e:
+        logger.warning("DecisionStore update_outcome failed: %s", e)
 
     # Re-index with outcome metadata
     reindexed = await reindex_decision(request.id, data, str(path))

@@ -46,7 +46,11 @@ from .models import (
     CheckGuardrailsRequest,
     CheckGuardrailsResponse,
     DecisionSummary,
+    GetStatsRequest,
+    GetStatsResponse,
     GuardrailViolation,
+    ListDecisionsRequest,
+    ListDecisionsResponse,
     PreActionRequest,
     QueryDecisionsRequest,
     QueryDecisionsResponse,
@@ -842,6 +846,84 @@ async def _handle_get_wisdom(
     return response.to_dict()
 
 
+async def _handle_list_decisions(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.listDecisions method (F050).
+
+    Server-side filtered, sorted, paginated list of decisions.
+
+    Args:
+        params: JSON-RPC params with filter/sort/pagination fields.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Paginated list of decisions with total count.
+    """
+    from .storage import ListQuery
+    from .storage.factory import get_decision_store
+
+    request = ListDecisionsRequest.from_params(params)
+    store = get_decision_store()
+    query = ListQuery(
+        limit=request.limit,
+        offset=request.offset,
+        category=request.category,
+        stakes=request.stakes,
+        status=request.status,
+        agent=request.agent,
+        tags=request.tags,
+        project=request.project,
+        date_from=request.date_from,
+        date_to=request.date_to,
+        search=request.search,
+        sort=request.sort,
+        order=request.order,
+    )
+    result = await store.list(query)
+    response = ListDecisionsResponse(
+        decisions=result.decisions,
+        total=result.total,
+        limit=result.limit,
+        offset=result.offset,
+    )
+    return response.to_dict()
+
+
+async def _handle_get_stats(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.getStats method (F050).
+
+    Server-side aggregated statistics over decisions.
+
+    Args:
+        params: JSON-RPC params with optional date range and project.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Aggregated decision statistics.
+    """
+    from .storage import StatsQuery
+    from .storage.factory import get_decision_store
+
+    request = GetStatsRequest.from_params(params)
+    store = get_decision_store()
+    query = StatsQuery(
+        date_from=request.date_from,
+        date_to=request.date_to,
+        project=request.project,
+    )
+    result = await store.stats(query)
+    response = GetStatsResponse(
+        total=result.total,
+        by_category=result.by_category,
+        by_stakes=result.by_stakes,
+        by_status=result.by_status,
+        by_agent=result.by_agent,
+        by_day=result.by_day,
+        top_tags=result.top_tags,
+        recent_activity=result.recent_activity,
+    )
+    return response.to_dict()
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -880,6 +962,10 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     dispatcher.register("cstp.getCompacted", _handle_get_compacted)
     dispatcher.register("cstp.setPreserve", _handle_set_preserve)
     dispatcher.register("cstp.getWisdom", _handle_get_wisdom)
+
+    # F050: Structured Storage Layer
+    dispatcher.register("cstp.listDecisions", _handle_list_decisions)
+    dispatcher.register("cstp.getStats", _handle_get_stats)
 
     # F126: Debug Tracker
     dispatcher.register("cstp.debugTracker", _handle_debug_tracker)
