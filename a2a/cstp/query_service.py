@@ -187,7 +187,9 @@ async def query_decisions(
         bridge_dict: dict[str, str] | None = None
         if meta.get("bridge_json"):
             try:
-                bridge_dict = json.loads(meta["bridge_json"])
+                parsed = json.loads(meta["bridge_json"])
+                if isinstance(parsed, dict):
+                    bridge_dict = parsed
             except (json.JSONDecodeError, TypeError):
                 pass
 

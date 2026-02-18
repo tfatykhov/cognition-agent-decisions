@@ -1049,7 +1049,8 @@ async def record_decision(
             bridge_obj["structure"] = request.bridge.structure
         if request.bridge.function:
             bridge_obj["function"] = request.bridge.function
-        metadata["bridge_json"] = json.dumps(bridge_obj)[:1000]
+        if bridge_obj:
+            metadata["bridge_json"] = json.dumps(bridge_obj)[:1000]
 
     indexed = await index_to_chromadb(decision_id, embedding_text, metadata)
 
