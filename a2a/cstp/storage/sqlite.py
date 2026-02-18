@@ -243,7 +243,16 @@ class SQLiteDecisionStore(DecisionStore):
                         reviewed_at=excluded.reviewed_at,
                         updated_at=excluded.updated_at
                     """,
-                    (
+                # Handle project field: may be a dict {"name": ..., "pr": ...} or string
+                raw_project = data.get("project")
+                if isinstance(raw_project, dict):
+                    project_str = raw_project.get("name", json.dumps(raw_project))
+                    pr_val = data.get("pr") or raw_project.get("pr")
+                else:
+                    project_str = raw_project
+                    pr_val = data.get("pr")
+
+                (
                         decision_id,
                         data.get("decision", ""),
                         data.get("confidence", 0.0),
@@ -252,9 +261,9 @@ class SQLiteDecisionStore(DecisionStore):
                         data.get("status", "pending"),
                         data.get("context"),
                         data.get("recorded_by") or data.get("agent_id"),
-                        data.get("project"),
+                        project_str,
                         data.get("feature"),
-                        data.get("pr"),
+                        pr_val,
                         data.get("pattern"),
                         data.get("outcome"),
                         data.get("outcome_result") or data.get("actual_result"),
