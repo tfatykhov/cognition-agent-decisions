@@ -484,7 +484,10 @@ class TestAutoLinkDecision:
 # ===========================================================================
 
 
-_has_mcp = bool(sys.modules.get("mcp") or __import__("importlib").util.find_spec("mcp"))
+try:
+    _has_mcp = bool(sys.modules.get("mcp") or __import__("importlib").util.find_spec("mcp"))
+except (ValueError, ModuleNotFoundError):
+    _has_mcp = False
 
 
 @pytest.mark.skipif(not _has_mcp, reason="mcp package not installed (CI)")
