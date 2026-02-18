@@ -142,6 +142,8 @@ class DecisionSummary:
     # F163: Enrichment fields
     lessons: str | None = None
     actual_result: str | None = None
+    # F169: Bridge (structure/function) in search results
+    bridge: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict for JSON response."""
@@ -169,6 +171,8 @@ class DecisionSummary:
             result["lessons"] = self.lessons
         if self.actual_result:
             result["actualResult"] = self.actual_result
+        if self.bridge:
+            result["bridge"] = self.bridge
         return result
 
 

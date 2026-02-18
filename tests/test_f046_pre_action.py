@@ -193,6 +193,7 @@ class MockQueryResult:
     lessons: str | None = None
     actual_result: str | None = None
     reasons: list[dict[str, str]] | None = None
+    bridge: dict[str, str] | None = None
 
 
 @dataclass

@@ -103,6 +103,7 @@ async def pre_action(
                 tags=r.tags,
                 pattern=r.pattern,
                 lessons=r.lessons,
+                bridge=r.bridge,
             ))
 
     # F023/F049: Track query for deliberation (issue #159)

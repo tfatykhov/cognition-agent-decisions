@@ -64,6 +64,20 @@ from .session_context_service import get_session_context
 
 logger = logging.getLogger("cstp.dispatcher")
 
+
+def _extract_bridge(d: dict[str, Any]) -> dict[str, str] | None:
+    """Extract bridge structure/function from a decision dict (F169)."""
+    bridge = d.get("bridge")
+    if not bridge or not isinstance(bridge, dict):
+        return None
+    result: dict[str, str] = {}
+    if bridge.get("structure"):
+        result["structure"] = bridge["structure"]
+    if bridge.get("function"):
+        result["function"] = bridge["function"]
+    return result or None
+
+
 # Type alias for method handlers
 MethodHandler = Callable[[dict[str, Any], str], Awaitable[dict[str, Any]]]
 
@@ -272,6 +286,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                     actual_result=(
                         d.get("actual_result") if request.include_detail else None
                     ),
+                    bridge=_extract_bridge(d),
                 )
             )
 
@@ -343,6 +358,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                     actual_result=(
                         d.get("actual_result") if request.include_detail else None
                     ),
+                    bridge=_extract_bridge(d),
                 )
             )
             scores[doc_id[:8] if len(doc_id) > 8 else doc_id] = {
@@ -428,6 +444,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                         actual_result=(
                             r.actual_result if request.include_detail else None
                         ),
+                        bridge=r.bridge,
                     )
                 )
             elif doc_id in decision_map:
@@ -450,6 +467,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                         actual_result=(
                             d.get("actual_result") if request.include_detail else None
                         ),
+                        bridge=_extract_bridge(d),
                     )
                 )
             scores[doc_id] = score_dict
@@ -492,6 +510,7 @@ async def _handle_query_decisions(params: dict[str, Any], agent_id: str) -> dict
                 pattern=r.pattern,
                 lessons=r.lessons,
                 actual_result=r.actual_result if request.include_detail else None,
+                bridge=r.bridge,
             )
             for r in response.results
         ]
