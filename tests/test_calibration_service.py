@@ -1,6 +1,7 @@
 """Unit tests for calibration_service.py."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -14,6 +15,16 @@ from a2a.cstp.calibration_service import (
     get_calibration,
     get_reviewed_decisions,
 )
+
+
+@pytest.fixture(autouse=True)
+def _force_yaml_fallback():
+    """Force _scan_decisions to use YAML fallback so tests control data via tmp_path."""
+    with patch(
+        "a2a.cstp.storage.factory.get_decision_store",
+        side_effect=RuntimeError("force YAML fallback"),
+    ):
+        yield
 
 
 def create_decision(

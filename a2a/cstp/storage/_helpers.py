@@ -47,6 +47,8 @@ def apply_filters(
             continue
         if query.project and d.get("project") != query.project:
             continue
+        if query.feature and d.get("feature") != query.feature:
+            continue
 
         # Tags: any match
         if query.tags:
