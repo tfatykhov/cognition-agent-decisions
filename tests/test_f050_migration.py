@@ -8,7 +8,6 @@ Covers:
 - Error handling for malformed YAML files
 """
 
-import tempfile
 from pathlib import Path
 from typing import Any
 
