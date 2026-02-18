@@ -3,6 +3,7 @@
 Calculates confidence calibration statistics from reviewed decisions.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,8 @@ from typing import Any
 import yaml
 
 from .decision_service import DECISIONS_PATH
+
+logger = logging.getLogger(__name__)
 
 
 def window_to_dates(window: str | None) -> tuple[str | None, str | None]:
@@ -208,12 +211,13 @@ async def _scan_decisions(
     feature: str | None = None,
     reviewed_only: bool = False,
 ) -> list[dict[str, Any]]:
-    """Scan decision YAML files with optional filters.
+    """Load decisions with optional filters, preferring DecisionStore over YAML.
 
-    Shared helper for both all-decision and reviewed-only queries.
+    Tries DecisionStore.list() first for efficient querying (SQLite indexed).
+    Falls back to YAML rglob if the store is unavailable or raises.
 
     Args:
-        decisions_path: Override for decisions directory.
+        decisions_path: Override for decisions directory (YAML fallback only).
         agent: Filter by recorded_by field.
         category: Filter by category.
         stakes: Filter by stakes level.
@@ -226,8 +230,40 @@ async def _scan_decisions(
     Returns:
         List of matching decision data dictionaries.
     """
+    # --- Fast path: DecisionStore (SQLite/memory) ---
+    try:
+        from .storage import ListQuery
+        from .storage.factory import get_decision_store
+
+        store = get_decision_store()
+        query = ListQuery(
+            limit=10_000,
+            offset=0,
+            category=category,
+            stakes=stakes,
+            status="reviewed" if reviewed_only else None,
+            agent=agent,
+            project=project,
+            feature=feature,
+            date_from=since,
+            date_to=until,
+            sort="created_at",
+            order="desc",
+        )
+        result = await store.list(query)
+        decisions = result.decisions
+
+        # For reviewed_only, also require 'outcome' field present
+        if reviewed_only:
+            decisions = [d for d in decisions if "outcome" in d]
+
+        return decisions
+    except Exception:
+        logger.debug("DecisionStore unavailable, falling back to YAML scan", exc_info=True)
+
+    # --- Slow path: YAML rglob fallback ---
     base = Path(decisions_path or DECISIONS_PATH)
-    decisions: list[dict[str, Any]] = []
+    decisions = []
 
     if not base.exists():
         return decisions

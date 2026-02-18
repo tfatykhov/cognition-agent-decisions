@@ -23,6 +23,7 @@ class ListQuery:
     agent: str | None = None
     tags: list[str] = field(default_factory=list)
     project: str | None = None
+    feature: str | None = None
     date_from: str | None = None
     date_to: str | None = None
     search: str | None = None

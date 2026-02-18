@@ -489,6 +489,9 @@ class SQLiteDecisionStore(DecisionStore):
         if query.project:
             conditions.append("d.project = ?")
             params.append(query.project)
+        if query.feature:
+            conditions.append("d.feature = ?")
+            params.append(query.feature)
         if query.date_from:
             conditions.append("d.created_at >= ?")
             params.append(query.date_from)
