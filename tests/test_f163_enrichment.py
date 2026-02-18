@@ -31,10 +31,10 @@ if not _mcp_available:
     sys.modules["mcp.server.streamable_http_manager"] = mock_mcp
     sys.modules["mcp.types"] = mock_mcp
 
-import pytest
+import pytest  # noqa: E402
 
-from a2a.cstp.models import DecisionSummary, QueryDecisionsRequest
-from a2a.cstp.query_service import QueryResult
+from a2a.cstp.models import DecisionSummary, QueryDecisionsRequest  # noqa: E402
+from a2a.cstp.query_service import QueryResult  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

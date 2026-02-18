@@ -28,9 +28,9 @@ if not _mcp_available:
         {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
     )
 
-from unittest.mock import patch
+from unittest.mock import patch  # noqa: E402
 
-import pytest
+import pytest  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
