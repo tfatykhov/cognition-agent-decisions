@@ -320,13 +320,24 @@ def test_overview_calls_list_decisions_small_batch(
 def test_overview_period_all(
     client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
 ) -> None:
-    """Test overview with period=all passes no date filters to get_stats."""
+    """Test overview with period=all skips redundant all-time get_stats call."""
     response = client.get("/?period=all", headers=auth_headers)
 
     assert response.status_code == 200
-    # get_stats should be called at least twice (with date filter and all-time)
-    # The first call is the filtered one, second is all-time
-    assert mock_cstp.get_stats.call_count >= 1
+    # period=all means date_from/date_to are both None, so the filtered call
+    # already returns all-time data — no second call needed
+    assert mock_cstp.get_stats.call_count == 1
+
+
+def test_overview_period_today_calls_get_stats_twice(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview with period=today calls get_stats twice (filtered + all-time)."""
+    response = client.get("/?period=today", headers=auth_headers)
+
+    assert response.status_code == 200
+    # First call is date-filtered, second is all-time for the total comparison
+    assert mock_cstp.get_stats.call_count == 2
 
 
 def test_overview_handles_stats_error(

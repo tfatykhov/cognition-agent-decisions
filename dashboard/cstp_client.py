@@ -209,7 +209,7 @@ class CSTPClient:
             params["project"] = project
 
         return self._call("cstp.getStats", params)
-    
+
     def get_decision(self, decision_id: str) -> Decision | None:
         """Get single decision by ID using getDecision API.
         

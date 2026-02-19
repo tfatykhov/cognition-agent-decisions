@@ -128,11 +128,15 @@ def index() -> str:
     total_filtered = stats_data.get("total", len(decisions_list))
 
     # Fetch all-time total (no date filter) for comparison
-    try:
-        all_time_stats = cstp.get_stats()
-        total_all = all_time_stats.get("total", total_filtered)
-    except CSTPError:
+    # Skip when already showing all-time (date_from/date_to both None)
+    if date_from is None and date_to is None:
         total_all = total_filtered
+    else:
+        try:
+            all_time_stats = cstp.get_stats()
+            total_all = all_time_stats.get("total", total_filtered)
+        except CSTPError:
+            total_all = total_filtered
 
     return render_template(
         "overview.html",
@@ -188,7 +192,9 @@ def _get_decisions(
 
     try:
         if search:
-            # Semantic search via queryDecisions (no server-side pagination)
+            # Semantic search via queryDecisions (no server-side pagination).
+            # Results are returned in relevance order — sort param is intentionally
+            # not applied here to preserve semantic ranking.
             all_results, total = cstp.search_decisions(
                 query=search, limit=200, category=category,
             )
