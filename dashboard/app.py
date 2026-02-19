@@ -1,7 +1,6 @@
 """CSTP Dashboard Flask application."""
 import contextlib
 import logging
-from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -92,71 +91,79 @@ def index() -> str:
         date_from = today_local.astimezone(UTC)
         date_to = (today_local + timedelta(days=1)).astimezone(UTC)
 
+    # Convert datetime to ISO strings for server-side filtering
+    date_from_str: str | None = None
+    date_to_str: str | None = None
+    if date_from is not None:
+        date_from_str = date_from.strftime("%Y-%m-%dT%H:%M:%S")
+    if date_to is not None:
+        date_to_str = date_to.strftime("%Y-%m-%dT%H:%M:%S")
+
     # Fetch calibration stats (always all-time)
     stats = cstp.get_calibration()
 
-    # Fetch all decisions for aggregation
-    all_decisions, total_count = cstp.list_decisions(limit=500)
+    # Fetch server-side aggregated stats (with date filter)
+    try:
+        stats_data = cstp.get_stats(
+            date_from=date_from_str, date_to=date_to_str,
+        )
+    except CSTPError:
+        stats_data = {}
 
-    # Apply date filter
-    if date_from is not None:
-        filtered = [
-            d for d in all_decisions
-            if d.created_at >= date_from and (date_to is None or d.created_at < date_to)
-        ]
-    else:
-        filtered = all_decisions
+    # Fetch recent decisions for the activity list (server-side filtered)
+    try:
+        decisions_list, _ = cstp.list_decisions(
+            limit=50, date_from=date_from_str, date_to=date_to_str,
+        )
+    except CSTPError:
+        decisions_list = []
 
-    # All decisions shown (no 10-item cap)
-    decisions_list = sorted(filtered, key=lambda d: d.created_at, reverse=True)
+    # Extract aggregated breakdowns from server stats (normalized to existing shapes)
+    cat_counts: dict[str, int] = stats_data.get("byCategory", {})
+    stakes_counts: dict[str, int] = stats_data.get("byStakes", {})
+    outcome_counts: dict[str, int] = stats_data.get("byStatus", {})
+    top_tags: list[tuple[str, int]] = [
+        (t["tag"], t["count"]) for t in stats_data.get("topTags", [])
+    ]
+    total_filtered = stats_data.get("total", len(decisions_list))
 
-    # Category breakdown
-    cat_counts: dict[str, int] = Counter(d.category for d in filtered)
-
-    # Stakes breakdown
-    stakes_counts: dict[str, int] = Counter(d.stakes for d in filtered)
-
-    # Outcome breakdown
-    outcome_counts: dict[str, int] = Counter(
-        d.outcome if d.outcome else "pending" for d in filtered
-    )
-
-    # Tag cloud (top 20)
-    tag_counter: Counter[str] = Counter()
-    for d in filtered:
-        for t in d.tags:
-            tag_counter[t] += 1
-    top_tags = tag_counter.most_common(20)
-
-    # Quality distribution
-    quality_buckets = {"high": 0, "medium": 0, "low": 0, "none": 0}
-    for d in filtered:
-        if d.quality and d.quality.score is not None:
-            if d.quality.score >= 0.7:
-                quality_buckets["high"] += 1
-            elif d.quality.score >= 0.4:
-                quality_buckets["medium"] += 1
-            else:
-                quality_buckets["low"] += 1
-        else:
-            quality_buckets["none"] += 1
+    # Fetch all-time total (no date filter) for comparison
+    try:
+        all_time_stats = cstp.get_stats()
+        total_all = all_time_stats.get("total", total_filtered)
+    except CSTPError:
+        total_all = total_filtered
 
     return render_template(
         "overview.html",
         stats=stats,
         decisions_list=decisions_list,
-        total=len(filtered),
-        total_all=len(all_decisions),
+        total=total_filtered,
+        total_all=total_all,
         cat_counts=cat_counts,
         stakes_counts=stakes_counts,
         outcome_counts=outcome_counts,
         top_tags=top_tags,
-        quality_buckets=quality_buckets,
         period=period,
         custom_date=custom_date or today_local.strftime("%Y-%m-%d"),
         today_str=today_local.strftime("%Y-%m-%d"),
         tz_name=tz_name,
     )
+
+
+def _map_sort(sort: str | None) -> tuple[str, str]:
+    """Map dashboard sort parameter to (column, order) for cstp.listDecisions."""
+    match sort:
+        case "confidence":
+            return ("confidence", "desc")
+        case "-confidence":
+            return ("confidence", "asc")
+        case "category":
+            return ("category", "asc")
+        case "-date":
+            return ("created_at", "asc")
+        case _:
+            return ("created_at", "desc")
 
 
 def _get_decisions(
@@ -168,54 +175,51 @@ def _get_decisions(
     search: str | None = None,
     sort: str | None = None,
 ) -> tuple[list, int, int, int]:
-    """Shared logic for fetching, filtering, sorting, and paginating decisions.
+    """Shared logic for server-side filtered, sorted, paginated decisions.
 
-    Fetches a large batch from the API, applies client-side filters
-    (stakes, status) and sorting, then paginates.
+    Uses cstp.listDecisions for structured queries and cstp.queryDecisions
+    (via search_decisions) for semantic search.
 
     Returns:
         (page_decisions, total, page, total_pages)
     """
-    has_outcome: bool | None = None
-    if status == "pending":
-        has_outcome = False
-    elif status == "reviewed":
-        has_outcome = True
+    sort_col, order = _map_sort(sort)
+    offset = (page - 1) * per_page
 
     try:
-        # Fetch larger batch for client-side filtering/sorting
-        all_decisions, _ = cstp.list_decisions(
-            limit=200,
-            offset=0,
-            category=category,
-            has_outcome=has_outcome,
-            search=search,
-        )
+        if search:
+            # Semantic search via queryDecisions (no server-side pagination)
+            all_results, total = cstp.search_decisions(
+                query=search, limit=200, category=category,
+            )
+            # Client-side filtering for fields not supported by queryDecisions
+            if stakes:
+                all_results = [d for d in all_results if d.stakes == stakes]
+            if status:
+                all_results = [
+                    d for d in all_results
+                    if (d.outcome is not None) == (status == "reviewed")
+                ]
+            total = len(all_results)
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, total_pages)
+            start = (page - 1) * per_page
+            page_decisions = all_results[start : start + per_page]
+        else:
+            # Server-side filtering, sorting, and pagination
+            page_decisions, total = cstp.list_decisions(
+                limit=per_page,
+                offset=offset,
+                category=category,
+                stakes=stakes,
+                status=status,
+                sort=sort_col,
+                order=order,
+            )
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            page = min(page, total_pages)
     except CSTPError:
         return [], 0, page, 1
-
-    # Client-side filtering for stakes (API doesn't support it)
-    if stakes:
-        all_decisions = [d for d in all_decisions if d.stakes == stakes]
-
-    # Client-side sorting (default: newest first)
-    if sort == "confidence":
-        all_decisions.sort(key=lambda d: d.confidence, reverse=True)
-    elif sort == "-confidence":
-        all_decisions.sort(key=lambda d: d.confidence)
-    elif sort == "category":
-        all_decisions.sort(key=lambda d: d.category)
-    elif sort == "-date":
-        all_decisions.sort(key=lambda d: d.created_at)
-    else:
-        # Default: newest first
-        all_decisions.sort(key=lambda d: d.created_at, reverse=True)
-
-    total = len(all_decisions)
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = min(page, total_pages)
-    start = (page - 1) * per_page
-    page_decisions = all_decisions[start : start + per_page]
 
     return page_decisions, total, page, total_pages
 
