@@ -47,11 +47,27 @@ def mock_cstp() -> Generator[MagicMock, None, None]:
     with patch("dashboard.app.cstp") as mock:
         mock.health_check = MagicMock(return_value=True)
         mock.list_decisions = MagicMock(return_value=([], 0))
+        mock.search_decisions = MagicMock(return_value=([], 0))
         mock.get_decision = MagicMock(return_value=None)
         mock.get_calibration = MagicMock(return_value=_mock_calibration_stats())
+        mock.get_stats = MagicMock(return_value=_mock_stats_data())
         mock.get_neighbors = MagicMock(return_value=[])
         mock.check_drift = MagicMock(return_value=None)
         yield mock
+
+
+def _mock_stats_data() -> dict[str, Any]:
+    """Create mock getStats response."""
+    return {
+        "total": 25,
+        "byCategory": {"architecture": 10, "process": 8, "tooling": 7},
+        "byStakes": {"medium": 15, "high": 5, "low": 5},
+        "byStatus": {"pending": 20, "reviewed": 5},
+        "byAgent": {"agent-1": 12, "agent-2": 13},
+        "byDay": {"2026-02-18": 5},
+        "topTags": [{"tag": "testing", "count": 8}, {"tag": "arch", "count": 5}],
+        "recentActivity": {"last_24h": 3, "last_7d": 10},
+    }
 
 
 def _mock_calibration_stats() -> Any:

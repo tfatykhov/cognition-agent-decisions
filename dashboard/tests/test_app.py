@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from flask.testing import FlaskClient
 
+from dashboard.app import _map_sort
 from dashboard.models import Decision, GraphNeighbor, Reason
 
 
@@ -243,3 +244,334 @@ def test_decision_detail_graph_neighbor_directions(
     # Edge type badges
     assert "depends on" in html
     assert "supersedes" in html
+
+
+# --- Issue #177: _map_sort helper ---
+
+
+def test_map_sort_default() -> None:
+    """Test _map_sort returns default sort when None."""
+    assert _map_sort(None) == ("created_at", "desc")
+
+
+def test_map_sort_reverse_date() -> None:
+    """Test _map_sort handles -date (oldest first)."""
+    assert _map_sort("-date") == ("created_at", "asc")
+
+
+def test_map_sort_confidence() -> None:
+    """Test _map_sort handles confidence and -confidence."""
+    assert _map_sort("confidence") == ("confidence", "desc")
+    assert _map_sort("-confidence") == ("confidence", "asc")
+
+
+def test_map_sort_category() -> None:
+    """Test _map_sort handles category sort."""
+    assert _map_sort("category") == ("category", "asc")
+
+
+def test_map_sort_unknown() -> None:
+    """Test _map_sort falls back to default for unknown values."""
+    assert _map_sort("unknown") == ("created_at", "desc")
+
+
+# --- Issue #177: Overview route uses get_stats ---
+
+
+def test_overview_calls_get_stats(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview page calls get_stats for server-side aggregation."""
+    response = client.get("/", headers=auth_headers)
+
+    assert response.status_code == 200
+    mock_cstp.get_stats.assert_called()
+
+
+def test_overview_calls_get_calibration(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview page still calls get_calibration for calibration stats."""
+    response = client.get("/", headers=auth_headers)
+
+    assert response.status_code == 200
+    mock_cstp.get_calibration.assert_called_once()
+
+
+def test_overview_calls_list_decisions_small_batch(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview fetches small batch of decisions (not 500)."""
+    response = client.get("/", headers=auth_headers)
+
+    assert response.status_code == 200
+    mock_cstp.list_decisions.assert_called()
+    # Check the limit is reasonable (50 or less, not 500)
+    call_kwargs = mock_cstp.list_decisions.call_args
+    if call_kwargs[1]:
+        limit = call_kwargs[1].get("limit")
+    else:
+        limit = call_kwargs[0][0] if call_kwargs[0] else None
+    # The call should use limit=50 based on implementation
+    assert limit is not None
+    assert limit <= 50
+
+
+def test_overview_period_all(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview with period=all skips redundant all-time get_stats call."""
+    response = client.get("/?period=all", headers=auth_headers)
+
+    assert response.status_code == 200
+    # period=all means date_from/date_to are both None, so the filtered call
+    # already returns all-time data — no second call needed
+    assert mock_cstp.get_stats.call_count == 1
+
+
+def test_overview_period_today_calls_get_stats_twice(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview with period=today calls get_stats twice (filtered + all-time)."""
+    response = client.get("/?period=today", headers=auth_headers)
+
+    assert response.status_code == 200
+    # First call is date-filtered, second is all-time for the total comparison
+    assert mock_cstp.get_stats.call_count == 2
+
+
+def test_overview_handles_stats_error(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview handles get_stats error gracefully."""
+    # Import from the same path app.py uses (cstp_client, not dashboard.cstp_client)
+    from cstp_client import CSTPError
+    mock_cstp.get_stats = MagicMock(side_effect=CSTPError("stats error"))
+
+    response = client.get("/", headers=auth_headers)
+
+    assert response.status_code == 200  # Should still render
+
+
+def test_overview_handles_list_decisions_error(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test overview handles list_decisions error gracefully."""
+    from cstp_client import CSTPError
+    mock_cstp.list_decisions = MagicMock(side_effect=CSTPError("list error"))
+
+    response = client.get("/", headers=auth_headers)
+
+    assert response.status_code == 200  # Should still render
+
+
+# --- Issue #177: Decisions route server-side filtering ---
+
+
+def _make_decisions_list(count: int = 3) -> list[Decision]:
+    """Helper to create a list of test decisions."""
+    return [
+        Decision(
+            id=f"dec{i:05d}",
+            summary=f"Decision {i}",
+            category="architecture" if i % 2 == 0 else "process",
+            stakes="medium" if i % 2 == 0 else "high",
+            confidence=0.5 + i * 0.1,
+            created_at=datetime(2026, 2, 18, 12, 0, i, tzinfo=UTC),
+            outcome="success" if i == 0 else None,
+        )
+        for i in range(count)
+    ]
+
+
+def test_decisions_browse_uses_list_decisions(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page without search uses list_decisions (server-side)."""
+    mock_cstp.list_decisions = MagicMock(return_value=(_make_decisions_list(), 3))
+
+    response = client.get("/decisions", headers=auth_headers)
+
+    assert response.status_code == 200
+    mock_cstp.list_decisions.assert_called()
+    mock_cstp.search_decisions.assert_not_called()
+
+
+def test_decisions_search_uses_search_decisions(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page with search uses search_decisions (semantic)."""
+    mock_cstp.search_decisions = MagicMock(
+        return_value=(_make_decisions_list(1), 1)
+    )
+
+    response = client.get("/decisions?search=architecture", headers=auth_headers)
+
+    assert response.status_code == 200
+    mock_cstp.search_decisions.assert_called_once()
+    # search_decisions should get the query
+    call_kwargs = mock_cstp.search_decisions.call_args
+    assert call_kwargs[1].get("query") == "architecture" or call_kwargs[0][0] == "architecture"
+
+
+def test_decisions_passes_category_filter(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page passes category filter to list_decisions."""
+    mock_cstp.list_decisions = MagicMock(return_value=([], 0))
+
+    response = client.get("/decisions?category=architecture", headers=auth_headers)
+
+    assert response.status_code == 200
+    call_kwargs = mock_cstp.list_decisions.call_args
+    assert call_kwargs[1].get("category") == "architecture"
+
+
+def test_decisions_passes_stakes_filter(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page passes stakes filter to list_decisions."""
+    mock_cstp.list_decisions = MagicMock(return_value=([], 0))
+
+    response = client.get("/decisions?stakes=high", headers=auth_headers)
+
+    assert response.status_code == 200
+    call_kwargs = mock_cstp.list_decisions.call_args
+    assert call_kwargs[1].get("stakes") == "high"
+
+
+def test_decisions_passes_status_filter(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page passes status filter to list_decisions."""
+    mock_cstp.list_decisions = MagicMock(return_value=([], 0))
+
+    response = client.get("/decisions?status=reviewed", headers=auth_headers)
+
+    assert response.status_code == 200
+    call_kwargs = mock_cstp.list_decisions.call_args
+    assert call_kwargs[1].get("status") == "reviewed"
+
+
+def test_decisions_passes_sort_params(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page translates sort param to server-side columns."""
+    mock_cstp.list_decisions = MagicMock(return_value=([], 0))
+
+    response = client.get("/decisions?sort=confidence", headers=auth_headers)
+
+    assert response.status_code == 200
+    call_kwargs = mock_cstp.list_decisions.call_args
+    assert call_kwargs[1].get("sort") == "confidence"
+    assert call_kwargs[1].get("order") == "desc"
+
+
+def test_decisions_pagination_offset(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page calculates correct offset for pagination."""
+    mock_cstp.list_decisions = MagicMock(return_value=([], 40))
+
+    response = client.get("/decisions?page=3", headers=auth_headers)
+
+    assert response.status_code == 200
+    call_kwargs = mock_cstp.list_decisions.call_args
+    # Page 3 with per_page=20 means offset=40
+    assert call_kwargs[1].get("offset") == 40
+
+
+def test_decisions_handles_cstp_error(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions page handles CSTPError gracefully."""
+    from cstp_client import CSTPError
+    mock_cstp.list_decisions = MagicMock(side_effect=CSTPError("connection error"))
+
+    response = client.get("/decisions", headers=auth_headers)
+
+    assert response.status_code == 200  # Should still render with empty results
+
+
+# --- Issue #177: decisions_partial HTMX route ---
+
+
+def test_decisions_partial_renders(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions_partial returns partial template for HTMX."""
+    mock_cstp.list_decisions = MagicMock(return_value=(_make_decisions_list(), 3))
+
+    response = client.get("/decisions/partial", headers=auth_headers)
+
+    assert response.status_code == 200
+
+
+def test_decisions_partial_passes_filters(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions_partial passes all filter params."""
+    mock_cstp.list_decisions = MagicMock(return_value=([], 0))
+
+    response = client.get(
+        "/decisions/partial?category=process&stakes=high&status=pending&sort=-date",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    call_kwargs = mock_cstp.list_decisions.call_args
+    assert call_kwargs[1].get("category") == "process"
+    assert call_kwargs[1].get("stakes") == "high"
+    assert call_kwargs[1].get("status") == "pending"
+
+
+def test_decisions_partial_search_branch(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test decisions_partial with search uses search_decisions."""
+    mock_cstp.search_decisions = MagicMock(return_value=([], 0))
+
+    response = client.get(
+        "/decisions/partial?search=test+query", headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    mock_cstp.search_decisions.assert_called_once()
+
+
+# --- Issue #177: Search with client-side filtering fallback ---
+
+
+def test_search_with_stakes_filter(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test search path applies client-side stakes filtering."""
+    decisions = _make_decisions_list(4)
+    decisions[0].stakes = "high"
+    decisions[1].stakes = "low"
+    decisions[2].stakes = "high"
+    decisions[3].stakes = "medium"
+    mock_cstp.search_decisions = MagicMock(return_value=(decisions, 4))
+
+    response = client.get(
+        "/decisions?search=test&stakes=high", headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+
+def test_search_with_status_filter(
+    client: FlaskClient, auth_headers: dict[str, str], mock_cstp: MagicMock
+) -> None:
+    """Test search path applies client-side status filtering."""
+    decisions = _make_decisions_list(3)
+    decisions[0].outcome = "success"  # reviewed
+    decisions[1].outcome = None  # pending
+    decisions[2].outcome = "partial"  # reviewed
+    mock_cstp.search_decisions = MagicMock(return_value=(decisions, 3))
+
+    response = client.get(
+        "/decisions?search=test&status=reviewed", headers=auth_headers,
+    )
+
+    assert response.status_code == 200

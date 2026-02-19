@@ -89,25 +89,82 @@ class CSTPClient:
         limit: int = 50,
         offset: int = 0,
         category: str | None = None,
-        has_outcome: bool | None = None,
-        project: str | None = None,
+        stakes: str | None = None,
+        status: str | None = None,
         search: str | None = None,
+        sort: str = "created_at",
+        order: str = "desc",
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> tuple[list[Decision], int]:
-        """List decisions with optional filters.
-        
+        """List decisions with server-side filtering, sorting, and pagination.
+
+        Uses cstp.listDecisions (SQL-backed) for structured queries.
+
         Args:
-            limit: Maximum number of decisions to return
+            limit: Maximum number of decisions to return (1-500)
             offset: Number of decisions to skip (for pagination)
             category: Filter by category (architecture, process, etc.)
+            stakes: Filter by stakes level (low, medium, high, critical)
+            status: Filter by review status (pending, reviewed)
+            search: Keyword search (SQL FTS, not semantic)
+            sort: Sort column (created_at, confidence, category, stakes, status)
+            order: Sort direction (asc, desc)
+            date_from: ISO date string for start of range
+            date_to: ISO date string for end of range
+
+        Returns:
+            Tuple of (list of Decision objects, total count)
+        """
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if category:
+            params["category"] = category
+        if stakes:
+            params["stakes"] = stakes
+        if status:
+            params["status"] = status
+        if search:
+            params["search"] = search
+        if sort != "created_at":
+            params["sort"] = sort
+        if order != "desc":
+            params["order"] = order
+        if date_from:
+            params["dateFrom"] = date_from
+        if date_to:
+            params["dateTo"] = date_to
+
+        result = self._call("cstp.listDecisions", params)
+
+        decisions = [Decision.from_dict(d) for d in result.get("decisions", [])]
+        total = result.get("total", len(decisions))
+
+        return decisions, total
+
+    def search_decisions(
+        self,
+        query: str,
+        limit: int = 20,
+        category: str | None = None,
+        has_outcome: bool | None = None,
+        project: str | None = None,
+    ) -> tuple[list[Decision], int]:
+        """Semantic search over decisions using vector similarity.
+
+        Uses cstp.queryDecisions (ChromaDB-backed) for semantic queries.
+
+        Args:
+            query: Natural language search query
+            limit: Maximum number of results
+            category: Optional category filter
             has_outcome: Filter by review status (True=reviewed, False=pending)
             project: Filter by project (owner/repo format)
-            search: Search query for semantic search
-            
+
         Returns:
             Tuple of (list of Decision objects, total count)
         """
         params: dict[str, Any] = {
-            "query": search or "",
+            "query": query,
             "limit": limit,
         }
         if category:
@@ -116,14 +173,43 @@ class CSTPClient:
             params["hasOutcome"] = has_outcome
         if project:
             params["project"] = project
-        
+
         result = self._call("cstp.queryDecisions", params)
-        
+
         decisions = [Decision.from_dict(d) for d in result.get("decisions", [])]
         total = result.get("total", len(decisions))
-        
+
         return decisions, total
-    
+
+    def get_stats(
+        self,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        project: str | None = None,
+    ) -> dict[str, Any]:
+        """Get aggregated decision statistics from server.
+
+        Uses cstp.getStats (SQL-backed) for efficient aggregation.
+
+        Args:
+            date_from: ISO date string for start of range
+            date_to: ISO date string for end of range
+            project: Optional project filter
+
+        Returns:
+            Raw stats dict with keys: total, byCategory, byStakes,
+            byStatus, byAgent, byDay, topTags, recentActivity
+        """
+        params: dict[str, Any] = {}
+        if date_from:
+            params["dateFrom"] = date_from
+        if date_to:
+            params["dateTo"] = date_to
+        if project:
+            params["project"] = project
+
+        return self._call("cstp.getStats", params)
+
     def get_decision(self, decision_id: str) -> Decision | None:
         """Get single decision by ID using getDecision API.
         

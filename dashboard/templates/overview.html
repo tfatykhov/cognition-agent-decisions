@@ -95,7 +95,7 @@
 </div>
 
 {% if total > 0 %}
-<!-- Charts Row -->
+<!-- Charts Row (2 charts: Category + Outcomes) -->
 <div class="chart-row">
     <!-- Category Breakdown (Doughnut) -->
     <div class="card mb-6" style="flex: 1">
@@ -117,18 +117,6 @@
         <div class="card-body">
             <div class="chart-container chart-container--sm">
                 <canvas id="outcomeChart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <!-- Quality Distribution (Bar) -->
-    <div class="card mb-6" style="flex: 1">
-        <div class="card-header">
-            <h2 class="card-title" style="margin:0">Quality</h2>
-        </div>
-        <div class="card-body">
-            <div class="chart-container chart-container--sm">
-                <canvas id="qualityChart"></canvas>
             </div>
         </div>
     </div>
@@ -284,6 +272,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'failure': '#f87171',
             'pending': '#4a4f6a',
             'abandoned': '#9498b0',
+            'reviewed': '#34d399',
         };
         const outColors = outLabels.map(l => outcomeColors[l] || '#6c8aff');
 
@@ -306,39 +295,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     legend: {
                         position: 'bottom',
                         labels: { boxWidth: 10, padding: 12 }
-                    }
-                }
-            }
-        });
-    }
-
-    // --- Quality Bar ---
-    const qualCtx = document.getElementById('qualityChart');
-    if (qualCtx) {
-        new Chart(qualCtx, {
-            type: 'bar',
-            data: {
-                labels: ['High (70%+)', 'Medium (40-70%)', 'Low (<40%)', 'No Score'],
-                datasets: [{
-                    data: [{{ quality_buckets.high }}, {{ quality_buckets.medium }}, {{ quality_buckets.low }}, {{ quality_buckets.none }}],
-                    backgroundColor: ['#34d399', '#fbbf24', '#f87171', '#4a4f6a'],
-                    borderRadius: 4,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y',
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        grid: { color: gridColor }
-                    },
-                    y: {
-                        grid: { display: false }
                     }
                 }
             }

@@ -306,3 +306,276 @@ def test_cstp_client_get_neighbors_calls_correct_method() -> None:
         "direction": "both",
         "limit": 10,
     })
+
+
+# --- Issue #177: list_decisions via cstp.listDecisions ---
+
+
+def test_list_decisions_calls_list_decisions_method() -> None:
+    """Test list_decisions calls cstp.listDecisions (not queryDecisions)."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0, "limit": 20, "offset": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.list_decisions()
+
+    mock_call.assert_called_once()
+    assert mock_call.call_args[0][0] == "cstp.listDecisions"
+
+
+def test_list_decisions_default_params() -> None:
+    """Test list_decisions sends correct default params."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.list_decisions()
+
+    params = mock_call.call_args[0][1]
+    assert params["limit"] == 50
+    assert params["offset"] == 0
+    # sort and order are omitted when default (created_at, desc)
+    assert "sort" not in params
+    assert "order" not in params
+    # Optional params should not be present when not specified
+    assert "category" not in params
+    assert "stakes" not in params
+    assert "status" not in params
+    assert "dateFrom" not in params
+    assert "dateTo" not in params
+    assert "search" not in params
+
+
+def test_list_decisions_all_params() -> None:
+    """Test list_decisions sends all params when specified."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.list_decisions(
+            limit=30, offset=10,
+            category="architecture", stakes="high",
+            status="pending",
+            date_from="2026-01-01", date_to="2026-02-01",
+            search="keyword", sort="confidence", order="asc",
+        )
+
+    params = mock_call.call_args[0][1]
+    assert params["limit"] == 30
+    assert params["offset"] == 10
+    assert params["category"] == "architecture"
+    assert params["stakes"] == "high"
+    assert params["status"] == "pending"
+    assert params["dateFrom"] == "2026-01-01"
+    assert params["dateTo"] == "2026-02-01"
+    assert params["search"] == "keyword"
+    assert params["sort"] == "confidence"
+    assert params["order"] == "asc"
+
+
+def test_list_decisions_parses_response() -> None:
+    """Test list_decisions parses decision list and total from response."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {
+        "decisions": [
+            {
+                "id": "dec00001",
+                "decision": "Use SQLite for storage",
+                "category": "architecture",
+                "stakes": "high",
+                "confidence": 0.9,
+                "created_at": "2026-02-18T10:00:00Z",
+            },
+            {
+                "id": "dec00002",
+                "decision": "Add date filters",
+                "category": "tooling",
+                "stakes": "medium",
+                "confidence": 0.75,
+                "created_at": "2026-02-17T10:00:00Z",
+            },
+        ],
+        "total": 42,
+    }
+
+    with patch.object(client, "_call", return_value=mock_result):
+        decisions, total = client.list_decisions()
+
+    assert total == 42
+    assert len(decisions) == 2
+    assert decisions[0].id == "dec00001"
+    assert decisions[0].summary == "Use SQLite for storage"
+    assert decisions[1].id == "dec00002"
+
+
+def test_list_decisions_omits_falsy_optional_params() -> None:
+    """Test list_decisions omits None/empty optional params."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.list_decisions(
+            category=None, stakes=None, status=None,
+            date_from=None, date_to=None, search=None,
+        )
+
+    params = mock_call.call_args[0][1]
+    # Only limit and offset should be present (sort/order omitted when default)
+    assert set(params.keys()) == {"limit", "offset"}
+
+
+# --- Issue #177: search_decisions via cstp.queryDecisions ---
+
+
+def test_search_decisions_calls_query_decisions_method() -> None:
+    """Test search_decisions calls cstp.queryDecisions for semantic search."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.search_decisions(query="architecture patterns")
+
+    mock_call.assert_called_once()
+    assert mock_call.call_args[0][0] == "cstp.queryDecisions"
+
+
+def test_search_decisions_params() -> None:
+    """Test search_decisions sends correct params."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.search_decisions(query="test query", limit=10, category="process")
+
+    params = mock_call.call_args[0][1]
+    assert params["query"] == "test query"
+    assert params["limit"] == 10
+    assert params["category"] == "process"
+
+
+def test_search_decisions_parses_response() -> None:
+    """Test search_decisions returns parsed decisions and total."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {
+        "decisions": [
+            {
+                "id": "srch0001",
+                "decision": "Found via semantic search",
+                "category": "architecture",
+                "stakes": "medium",
+                "confidence": 0.85,
+                "created_at": "2026-02-18T10:00:00Z",
+            },
+        ],
+        "total": 1,
+    }
+
+    with patch.object(client, "_call", return_value=mock_result):
+        decisions, total = client.search_decisions(query="search test")
+
+    assert total == 1
+    assert len(decisions) == 1
+    assert decisions[0].id == "srch0001"
+
+
+def test_search_decisions_without_category() -> None:
+    """Test search_decisions omits category when None."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"decisions": [], "total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.search_decisions(query="test")
+
+    params = mock_call.call_args[0][1]
+    assert "category" not in params
+
+
+# --- Issue #177: get_stats via cstp.getStats ---
+
+
+def test_get_stats_calls_correct_method() -> None:
+    """Test get_stats calls cstp.getStats."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"total": 0, "byCategory": {}}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.get_stats()
+
+    mock_call.assert_called_once_with("cstp.getStats", {})
+
+
+def test_get_stats_with_filters() -> None:
+    """Test get_stats passes date range and project filters."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"total": 10}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.get_stats(
+            date_from="2026-01-01", date_to="2026-02-01", project="owner/repo",
+        )
+
+    params = mock_call.call_args[0][1]
+    assert params["dateFrom"] == "2026-01-01"
+    assert params["dateTo"] == "2026-02-01"
+    assert params["project"] == "owner/repo"
+
+
+def test_get_stats_returns_raw_dict() -> None:
+    """Test get_stats returns the raw stats dict from server."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {
+        "total": 25,
+        "byCategory": {"architecture": 10},
+        "byStakes": {"high": 5},
+        "byStatus": {"pending": 20},
+        "byAgent": {"agent-1": 12},
+        "byDay": [{"date": "2026-02-18", "count": 5}],
+        "topTags": [{"tag": "testing", "count": 8}],
+        "recentActivity": {"last_24h": 3},
+    }
+
+    with patch.object(client, "_call", return_value=mock_result):
+        result = client.get_stats()
+
+    assert result["total"] == 25
+    assert result["byCategory"]["architecture"] == 10
+    assert result["byStakes"]["high"] == 5
+    assert len(result["topTags"]) == 1
+
+
+def test_get_stats_omits_none_params() -> None:
+    """Test get_stats omits None params."""
+    from dashboard.cstp_client import CSTPClient
+
+    client = CSTPClient("http://localhost:9991", "test-token")
+    mock_result = {"total": 0}
+
+    with patch.object(client, "_call", return_value=mock_result) as mock_call:
+        client.get_stats(date_from=None, date_to=None, project=None)
+
+    params = mock_call.call_args[0][1]
+    assert params == {}
