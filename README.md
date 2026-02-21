@@ -15,20 +15,33 @@ Cognition Engines gives AI agents a memory of their decisions — what they deci
 - **Deliberation Traces**: Auto-captures the reasoning chain (queries, guardrail checks) leading to each decision
 - **Bridge Search**: Query by structure ("what does it look like?") or function ("what problem does it solve?")
 - **MCP + JSON-RPC**: Framework-agnostic — works with Claude Code, Claude Desktop, OpenClaw, LangChain, or raw curl
+- **SQLite Storage**: WAL-mode SQLite with FTS5 full-text search. 8-42x faster than YAML. Auto-migration from YAML on startup
 - **Pluggable Storage**: VectorStore abstraction supports ChromaDB (default), with Weaviate, pgvector, Qdrant planned
 
 ## Quick Start
 
-### Docker (Recommended)
+### Try the Demo (Fastest)
 
 ```bash
 git clone https://github.com/tfatykhov/cognition-agent-decisions.git
-cd cognition-agent-decisions
+cd cognition-agent-decisions/demo
 
+python3 seed_data.py          # Generate sample decisions
+docker compose up --build     # Launch full stack
+
+# Dashboard: http://localhost:8080 (admin / demo)
+# Watch the MCP agent: docker compose logs -f demo-agent
+```
+
+The demo launches CSTP server + ChromaDB + Dashboard + a reference MCP agent that follows the [FORGE protocol](#forge-plugin-for-claude-code). See [demo/README.md](demo/README.md) for details.
+
+### Docker (Production)
+
+```bash
 cp .env.example .env
 # Edit .env: set GEMINI_API_KEY and CSTP_AUTH_TOKENS
 
-docker-compose up -d
+docker compose up -d
 curl http://localhost:8100/health
 ```
 
@@ -177,19 +190,23 @@ Returns active tracker sessions with composite keys, input counts, thought text,
 
 ![Cognition Engines Architecture](docs/architecture.png)
 
-### Pluggable Storage (F048)
+### Storage (F050)
 
-Vector storage and embeddings are abstracted behind `VectorStore` and `EmbeddingProvider` interfaces:
+Decision storage uses SQLite (WAL mode, FTS5) by default. Vector search uses ChromaDB.
 
 ```bash
-# Default: ChromaDB + Gemini
+# Decision storage (default: sqlite)
+CSTP_STORAGE=sqlite
+CSTP_DB_PATH=data/decisions.db
+
+# Vector storage (default: chromadb)
 VECTOR_BACKEND=chromadb
 EMBEDDING_PROVIDER=gemini
 
 # Testing: in-memory (no external services)
 VECTOR_BACKEND=memory
 
-# Coming soon: Weaviate, pgvector, Qdrant, OpenAI, Ollama
+# Auto-migration: YAML decisions are migrated to SQLite on startup
 ```
 
 ## Core Concepts
@@ -232,18 +249,17 @@ See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature ca
 | v0.8.0 | Core CSTP Server, Docker, Dashboard (F001-F011) | ✅ Shipped |
 | v0.9.0 | Hybrid Retrieval, Drift Alerts, Calibration (F014-F017) | ✅ Shipped |
 | v0.10.0 | MCP Server, Deliberation Traces, Bridge Definitions, Quality (F019-F028) | ✅ Shipped |
-| v0.11.0 | Pre-Action Hook, Session Context, Dashboard, Website, Pluggable Storage (F027-F028, F046-F048) | ✅ Shipped |
-| v0.12.0 | Agent Work Discovery, Graph Storage, Pluggable Storage (F044, F045, F048) | ✅ Shipped |
-| v0.13.0 | Memory Compaction, Circuit Breakers (F041, F030) | 🚧 In Progress |
+| v0.11.0 | Pre-Action Hook, Session Context, Website (F046-F048) | ✅ Shipped |
+| v0.14.0 | Multi-Agent Isolation, Live Deliberation Viewer, Memory Compaction, Graph Storage (F041, F044-F045, F049) | ✅ Shipped |
+| v0.15.0 | SQLite Storage, Auto-Migration, 8-42x Performance, Enriched Search, Dashboard Integration (F050) | ✅ Shipped |
 
 ### Upcoming
 
 | Priority | Features |
 |----------|----------|
-| **P0** | F044 Agent Work Discovery (`cstp.ready`) |
-| **P1** | F041 Memory Compaction, F045 Graph Storage, F030 Circuit Breakers, Weaviate/pgvector backends |
-| **P2** | F034 Decomposed Confidence, F040 Task-Decision Graph, F033 Censor Layer |
-| **P3** | F035-F039 Multi-Agent Federation, F043 Distributed Merge |
+| **P1** | F051 Docker-Compose Full Stack Demo ✅, F030 Circuit Breakers, Weaviate/pgvector backends |
+| **P2** | F052 Dashboard Export (Grafana/Prometheus), F053 Query Deduplication Cache |
+| **P3** | F034 Decomposed Confidence, F035-F039 Multi-Agent Federation, F043 Distributed Merge |
 
 ### Research Foundations
 
@@ -270,10 +286,15 @@ cognition-agent-decisions/
 │   │   └── memory.py          # In-memory backend (testing)
 │   └── embeddings/            # F048 Pluggable embeddings
 │       └── gemini.py          # Gemini backend
-├── a2a/mcp_server.py          # MCP Server (11 tools)
+├── a2a/mcp_server.py          # MCP Server (14+ tools)
+├── a2a/cstp/storage/          # F050 Pluggable decision storage
+│   ├── sqlite.py              # SQLite backend (WAL, FTS5)
+│   ├── yaml_fs.py             # YAML backend (legacy)
+│   └── memory.py              # In-memory backend (testing)
 ├── a2a/server.py              # FastAPI server
 ├── dashboard/                 # Web dashboard (Flask)
-├── docs/features/             # Feature specs (F001-F048)
+├── demo/                      # Full stack demo (docker compose)
+├── docs/features/             # Feature specs (F001-F053)
 ├── guardrails/                # YAML guardrail definitions
 ├── tests/                     # Test suite
 ├── website/                   # VitePress docs (cognition-engines.ai)
