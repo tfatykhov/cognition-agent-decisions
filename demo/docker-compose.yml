@@ -1,0 +1,115 @@
+##############################################################################
+# Cognition Engines - Full Stack Demo
+#
+# Usage:
+#   docker compose up
+#
+# Services:
+#   - CSTP Server:  http://localhost:8100  (JSON-RPC + MCP)
+#   - Dashboard:    http://localhost:8080  (login: admin / demo)
+#   - ChromaDB:     http://localhost:8000  (vector store)
+#   - Demo Agent:   runs MCP scenarios in a loop
+#
+# The demo starts with ~30 pre-loaded decisions so the dashboard
+# is interesting from the first moment. The demo agent adds more
+# decisions in real-time via MCP.
+##############################################################################
+
+services:
+  # ---------- ChromaDB (vector store) ----------
+  chromadb:
+    image: chromadb/chroma:0.4.22
+    container_name: demo-chromadb
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+      - ALLOW_RESET=false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - cstp-demo
+
+  # ---------- CSTP Server (decision intelligence) ----------
+  cstp-server:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: demo-cstp-server
+    ports:
+      - "${CSTP_PORT:-8100}:8100"
+    environment:
+      - CHROMA_URL=http://chromadb:8000
+      - CSTP_STORAGE=sqlite
+      - CSTP_DB_PATH=/app/data/decisions.db
+      - GRAPH_DATA_PATH=/app/data/graph_edges.jsonl
+      - CSTP_PORT=8100
+    volumes:
+      - ./seed-data:/app/data
+      - ./config:/app/config:ro
+      - ../guardrails:/app/guardrails:ro
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - cstp-demo
+
+  # ---------- Dashboard (Flask + HTMX) ----------
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    container_name: demo-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    environment:
+      - CSTP_URL=http://cstp-server:8100
+      - CSTP_TOKEN=demo-token
+      - DASHBOARD_USER=admin
+      - DASHBOARD_PASS=demo
+      - SECRET_KEY=demo-secret-key
+    depends_on:
+      cstp-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - cstp-demo
+
+  # ---------- Demo Agent (MCP client) ----------
+  demo-agent:
+    build:
+      context: ./demo-agent
+      dockerfile: Dockerfile
+    container_name: demo-agent
+    environment:
+      - CSTP_URL=http://cstp-server:8100
+      - DEMO_INTERVAL=${DEMO_INTERVAL:-60}
+    depends_on:
+      cstp-server:
+        condition: service_healthy
+    networks:
+      - cstp-demo
+
+volumes:
+  chroma_data:
+
+networks:
+  cstp-demo:
+    driver: bridge
