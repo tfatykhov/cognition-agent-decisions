@@ -38,8 +38,9 @@ logger = logging.getLogger("demo-agent")
 
 CSTP_URL = os.environ.get("CSTP_URL", "http://cstp-server:8100")
 MCP_URL = f"{CSTP_URL}/mcp"
+AUTH_TOKEN = os.environ.get("CSTP_TOKEN", "demo-token")
 AGENT_ID = "demo-agent"
-LOOP_INTERVAL = int(os.environ.get("DEMO_INTERVAL", "30"))
+LOOP_INTERVAL = int(os.environ.get("DEMO_INTERVAL", "60"))
 
 
 async def call_tool(session: ClientSession, name: str, args: dict) -> dict:
@@ -334,7 +335,8 @@ async def main() -> None:
         logger.info(f"{'#' * 60}")
 
         try:
-            async with streamablehttp_client(MCP_URL) as (read, write, _):
+            headers = {"Authorization": f"Bearer {AUTH_TOKEN}"}
+            async with streamablehttp_client(MCP_URL, headers=headers) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()
                     logger.info("MCP session initialized")

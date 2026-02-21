@@ -100,6 +100,7 @@ services:
     container_name: demo-agent
     environment:
       - CSTP_URL=http://cstp-server:8100
+      - CSTP_TOKEN=demo-token
       - DEMO_INTERVAL=${DEMO_INTERVAL:-60}
     depends_on:
       cstp-server:

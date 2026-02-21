@@ -9,7 +9,7 @@ to make the dashboard interesting from the start.
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Realistic demo decisions organized by category
@@ -551,11 +551,11 @@ def create_database(db_path: str) -> None:
         CREATE INDEX IF NOT EXISTS idx_decision_tags_tag ON decision_tags(tag);
     """)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     decision_ids = {}  # slug -> uuid for graph edges
 
     for i, d in enumerate(DECISIONS):
-        decision_id = str(uuid.uuid4())[:8] + str(uuid.uuid4())[8:]
+        decision_id = str(uuid.uuid4())
         date = (now - timedelta(days=d["days_ago"])).strftime("%Y-%m-%d")
 
         # Create a slug for graph edge mapping
@@ -675,7 +675,9 @@ def create_database(db_path: str) -> None:
 
 if __name__ == "__main__":
     import sys
-    output = sys.argv[1] if len(sys.argv) > 1 else "demo/seed-data/decisions.db"
+    # Script-relative path so it works from any directory
+    default_path = Path(__file__).parent / "seed-data" / "decisions.db"
+    output = sys.argv[1] if len(sys.argv) > 1 else str(default_path)
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     # Remove existing to start fresh
     Path(output).unlink(missing_ok=True)
