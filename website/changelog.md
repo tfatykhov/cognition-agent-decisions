@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.15.0 - SQLite Storage & Performance
+*February 21, 2026*
+
+SQLite-backed storage with 8-42x performance gains, enriched search results, YAML auto-migration, and dashboard server-side integration.
+
+### F050: SQLite Storage Layer
+- **SQLite backend with WAL mode** - Full ACID compliance, concurrent reads, ~900 lines of battle-tested storage code
+- **Normalized schema** - Separate tables for tags, reasons, bridge definitions, and deliberation traces
+- **FTS5 full-text search** - Keyword search on decision text, context, and tags
+- **Factory pattern** - `CSTP_STORAGE=sqlite` env var switches backend; `CSTP_DB_PATH` for file location
+- **Abstract `DecisionStore` ABC** - Clean interface for future storage backends
+
+### Auto-Migration
+- **YAML → SQLite migration on startup** - Automatic, safe, uses upserts (re-runnable)
+- **Standalone migration script** - `scripts/migrate_yaml_to_sqlite.py` with 17 tests
+- **Zero data loss** - All fields preserved including bridge definitions, tags, reasons, and project context
+
+### Performance
+- **queryDecisions: 0.37s** (was 3.16s with YAML — **8.5x faster**)
+- **getCalibration: 0.06s** (was 2.54s — **42x faster**)
+- **getDecision: 5.8ms** (was 27ms — **4.7x faster**)
+- **listDecisions: 6.7ms**, getStats: 8ms
+
+### Enriched Search
+- **Bridge in search results** - `DecisionSummary` now includes structure/function bridge definitions (~200 bytes each)
+- **Enriched pre_action** - Relevant decisions include outcome, reasons, and lessons learned
+- **Deliberation on-demand** - Full traces (2-5KB) only via `getDecision`, not in list results
+
+### Dashboard Integration
+- **Server-side filtering** - Dashboard wired to `listDecisions`/`getStats` APIs instead of client-side YAML scanning
+- **Decision detail page** - Full text, recorded_by attribution, strength bars, graph neighbor links
+- **Calibration service refactored** - Uses `DecisionStore.list()` instead of YAML file globbing
+
+### Bug Fixes
+- Fix `dict`-type `project` field handling in SQLite storage
+- Fix `reindex_decisions()` to delegate to `reindex_decision()` for full metadata rebuild
+- Fix deliberation tracking in `pre_action` for MCP visibility
+- Fix `safe_auto_link()` in `pre_action` auto_record path
+
 ## v0.14.0 - Multi-Agent Isolation & Live Deliberation
 *February 16, 2026*
 
