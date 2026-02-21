@@ -354,6 +354,41 @@ class CSTPClient:
             ))
         return neighbors
 
+    def list_breakers(self) -> list[dict]:
+        """List all circuit breakers with current state.
+
+        Returns:
+            List of breaker dicts with scope, state, failure_count, etc.
+        """
+        result = self._call("cstp.listBreakers", {})
+        return result.get("breakers", [])
+
+    def get_circuit_state(self, scope: str) -> dict:
+        """Get circuit breaker state for a specific scope.
+
+        Args:
+            scope: Breaker scope (e.g. "stakes:high")
+
+        Returns:
+            Breaker state dict.
+        """
+        return self._call("cstp.getCircuitState", {"scope": scope})
+
+    def reset_circuit(self, scope: str, probe_first: bool = False) -> dict:
+        """Manually reset an OPEN circuit breaker.
+
+        Args:
+            scope: Breaker scope to reset.
+            probe_first: If True, transition to HALF_OPEN instead of CLOSED.
+
+        Returns:
+            Result dict with previous_state and new_state.
+        """
+        params: dict = {"scope": scope}
+        if probe_first:
+            params["probeFirst"] = True
+        return self._call("cstp.resetCircuit", params)
+
     def health_check(self) -> bool:
         """Check if CSTP server is reachable.
         

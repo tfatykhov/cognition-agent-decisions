@@ -48,6 +48,10 @@
                     <span class="sidebar-link-icon">&#128302;</span>
                     Deliberation
                 </a>
+                <a href="{{ url_for('breakers') }}" class="sidebar-link {% if request.endpoint in ('breakers', 'breakers_partial') %}active{% endif %}">
+                    <span class="sidebar-link-icon">&#9889;</span>
+                    Circuit Breakers
+                </a>
             </nav>
 
             <div class="sidebar-footer">

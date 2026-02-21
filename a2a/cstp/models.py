@@ -282,6 +282,11 @@ class GuardrailViolation:
     message: str
     severity: str = "block"
     suggestion: str | None = None
+    # F030: Circuit breaker fields (optional)
+    type: str | None = None  # "static" or "circuit_breaker"
+    state: str | None = None  # "open", "half_open"
+    failure_rate: float | None = None
+    reset_at: str | None = None  # ISO datetime
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dict."""
@@ -293,6 +298,15 @@ class GuardrailViolation:
         }
         if self.suggestion:
             result["suggestion"] = self.suggestion
+        # F030: Include circuit breaker fields when present
+        if self.type:
+            result["type"] = self.type
+        if self.state:
+            result["state"] = self.state
+        if self.failure_rate is not None:
+            result["failureRate"] = self.failure_rate
+        if self.reset_at:
+            result["resetAt"] = self.reset_at
         return result
 
 
@@ -673,6 +687,7 @@ class SessionContextResponse:
     ready_queue: list[ReadyQueueItem] = field(default_factory=list)
     confirmed_patterns: list[ConfirmedPattern] = field(default_factory=list)
     wisdom_entries: list["WisdomEntry"] = field(default_factory=list)
+    circuit_breakers: list[dict[str, Any]] = field(default_factory=list)
     query_time_ms: int = 0
     markdown: str | None = None
 
@@ -691,6 +706,8 @@ class SessionContextResponse:
         }
         if self.wisdom_entries:
             result["wisdom"] = [w.to_dict() for w in self.wisdom_entries]
+        if self.circuit_breakers:
+            result["circuitBreakers"] = self.circuit_breakers
         return result
 
 
@@ -1478,4 +1495,98 @@ class GetStatsResponse:
             "byDay": self.by_day,
             "topTags": self.top_tags,
             "recentActivity": self.recent_activity,
+        }
+
+
+# ============================================================================
+# F030: Circuit Breaker models
+# ============================================================================
+
+
+@dataclass(slots=True)
+class GetCircuitStateRequest:
+    """Request for cstp.getCircuitState (F030)."""
+
+    scope: str
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "GetCircuitStateRequest":
+        """Create from JSON-RPC params."""
+        scope = params.get("scope", "")
+        if not scope:
+            raise ValueError("Missing required parameter: scope")
+        return cls(scope=scope)
+
+
+@dataclass(slots=True)
+class GetCircuitStateResponse:
+    """Response for cstp.getCircuitState (F030)."""
+
+    scope: str
+    state: str
+    failure_count: int
+    failure_threshold: int
+    window_ms: int
+    cooldown_ms: int
+    last_failure: str | None = None
+    opened_at: str | None = None
+    reset_at: str | None = None
+    cooldown_remaining_ms: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        result: dict[str, Any] = {
+            "scope": self.scope,
+            "state": self.state,
+            "failureCount": self.failure_count,
+            "failureThreshold": self.failure_threshold,
+            "windowMs": self.window_ms,
+            "cooldownMs": self.cooldown_ms,
+        }
+        if self.last_failure:
+            result["lastFailure"] = self.last_failure
+        if self.opened_at:
+            result["openedAt"] = self.opened_at
+        if self.reset_at:
+            result["resetAt"] = self.reset_at
+        if self.cooldown_remaining_ms is not None:
+            result["cooldownRemainingMs"] = self.cooldown_remaining_ms
+        return result
+
+
+@dataclass(slots=True)
+class ResetCircuitRequest:
+    """Request for cstp.resetCircuit (F030)."""
+
+    scope: str
+    probe_first: bool = False
+
+    @classmethod
+    def from_params(cls, params: dict[str, Any]) -> "ResetCircuitRequest":
+        """Create from JSON-RPC params (camelCase support)."""
+        scope = params.get("scope", "")
+        if not scope:
+            raise ValueError("Missing required parameter: scope")
+        probe_first = bool(
+            params.get("probeFirst", params.get("probe_first", False))
+        )
+        return cls(scope=scope, probe_first=probe_first)
+
+
+@dataclass(slots=True)
+class ResetCircuitResponse:
+    """Response for cstp.resetCircuit (F030)."""
+
+    scope: str
+    previous_state: str
+    new_state: str
+    message: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict with camelCase keys."""
+        return {
+            "scope": self.scope,
+            "previousState": self.previous_state,
+            "newState": self.new_state,
+            "message": self.message,
         }

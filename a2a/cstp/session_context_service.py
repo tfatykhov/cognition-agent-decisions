@@ -105,6 +105,17 @@ async def get_session_context(
         except Exception as e:
             logger.warning("Failed to build wisdom for session context: %s", e)
 
+    # --- Circuit Breakers (F030) ---
+    circuit_breakers: list[dict[str, Any]] = []
+    try:
+        from .circuit_breaker_service import get_circuit_breaker_manager
+
+        cb_manager = await get_circuit_breaker_manager()
+        if cb_manager.is_initialized:
+            circuit_breakers = await cb_manager.get_non_closed_summary()
+    except Exception as e:
+        logger.debug("Circuit breaker summary unavailable: %s", e)
+
     query_time_ms = int((time.time() - start_time) * 1000)
 
     response = SessionContextResponse(
@@ -115,6 +126,7 @@ async def get_session_context(
         ready_queue=ready_queue,
         confirmed_patterns=confirmed_patterns,
         wisdom_entries=wisdom_entries,
+        circuit_breakers=circuit_breakers,
         query_time_ms=query_time_ms,
     )
 
@@ -334,6 +346,28 @@ def _render_markdown(
             action = g.get("action", "warn")
             desc = g.get("description", g.get("id", ""))
             lines.append(f"- [{action}] {desc}")
+        lines.append("")
+
+    # Circuit Breakers (F030) — only non-CLOSED
+    if response.circuit_breakers:
+        lines.append("### Circuit Breakers")
+        for cb in response.circuit_breakers:
+            state_upper = cb.get("state", "unknown").upper()
+            scope = cb.get("scope", "?")
+            fc = cb.get("failure_count", 0)
+            ft = cb.get("failure_threshold", 0)
+            remaining_ms = cb.get("cooldown_remaining_ms")
+            reset_info = ""
+            if remaining_ms is not None and remaining_ms > 0:
+                remaining_min = remaining_ms // 60_000
+                if remaining_min > 0:
+                    reset_info = f", resets in {remaining_min}m"
+                else:
+                    remaining_sec = remaining_ms // 1000
+                    reset_info = f", resets in {remaining_sec}s"
+            lines.append(
+                f"- [{state_upper}] {scope} \u2014 {fc}/{ft} failures{reset_info}"
+            )
         lines.append("")
 
     # Calibration
