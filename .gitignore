@@ -36,3 +36,5 @@ website/.vitepress/cache/
 .uv.lock
 uv.lock
 *.lock
+demo/seed-data/decisions.db
+demo/seed-data/graph_edges.jsonl
