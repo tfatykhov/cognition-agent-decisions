@@ -676,3 +676,22 @@ class GetNeighborsInput(BaseModel):
         le=100,
         description="Maximum neighbors to return (1-100)",
     )
+
+
+# ============================================================================
+# F030: Circuit breaker tools
+# ============================================================================
+
+
+class GetCircuitStateInput(BaseModel):
+    """Input for the get_circuit_state tool."""
+
+    scope: str = Field(
+        ...,
+        min_length=1,
+        description="Circuit breaker scope to query (e.g. 'stakes:high', 'category:tooling', 'global')",
+    )
+
+
+class ListBreakersInput(BaseModel):
+    """Input for the list_breakers tool (no required fields)."""

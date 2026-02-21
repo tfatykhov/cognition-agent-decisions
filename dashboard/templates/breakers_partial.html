@@ -1,0 +1,70 @@
+<span id="breaker-status" hx-swap-oob="innerHTML">
+    {% if open_count %}{{ open_count }} tripped{% else %}All healthy{% endif %}
+</span>
+
+{% if breakers %}
+<div class="breaker-grid">
+    {% for b in breakers %}
+    <div class="breaker-card {{ b.state_class }}">
+        <div class="breaker-card-header">
+            <div class="breaker-scope">
+                <code class="breaker-scope-label">{{ b.scope }}</code>
+                {% if b.from_config %}
+                <span class="badge badge--neutral badge--xs">config</span>
+                {% else %}
+                <span class="badge badge--info badge--xs">dynamic</span>
+                {% endif %}
+            </div>
+            <span class="breaker-state-badge breaker-state-badge--{{ b.state }}">
+                {{ b.state_label }}
+            </span>
+        </div>
+
+        <div class="breaker-card-body">
+            <!-- Failure progress bar -->
+            <div class="breaker-progress">
+                <div class="breaker-progress-label">
+                    <span>Failures</span>
+                    <span>{{ b.failure_count }} / {{ b.failure_threshold }}</span>
+                </div>
+                <div class="breaker-progress-bar">
+                    <div class="breaker-progress-fill breaker-progress-fill--{{ b.state }}"
+                         style="width: {{ b.progress_pct }}%"></div>
+                </div>
+            </div>
+
+            <!-- Config details -->
+            <div class="breaker-details">
+                <div class="breaker-detail">
+                    <span class="breaker-detail-label">Window</span>
+                    <span class="breaker-detail-value">{{ b.window_display }}</span>
+                </div>
+                <div class="breaker-detail">
+                    <span class="breaker-detail-label">Cooldown</span>
+                    <span class="breaker-detail-value">{{ b.cooldown_period or '—' }}</span>
+                </div>
+                {% if b.cooldown_display %}
+                <div class="breaker-detail">
+                    <span class="breaker-detail-label">Resets in</span>
+                    <span class="breaker-detail-value breaker-detail-value--countdown">{{ b.cooldown_display }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if b.state == 'open' %}
+        <div class="breaker-card-footer">
+            <button class="btn btn--danger btn--sm" @click="$store.breakers.openReset('{{ b.scope }}')">
+                Reset
+            </button>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-state-icon">&#9889;</div>
+    <p class="empty-state-text">No circuit breakers configured.</p>
+</div>
+{% endif %}

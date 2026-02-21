@@ -409,6 +409,27 @@ async def evaluate_guardrails(
                 else:
                     warnings.append(gr)
 
+    # F030: Circuit breaker evaluation
+    try:
+        from .circuit_breaker_service import get_circuit_breaker_manager
+
+        mgr = await get_circuit_breaker_manager()
+        if mgr._initialized:
+            cb_results = await mgr.check(context)
+            for cbr in cb_results:
+                if cbr.blocked:
+                    violations.append(GuardrailResult(
+                        guardrail_id=f"circuit_breaker:{cbr.scope}",
+                        name=f"Circuit breaker ({cbr.scope})",
+                        message=cbr.message,
+                        severity="block",
+                    ))
+                    allowed = False
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Circuit breaker evaluation failed", exc_info=True,
+        )
+
     return EvaluationResult(
         allowed=allowed,
         violations=violations,

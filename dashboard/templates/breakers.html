@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Circuit Breakers - CSTP Dashboard{% endblock %}
+
+{% block header %}
+<div class="page-header">
+    <div class="page-header-row">
+        <div>
+            <h1 class="page-title">Circuit Breakers</h1>
+            <p class="page-subtitle">Automatic failure protection for decision scopes</p>
+        </div>
+        <div class="flex gap-3 items-center">
+            <span class="badge badge--{{ 'warning' if open_count else 'success' }}" id="breaker-status">
+                {% if open_count %}{{ open_count }} tripped{% else %}All healthy{% endif %}
+            </span>
+            <span class="text-muted text-sm">{{ total_count }} breaker{{ 's' if total_count != 1 }}</span>
+            <span class="text-muted text-sm" id="refresh-indicator">Auto-refreshing</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block head_scripts %}
+<script>
+    document.addEventListener('alpine:init', function () {
+        Alpine.store('breakers', {
+            resetScope: null,
+            showConfirm: false,
+            probeFirst: false,
+            openReset(scope) {
+                this.resetScope = scope;
+                this.probeFirst = false;
+                this.showConfirm = true;
+            },
+            closeReset() {
+                this.resetScope = null;
+                this.showConfirm = false;
+            }
+        });
+    });
+</script>
+{% endblock %}
+
+{% block content %}
+<!-- Reset confirmation modal -->
+<div x-data x-show="$store.breakers.showConfirm" x-cloak
+     class="modal-overlay" @click.self="$store.breakers.closeReset()">
+    <div class="modal-card">
+        <h3 class="modal-title">Reset Circuit Breaker</h3>
+        <p class="modal-text">
+            Reset breaker <strong x-text="$store.breakers.resetScope"></strong>?
+        </p>
+        <div class="modal-options">
+            <label class="modal-option">
+                <input type="radio" name="reset_mode" value="force"
+                       x-model="$store.breakers.probeFirst"
+                       :value="false" checked>
+                <span>Force close (OPEN &rarr; CLOSED)</span>
+            </label>
+            <label class="modal-option">
+                <input type="radio" name="reset_mode" value="probe"
+                       x-model="$store.breakers.probeFirst"
+                       :value="true">
+                <span>Cautious (OPEN &rarr; HALF_OPEN)</span>
+            </label>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn--ghost btn--sm" @click="$store.breakers.closeReset()">Cancel</button>
+            <form method="post" action="{{ url_for('breakers_reset') }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="scope" :value="$store.breakers.resetScope">
+                <input type="hidden" name="probe_first" :value="$store.breakers.probeFirst ? 'true' : 'false'">
+                <button type="submit" class="btn btn--danger btn--sm">Reset</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="breakers-content" x-data
+     hx-get="{{ url_for('breakers_partial') }}"
+     hx-trigger="every 5s"
+     hx-swap="innerHTML">
+    {% include "breakers_partial.html" %}
+</div>
+{% endblock %}

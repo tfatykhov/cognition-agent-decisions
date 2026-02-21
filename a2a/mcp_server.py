@@ -28,6 +28,7 @@ from mcp.types import (
 
 from .mcp_schemas import (
     CheckActionInput,
+    GetCircuitStateInput,
     GetDecisionInput,
     GetGraphInput,
     GetNeighborsInput,
@@ -35,6 +36,7 @@ from .mcp_schemas import (
     GetSessionContextInput,
     GetStatsInput,
     LinkDecisionsInput,
+    ListBreakersInput,
     LogDecisionInput,
     PreActionInput,
     QueryDecisionsInput,
@@ -314,6 +316,26 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema=_deref_schema(GetNeighborsInput.model_json_schema()),
         ),
+        # F030: Circuit breaker tools (read-only)
+        Tool(
+            name="get_circuit_state",
+            description=(
+                "Query the current state of a circuit breaker by scope. "
+                "Returns state, failure count, threshold, cooldown remaining, "
+                "and configuration details. Use to inspect a specific breaker."
+            ),
+            inputSchema=_deref_schema(GetCircuitStateInput.model_json_schema()),
+        ),
+        Tool(
+            name="list_breakers",
+            description=(
+                "List all circuit breakers with their current state. "
+                "Returns each breaker's scope, state, failure count, "
+                "threshold, and configuration. Use for overview of all "
+                "circuit breaker health."
+            ),
+            inputSchema=_deref_schema(ListBreakersInput.model_json_schema()),
+        ),
     ]
 
 
@@ -367,6 +389,12 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         if name == "get_neighbors":
             return await _handle_get_neighbors_mcp(arguments)
+
+        if name == "get_circuit_state":
+            return await _handle_get_circuit_state_mcp(arguments)
+
+        if name == "list_breakers":
+            return await _handle_list_breakers_mcp(arguments)
 
         raise ValueError(f"Unknown tool: {name}")
 
@@ -1095,6 +1123,51 @@ async def _handle_get_neighbors_mcp(arguments: dict[str, Any]) -> list[TextConte
             text=json.dumps(response.to_dict(), indent=2, default=str),
         )
     ]
+
+
+async def _handle_get_circuit_state_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle get_circuit_state tool call (F030)."""
+    from .cstp.circuit_breaker_service import _manager as cb_manager
+
+    args = GetCircuitStateInput(**arguments)
+
+    if cb_manager is None or not cb_manager._initialized:
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": "Circuit breaker manager not initialized"}),
+        )]
+
+    state = await cb_manager.get_state(args.scope)
+    if state is None:
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": f"No breaker found for scope: {args.scope}"}),
+        )]
+
+    return [TextContent(
+        type="text",
+        text=json.dumps(state, indent=2, default=str),
+    )]
+
+
+async def _handle_list_breakers_mcp(arguments: dict[str, Any]) -> list[TextContent]:
+    """Handle list_breakers tool call (F030)."""
+    from .cstp.circuit_breaker_service import _manager as cb_manager
+
+    # Validate input (no required fields, but validates structure)
+    ListBreakersInput(**arguments)
+
+    if cb_manager is None or not cb_manager._initialized:
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": "Circuit breaker manager not initialized"}),
+        )]
+
+    breakers = await cb_manager.list_breakers()
+    return [TextContent(
+        type="text",
+        text=json.dumps({"breakers": breakers, "total": len(breakers)}, indent=2, default=str),
+    )]
 
 
 async def run_stdio() -> None:

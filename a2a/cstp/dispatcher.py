@@ -46,6 +46,8 @@ from .models import (
     CheckGuardrailsRequest,
     CheckGuardrailsResponse,
     DecisionSummary,
+    GetCircuitStateRequest,
+    GetCircuitStateResponse,
     GetStatsRequest,
     GetStatsResponse,
     GuardrailViolation,
@@ -55,6 +57,8 @@ from .models import (
     QueryDecisionsRequest,
     QueryDecisionsResponse,
     RecordThoughtParams,
+    ResetCircuitRequest,
+    ResetCircuitResponse,
     SessionContextRequest,
 )
 from .preaction_service import pre_action
@@ -606,6 +610,42 @@ async def _handle_check_guardrails(params: dict[str, Any], agent_id: str) -> dic
         for w in eval_result.warnings
     ]
 
+    # F030: Enrich circuit breaker violations with F030-specific fields
+    try:
+        from .circuit_breaker_service import get_circuit_breaker_manager
+
+        mgr = await get_circuit_breaker_manager()
+        if mgr._initialized:
+            cb_results = await mgr.check(context)
+            cb_by_scope = {
+                cbr.scope: cbr for cbr in cb_results
+            }
+            # Enrich existing violations from breaker check
+            for v in violations:
+                if v.guardrail_id.startswith("circuit_breaker:"):
+                    scope = v.guardrail_id[len("circuit_breaker:"):]
+                    cbr = cb_by_scope.get(scope)
+                    if cbr:
+                        v.type = "circuit_breaker"
+                        v.state = cbr.state
+                        threshold = cbr.failure_threshold or 1
+                        v.failure_rate = (
+                            cbr.failure_count / threshold
+                        )
+                        if cbr.cooldown_remaining_ms is not None:
+                            from datetime import timedelta
+                            reset_dt = (
+                                datetime.now(UTC)
+                                + timedelta(
+                                    milliseconds=cbr.cooldown_remaining_ms,
+                                )
+                            )
+                            v.reset_at = reset_dt.isoformat()
+    except Exception:
+        logger.debug(
+            "Circuit breaker enrichment failed", exc_info=True,
+        )
+
     result = CheckGuardrailsResponse(
         allowed=eval_result.allowed,
         violations=violations,
@@ -961,6 +1001,104 @@ async def _handle_get_stats(params: dict[str, Any], agent_id: str) -> dict[str, 
     return response.to_dict()
 
 
+async def _handle_list_breakers(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.listBreakers method (F030).
+
+    Returns all circuit breakers with their current state.
+
+    Args:
+        params: JSON-RPC params (unused).
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Dict with 'breakers' list.
+    """
+    from .circuit_breaker_service import get_circuit_breaker_manager
+
+    mgr = await get_circuit_breaker_manager()
+    breakers = await mgr.list_breakers()
+    return {"breakers": breakers}
+
+
+async def _handle_get_circuit_state(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.getCircuitState method (F030).
+
+    Returns the current state of a circuit breaker by scope.
+
+    Args:
+        params: JSON-RPC params with 'scope' field.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Circuit breaker state as dict.
+    """
+    from .circuit_breaker_service import get_circuit_breaker_manager
+
+    request = GetCircuitStateRequest.from_params(params)
+    mgr = await get_circuit_breaker_manager()
+    state = await mgr.get_state(request.scope)
+    if state is None:
+        raise ValueError(
+            f"No circuit breaker found for scope: {request.scope}"
+        )
+
+    response = GetCircuitStateResponse(
+        scope=state["scope"],
+        state=state["state"],
+        failure_count=state["failure_count"],
+        failure_threshold=state["failure_threshold"],
+        window_ms=state["window_ms"],
+        cooldown_ms=state["cooldown_ms"],
+        cooldown_remaining_ms=state.get("cooldown_remaining_ms"),
+        opened_at=(
+            str(state["opened_at"]) if state.get("opened_at") else None
+        ),
+    )
+    return response.to_dict()
+
+
+async def _handle_reset_circuit(
+    params: dict[str, Any], agent_id: str,
+) -> dict[str, Any]:
+    """Handle cstp.resetCircuit method (F030).
+
+    Manually resets an OPEN circuit breaker.
+
+    Args:
+        params: JSON-RPC params with 'scope' and optional
+            'probeFirst' fields.
+        agent_id: Authenticated agent ID.
+
+    Returns:
+        Reset result with previous and new state.
+    """
+    from .circuit_breaker_service import get_circuit_breaker_manager
+
+    request = ResetCircuitRequest.from_params(params)
+    mgr = await get_circuit_breaker_manager()
+    result = await mgr.reset(
+        request.scope, probe_first=request.probe_first,
+    )
+
+    if "error" in result:
+        raise ValueError(result["error"])
+
+    response = ResetCircuitResponse(
+        scope=result["scope"],
+        previous_state=result["previous_state"],
+        new_state=result["new_state"],
+        message=(
+            f"Circuit breaker {request.scope} reset: "
+            f"{result['previous_state']} -> {result['new_state']}"
+        ),
+    )
+    return response.to_dict()
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -1003,6 +1141,15 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
     # F050: Structured Storage Layer
     dispatcher.register("cstp.listDecisions", _handle_list_decisions)
     dispatcher.register("cstp.getStats", _handle_get_stats)
+
+    # F030: Circuit Breaker
+    dispatcher.register("cstp.listBreakers", _handle_list_breakers)
+    dispatcher.register(
+        "cstp.getCircuitState", _handle_get_circuit_state,
+    )
+    dispatcher.register(
+        "cstp.resetCircuit", _handle_reset_circuit,
+    )
 
     # F126: Debug Tracker
     dispatcher.register("cstp.debugTracker", _handle_debug_tracker)
@@ -1316,7 +1463,35 @@ async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict
             level = determine_compaction_level(decision_data)
             result["compactionLevel"] = level
     except Exception:
-        logger.debug("Failed to annotate compaction level for %s", request.id, exc_info=True)
+        logger.debug(
+            "Failed to annotate compaction level for %s",
+            request.id, exc_info=True,
+        )
+
+    # F030: Record outcome for circuit breaker tracking
+    try:
+        from .circuit_breaker_service import get_circuit_breaker_manager
+        from .decision_service import find_decision as _find_decision
+
+        mgr = await get_circuit_breaker_manager()
+        if mgr._initialized:
+            found_dec = await _find_decision(request.id)
+            if found_dec:
+                _, dec_data = found_dec
+                cb_context: dict[str, Any] = {
+                    "category": dec_data.get("category"),
+                    "stakes": dec_data.get("stakes"),
+                    "agent_id": agent_id,
+                    "tags": dec_data.get("tags", []),
+                }
+                await mgr.record_outcome(
+                    cb_context, request.outcome,
+                )
+    except Exception:
+        logger.debug(
+            "Circuit breaker outcome recording failed for %s",
+            request.id, exc_info=True,
+        )
 
     return result
 

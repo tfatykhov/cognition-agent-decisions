@@ -621,6 +621,13 @@ tbody tr:hover {
   padding: var(--sp-1) var(--sp-3);
   font-size: var(--fs-xs);
 }
+.btn--danger {
+  background: var(--c-danger);
+  color: #fff;
+}
+.btn--danger:hover {
+  background: #ef5858;
+}
 
 /* --- Forms --- */
 .form-group {
@@ -1318,7 +1325,7 @@ details > :not(summary) {
   padding: var(--sp-1) var(--sp-3);
   background: var(--c-bg-tertiary);
   border: 1px solid var(--c-border);
-  border-radius: var(--radius-full);
+  border-radius: 9999px;
   color: var(--c-text-secondary);
   text-decoration: none;
   transition: all var(--transition-fast);
@@ -1679,4 +1686,204 @@ details > :not(summary) {
   color: var(--c-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* ============================================
+   Circuit Breaker Page (F030)
+   ============================================ */
+
+.breaker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--sp-4);
+}
+
+.breaker-card {
+  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.breaker-card:hover {
+  border-color: var(--c-border-light);
+}
+
+/* State-specific left border accents */
+.breaker--closed {
+  border-left: 3px solid var(--c-success);
+}
+.breaker--open {
+  border-left: 3px solid var(--c-danger);
+}
+.breaker--half-open {
+  border-left: 3px solid var(--c-warning);
+}
+
+.breaker-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--c-bg-tertiary);
+}
+
+.breaker-scope {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.breaker-scope-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--c-text-primary);
+}
+
+/* State badge */
+.breaker-state-badge {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.breaker-state-badge--closed {
+  background: var(--c-success-subtle);
+  color: var(--c-success);
+}
+.breaker-state-badge--open {
+  background: var(--c-danger-subtle);
+  color: var(--c-danger);
+}
+.breaker-state-badge--half_open {
+  background: var(--c-warning-subtle);
+  color: var(--c-warning);
+}
+
+.breaker-card-body {
+  padding: var(--sp-4);
+}
+
+/* Progress bar */
+.breaker-progress {
+  margin-bottom: var(--sp-3);
+}
+.breaker-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--c-text-secondary);
+  margin-bottom: var(--sp-1);
+}
+.breaker-progress-bar {
+  height: 6px;
+  background: var(--c-bg-elevated);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.breaker-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+.breaker-progress-fill--closed {
+  background: var(--c-success);
+}
+.breaker-progress-fill--open {
+  background: var(--c-danger);
+}
+.breaker-progress-fill--half_open {
+  background: var(--c-warning);
+}
+
+/* Detail rows */
+.breaker-details {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+.breaker-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.breaker-detail-label {
+  font-size: var(--fs-xs);
+  color: var(--c-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.breaker-detail-value {
+  font-size: var(--fs-sm);
+  color: var(--c-text-primary);
+  font-family: var(--font-mono);
+}
+.breaker-detail-value--countdown {
+  color: var(--c-warning);
+  font-weight: 600;
+}
+
+.breaker-card-footer {
+  padding: var(--sp-2) var(--sp-4) var(--sp-3);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Reset confirmation modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal-card {
+  background: var(--c-bg-secondary);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+  min-width: 360px;
+  max-width: 480px;
+}
+.modal-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--c-text-primary);
+  margin-bottom: var(--sp-2);
+}
+.modal-text {
+  font-size: var(--fs-sm);
+  color: var(--c-text-secondary);
+  margin-bottom: var(--sp-4);
+}
+.modal-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+.modal-option {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--c-text-primary);
+  cursor: pointer;
+}
+.modal-option input[type="radio"] {
+  accent-color: var(--c-accent);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+/* Extra-small badge variant */
+.badge--xs {
+  font-size: 0.625rem;
+  padding: 1px 5px;
 }

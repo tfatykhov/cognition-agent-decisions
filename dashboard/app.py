@@ -509,6 +509,119 @@ def deliberation_partial() -> str:
     )
 
 
+def _format_cooldown(ms: int | None) -> str:
+    """Format cooldown remaining milliseconds to human-readable string."""
+    if ms is None or ms <= 0:
+        return ""
+    seconds = ms // 1000
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    hours = seconds // 3600
+    mins = (seconds % 3600) // 60
+    if mins:
+        return f"{hours}h {mins}m"
+    return f"{hours}h"
+
+
+def _format_window(ms: int) -> str:
+    """Format window milliseconds to human-readable string."""
+    seconds = ms // 1000
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    hours = seconds // 3600
+    if hours < 24:
+        return f"{hours}h"
+    days = hours // 24
+    return f"{days}d"
+
+
+def _breaker_state_class(state: str) -> str:
+    """Return CSS modifier class for breaker state."""
+    return {
+        "closed": "breaker--closed",
+        "open": "breaker--open",
+        "half_open": "breaker--half-open",
+    }.get(state, "")
+
+
+def _enrich_breakers(breaker_list: list[dict]) -> None:
+    """Add display helpers to breaker dicts for templates."""
+    for b in breaker_list:
+        b["state_class"] = _breaker_state_class(b.get("state", ""))
+        b["state_label"] = b.get("state", "").upper().replace("_", " ")
+        b["cooldown_display"] = _format_cooldown(b.get("cooldown_remaining_ms"))
+        b["window_display"] = _format_window(b.get("window_ms", 0))
+        b["cooldown_period"] = _format_window(b.get("cooldown_ms", 0))
+        threshold = b.get("failure_threshold", 1)
+        count = b.get("failure_count", 0)
+        b["progress_pct"] = min(100, int((count / max(threshold, 1)) * 100))
+
+
+@app.route("/breakers")
+@auth
+def breakers() -> str:
+    """Circuit breaker status page."""
+    try:
+        breaker_list = cstp.list_breakers()
+    except CSTPError as e:
+        flash(f"Error loading breakers: {e}", "error")
+        breaker_list = []
+
+    _enrich_breakers(breaker_list)
+    open_count = sum(1 for b in breaker_list if b.get("state") != "closed")
+
+    return render_template(
+        "breakers.html",
+        breakers=breaker_list,
+        open_count=open_count,
+        total_count=len(breaker_list),
+    )
+
+
+@app.route("/breakers/partial")
+@auth
+def breakers_partial() -> str:
+    """Partial template for HTMX auto-refresh of breaker table."""
+    try:
+        breaker_list = cstp.list_breakers()
+    except CSTPError:
+        breaker_list = []
+
+    _enrich_breakers(breaker_list)
+    open_count = sum(1 for b in breaker_list if b.get("state") != "closed")
+
+    return render_template(
+        "breakers_partial.html",
+        breakers=breaker_list,
+        open_count=open_count,
+        total_count=len(breaker_list),
+    )
+
+
+@app.route("/breakers/reset", methods=["POST"])
+@auth
+def breakers_reset() -> Response:
+    """Reset an OPEN circuit breaker (admin action)."""
+    scope = request.form.get("scope", "")
+    probe_first = request.form.get("probe_first") == "true"
+
+    if not scope:
+        flash("Scope is required", "error")
+        return redirect(url_for("breakers"))
+
+    try:
+        result = cstp.reset_circuit(scope, probe_first=probe_first)
+        prev = result.get("previous_state", "?")
+        new = result.get("new_state", "?")
+        flash(f"Reset {scope}: {prev} \u2192 {new}", "success")
+    except CSTPError as e:
+        flash(f"Reset failed: {e}", "error")
+
+    return redirect(url_for("breakers"))
+
+
 @app.route("/calibration")
 @auth
 def calibration() -> str:
