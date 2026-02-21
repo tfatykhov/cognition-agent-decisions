@@ -60,8 +60,11 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | ~~F046~~ | ~~Pre-Action Hook API~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
 | ~~F047~~ | ~~Session Context Endpoint~~ | ~~Agentic Loop Integration~~ | *Shipped in v0.11.0* |
 | ~~F048~~ | ~~Multi-Vector-DB Support~~ | ~~Infrastructure~~ | *Shipped in v0.12.0* |
-| F049 | Live Deliberation Viewer | Dashboard + debugTracker | `F049-live-deliberation-viewer.md` |
-| F050 | SQLite Storage Layer | Infrastructure | `F050-sqlite-storage-layer.md` |
+| ~~F049~~ | ~~Live Deliberation Viewer~~ | ~~Dashboard + debugTracker~~ | *Shipped in v0.14.0* |
+| ~~F050~~ | ~~SQLite Storage Layer~~ | ~~Infrastructure~~ | *Shipped in v0.15.0* |
+| F051 | Docker-Compose Full Stack Demo | Adoption | `F051-docker-compose-demo.md` |
+| F052 | Pre-Built Decision Quality Dashboard | Observability | `F052-dashboard-export.md` |
+| F053 | Query Deduplication Cache | Performance | `F053-query-deduplication.md` |
 
 ## Retired IDs
 
