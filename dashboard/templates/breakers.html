@@ -43,9 +43,12 @@
 {% block content %}
 <!-- Reset confirmation modal -->
 <div x-data x-show="$store.breakers.showConfirm" x-cloak
-     class="modal-overlay" @click.self="$store.breakers.closeReset()">
+     class="modal-overlay"
+     @click.self="$store.breakers.closeReset()"
+     @keydown.escape.window="$store.breakers.closeReset()"
+     role="dialog" aria-modal="true" aria-labelledby="breaker-modal-title">
     <div class="modal-card">
-        <h3 class="modal-title">Reset Circuit Breaker</h3>
+        <h3 class="modal-title" id="breaker-modal-title">Reset Circuit Breaker</h3>
         <p class="modal-text">
             Reset breaker <strong x-text="$store.breakers.resetScope"></strong>?
         </p>

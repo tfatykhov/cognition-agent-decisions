@@ -414,7 +414,7 @@ async def evaluate_guardrails(
         from .circuit_breaker_service import get_circuit_breaker_manager
 
         mgr = await get_circuit_breaker_manager()
-        if mgr._initialized:
+        if mgr.is_initialized:
             cb_results = await mgr.check(context)
             for cbr in cb_results:
                 if cbr.blocked:

@@ -84,7 +84,7 @@ class CircuitBreaker:
     opened_at: float | None = None
     probe_in_flight: bool = False
     last_notification: float | None = None
-    last_activity: float = field(default_factory=time.monotonic)
+    last_activity: float = field(default_factory=time.time)
     from_config: bool = True  # False for dynamically created breakers
 
 
@@ -172,6 +172,10 @@ def load_breaker_configs(config_path: Path | None = None) -> list[CircuitBreaker
 
             for item in items:
                 if not isinstance(item, dict):
+                    logger.warning("Skipping non-dict circuit breaker item: %s", item)
+                    continue
+                if "scope" not in item:
+                    logger.warning("Skipping circuit breaker item without 'scope': %s", item)
                     continue
                 configs.append(CircuitBreakerConfig(
                     scope=item["scope"],
@@ -212,12 +216,14 @@ def _serialize_breaker(scope: str, breaker: CircuitBreaker) -> dict[str, Any]:
 def _save_all_breakers(
     breakers: dict[str, CircuitBreaker], path: Path
 ) -> None:
-    """Full rewrite of all breaker states to JSONL."""
+    """Full rewrite of all breaker states to JSONL (atomic via tmp+replace)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    tmp_path = path.with_suffix(".jsonl.tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
         for scope, breaker in breakers.items():
             line = json.dumps(_serialize_breaker(scope, breaker), ensure_ascii=False)
             f.write(line + "\n")
+    os.replace(tmp_path, path)
 
 
 def _append_breaker(scope: str, breaker: CircuitBreaker, path: Path) -> None:
@@ -273,7 +279,7 @@ def _load_breakers_from_jsonl(
             opened_at=data.get("opened_at"),
             probe_in_flight=bool(data.get("probe_in_flight", False)),
             last_notification=data.get("last_notification"),
-            last_activity=data.get("last_activity", time.monotonic()),
+            last_activity=data.get("last_activity", time.time()),
             from_config=from_config,
         )
 
@@ -304,6 +310,11 @@ class CircuitBreakerManager:
         self._lock = asyncio.Lock()
         self._initialized = False
 
+    @property
+    def is_initialized(self) -> bool:
+        """Whether the manager has been initialized."""
+        return self._initialized
+
     async def initialize(self) -> None:
         """Load configs from YAML and restore state from JSONL."""
         configs = load_breaker_configs(self._config_path)
@@ -328,37 +339,32 @@ class CircuitBreakerManager:
             len(self._breakers),
         )
 
-    def _get_or_create_breaker(self, scope: str) -> CircuitBreaker:
-        """Get existing breaker or create a dynamic one."""
-        if scope not in self._breakers:
-            config = self._configs.get(scope) or CircuitBreakerConfig(scope=scope)
-            self._breakers[scope] = CircuitBreaker(
-                config=config,
-                from_config=scope in self._configs,
-            )
-        return self._breakers[scope]
-
     def _evict_stale_window(self, breaker: CircuitBreaker) -> None:
         """Remove failure timestamps outside the sliding window."""
-        cutoff = time.monotonic() - breaker.config.window_seconds
+        cutoff = time.time() - breaker.config.window_seconds
         while breaker.failures and breaker.failures[0] < cutoff:
             breaker.failures.popleft()
 
-    def _check_lazy_cooldown(self, breaker: CircuitBreaker) -> None:
-        """Transition OPEN -> HALF_OPEN if cooldown has elapsed."""
+    def _check_lazy_cooldown(self, breaker: CircuitBreaker) -> bool:
+        """Transition OPEN -> HALF_OPEN if cooldown has elapsed.
+
+        Returns True if a state transition occurred, False otherwise.
+        """
         if (
             breaker.state is BreakerState.OPEN
             and breaker.opened_at is not None
         ):
-            elapsed = time.monotonic() - breaker.opened_at
+            elapsed = time.time() - breaker.opened_at
             if elapsed >= breaker.config.cooldown_seconds:
                 breaker.state = BreakerState.HALF_OPEN
                 breaker.probe_in_flight = False
-                breaker.last_activity = time.monotonic()
+                breaker.last_activity = time.time()
                 logger.info(
                     "Circuit breaker %s: OPEN -> HALF_OPEN (cooldown elapsed)",
                     breaker.config.scope,
                 )
+                return True
+        return False
 
     def _check_invariants(self, breaker: CircuitBreaker) -> None:
         """Verify post-mutation invariants (debug aid)."""
@@ -377,7 +383,7 @@ class CircuitBreakerManager:
             return False
         if breaker.last_notification is None:
             return True
-        return (time.monotonic() - breaker.last_notification) >= _NOTIFICATION_DEBOUNCE_SECONDS
+        return (time.time() - breaker.last_notification) >= _NOTIFICATION_DEBOUNCE_SECONDS
 
     def _emit_notification(
         self, scope: str, breaker: CircuitBreaker, event: str
@@ -385,7 +391,7 @@ class CircuitBreakerManager:
         """Emit a structured audit log notification."""
         if not self._should_notify(breaker):
             return
-        breaker.last_notification = time.monotonic()
+        breaker.last_notification = time.time()
         audit_entry = {
             "timestamp": datetime.now(UTC).isoformat(),
             "event": f"circuit_breaker_{event}",
@@ -429,7 +435,8 @@ class CircuitBreakerManager:
                     continue
 
                 self._evict_stale_window(breaker)
-                self._check_lazy_cooldown(breaker)
+                if self._check_lazy_cooldown(breaker):
+                    await self._persist_breaker(scope)
 
                 if breaker.state is BreakerState.CLOSED:
                     results.append(BreakerCheckResult(
@@ -444,7 +451,7 @@ class CircuitBreakerManager:
                 elif breaker.state is BreakerState.OPEN:
                     remaining_ms = None
                     if breaker.opened_at is not None:
-                        elapsed = time.monotonic() - breaker.opened_at
+                        elapsed = time.time() - breaker.opened_at
                         remaining = breaker.config.cooldown_seconds - elapsed
                         remaining_ms = max(0, int(remaining * 1000))
 
@@ -466,7 +473,7 @@ class CircuitBreakerManager:
                     if not breaker.probe_in_flight:
                         # Allow one probe through
                         breaker.probe_in_flight = True
-                        breaker.last_activity = time.monotonic()
+                        breaker.last_activity = time.time()
                         await self._persist_breaker(scope)
                         results.append(BreakerCheckResult(
                             scope=scope,
@@ -513,7 +520,7 @@ class CircuitBreakerManager:
                 if not matches_scope(scope, context):
                     continue
 
-                breaker.last_activity = time.monotonic()
+                breaker.last_activity = time.time()
 
                 if is_failure:
                     self._record_failure(scope, breaker)
@@ -526,13 +533,13 @@ class CircuitBreakerManager:
     def _record_failure(self, scope: str, breaker: CircuitBreaker) -> None:
         """Record a failure for a breaker (called under lock)."""
         if breaker.state is BreakerState.CLOSED:
-            breaker.failures.append(time.monotonic())
+            breaker.failures.append(time.time())
             self._evict_stale_window(breaker)
 
             if len(breaker.failures) >= breaker.config.failure_threshold:
                 # Trip the breaker
                 breaker.state = BreakerState.OPEN
-                breaker.opened_at = time.monotonic()
+                breaker.opened_at = time.time()
                 breaker.probe_in_flight = False
                 logger.warning(
                     "Circuit breaker TRIPPED for %s: %d/%d failures",
@@ -545,7 +552,7 @@ class CircuitBreakerManager:
         elif breaker.state is BreakerState.HALF_OPEN:
             # Probe failed — back to OPEN
             breaker.state = BreakerState.OPEN
-            breaker.opened_at = time.monotonic()
+            breaker.opened_at = time.time()
             breaker.probe_in_flight = False
             logger.info(
                 "Circuit breaker %s: HALF_OPEN -> OPEN (probe failed)", scope
@@ -554,7 +561,7 @@ class CircuitBreakerManager:
 
         elif breaker.state is BreakerState.OPEN:
             # Already open — just record for stats, don't extend window
-            breaker.failures.append(time.monotonic())
+            breaker.failures.append(time.time())
             self._evict_stale_window(breaker)
 
     def _record_success(self, scope: str, breaker: CircuitBreaker) -> None:
@@ -585,11 +592,12 @@ class CircuitBreakerManager:
                 return None
 
             self._evict_stale_window(breaker)
-            self._check_lazy_cooldown(breaker)
+            if self._check_lazy_cooldown(breaker):
+                await self._persist_breaker(scope)
 
             cooldown_remaining_ms = None
             if breaker.state is BreakerState.OPEN and breaker.opened_at is not None:
-                elapsed = time.monotonic() - breaker.opened_at
+                elapsed = time.time() - breaker.opened_at
                 remaining = breaker.config.cooldown_seconds - elapsed
                 cooldown_remaining_ms = max(0, int(remaining * 1000))
 
@@ -636,13 +644,13 @@ class CircuitBreakerManager:
             if probe_first:
                 breaker.state = BreakerState.HALF_OPEN
                 breaker.probe_in_flight = False
-                breaker.last_activity = time.monotonic()
+                breaker.last_activity = time.time()
             else:
                 breaker.state = BreakerState.CLOSED
                 breaker.failures.clear()
                 breaker.opened_at = None
                 breaker.probe_in_flight = False
-                breaker.last_activity = time.monotonic()
+                breaker.last_activity = time.time()
 
             self._check_invariants(breaker)
             await self._persist_breaker(scope)
@@ -669,11 +677,12 @@ class CircuitBreakerManager:
             for scope in sorted(self._breakers.keys()):
                 breaker = self._breakers[scope]
                 self._evict_stale_window(breaker)
-                self._check_lazy_cooldown(breaker)
+                if self._check_lazy_cooldown(breaker):
+                    await self._persist_breaker(scope)
 
                 cooldown_remaining_ms = None
                 if breaker.state is BreakerState.OPEN and breaker.opened_at is not None:
-                    elapsed = time.monotonic() - breaker.opened_at
+                    elapsed = time.time() - breaker.opened_at
                     remaining = breaker.config.cooldown_seconds - elapsed
                     cooldown_remaining_ms = max(0, int(remaining * 1000))
 
@@ -699,7 +708,7 @@ class CircuitBreakerManager:
             Number of breakers evicted.
         """
         evicted = 0
-        now = time.monotonic()
+        now = time.time()
 
         async with self._lock:
             to_remove: list[str] = []
@@ -732,14 +741,15 @@ class CircuitBreakerManager:
         async with self._lock:
             for scope, breaker in self._breakers.items():
                 self._evict_stale_window(breaker)
-                self._check_lazy_cooldown(breaker)
+                if self._check_lazy_cooldown(breaker):
+                    await self._persist_breaker(scope)
 
                 if breaker.state is BreakerState.CLOSED:
                     continue
 
                 cooldown_remaining_ms = None
                 if breaker.state is BreakerState.OPEN and breaker.opened_at is not None:
-                    elapsed = time.monotonic() - breaker.opened_at
+                    elapsed = time.time() - breaker.opened_at
                     remaining = breaker.config.cooldown_seconds - elapsed
                     cooldown_remaining_ms = max(0, int(remaining * 1000))
 

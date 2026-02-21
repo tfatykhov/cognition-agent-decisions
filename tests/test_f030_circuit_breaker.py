@@ -182,8 +182,8 @@ class TestStateMachine:
             await mgr.record_outcome(ctx, "failure")
 
         # Simulate cooldown elapsed
-        base = time.monotonic()
-        with patch("a2a.cstp.circuit_breaker_service.time.monotonic", return_value=base + 2.0):
+        base = time.time()
+        with patch("a2a.cstp.circuit_breaker_service.time.time", return_value=base + 2.0):
             results = await mgr.check(ctx)
             assert results[0].state == "half_open"
             assert results[0].blocked is False
@@ -307,9 +307,9 @@ class TestSlidingWindow:
             await mgr.record_outcome(ctx, "failure")
 
         # Advance time beyond window
-        base = time.monotonic()
+        base = time.time()
         with patch(
-            "a2a.cstp.circuit_breaker_service.time.monotonic",
+            "a2a.cstp.circuit_breaker_service.time.time",
             return_value=base + 15.0,
         ):
             results = await mgr.check(ctx)
@@ -326,7 +326,7 @@ class TestSlidingWindow:
 
         # At base + 10.0, the first failure is exactly at the cutoff
         with patch(
-            "a2a.cstp.circuit_breaker_service.time.monotonic",
+            "a2a.cstp.circuit_breaker_service.time.time",
             return_value=base + 10.0,
         ):
             results = await mgr.check(_ctx())
@@ -346,7 +346,7 @@ class TestSlidingWindow:
         breaker = mgr._breakers["global"]
 
         # Inject old failures
-        old_time = time.monotonic() - 100.0
+        old_time = time.time() - 100.0
         breaker.failures = deque([old_time, old_time + 1.0])
 
         results = await mgr.check(_ctx())
@@ -763,7 +763,7 @@ class TestEdgeCases:
             config=_config(scope="agent:stale-bot"),
             state=BreakerState.CLOSED,
             failures=deque(),
-            last_activity=time.monotonic() - 100_000.0,  # Very old
+            last_activity=time.time() - 100_000.0,  # Very old
             from_config=False,
         )
 
@@ -776,7 +776,7 @@ class TestEdgeCases:
         mgr = await _make_manager(tmp_path, [cfg])
 
         # Make it look stale
-        mgr._breakers["global"].last_activity = time.monotonic() - 100_000.0
+        mgr._breakers["global"].last_activity = time.time() - 100_000.0
 
         evicted = await mgr.evict_stale()
         assert evicted == 0
@@ -788,8 +788,8 @@ class TestEdgeCases:
             config=_config(scope="agent:dynamic"),
             state=BreakerState.OPEN,
             failures=deque(),
-            opened_at=time.monotonic(),
-            last_activity=time.monotonic() - 100_000.0,
+            opened_at=time.time(),
+            last_activity=time.time() - 100_000.0,
             from_config=False,
         )
 
@@ -805,11 +805,11 @@ class TestEdgeCases:
         assert mgr._should_notify(breaker) is True
 
         # After notification, debounce
-        breaker.last_notification = time.monotonic()
+        breaker.last_notification = time.time()
         assert mgr._should_notify(breaker) is False
 
         # After debounce window
-        breaker.last_notification = time.monotonic() - 61.0
+        breaker.last_notification = time.time() - 61.0
         assert mgr._should_notify(breaker) is True
 
     async def test_get_state_unknown_scope(self, tmp_path: Path) -> None:
@@ -1007,14 +1007,12 @@ class TestModels:
             type="circuit_breaker",
             state="open",
             failure_rate=1.0,
-            recent_failures=["id1", "id2"],
             reset_at="2026-02-21T12:00:00Z",
         )
         d = v.to_dict()
         assert d["type"] == "circuit_breaker"
         assert d["state"] == "open"
         assert d["failureRate"] == 1.0
-        assert d["recentFailures"] == ["id1", "id2"]
         assert d["resetAt"] == "2026-02-21T12:00:00Z"
 
     def test_guardrail_violation_no_f030_fields(self) -> None:

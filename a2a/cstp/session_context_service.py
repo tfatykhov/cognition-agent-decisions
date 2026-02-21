@@ -108,9 +108,10 @@ async def get_session_context(
     # --- Circuit Breakers (F030) ---
     circuit_breakers: list[dict[str, Any]] = []
     try:
-        from .circuit_breaker_service import _manager as cb_manager
+        from .circuit_breaker_service import get_circuit_breaker_manager
 
-        if cb_manager is not None and cb_manager._initialized:
+        cb_manager = await get_circuit_breaker_manager()
+        if cb_manager.is_initialized:
             circuit_breakers = await cb_manager.get_non_closed_summary()
     except Exception as e:
         logger.debug("Circuit breaker summary unavailable: %s", e)

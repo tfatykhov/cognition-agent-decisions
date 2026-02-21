@@ -1127,17 +1127,12 @@ async def _handle_get_neighbors_mcp(arguments: dict[str, Any]) -> list[TextConte
 
 async def _handle_get_circuit_state_mcp(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle get_circuit_state tool call (F030)."""
-    from .cstp.circuit_breaker_service import _manager as cb_manager
+    from .cstp.circuit_breaker_service import get_circuit_breaker_manager
 
     args = GetCircuitStateInput(**arguments)
 
-    if cb_manager is None or not cb_manager._initialized:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "Circuit breaker manager not initialized"}),
-        )]
-
-    state = await cb_manager.get_state(args.scope)
+    mgr = await get_circuit_breaker_manager()
+    state = await mgr.get_state(args.scope)
     if state is None:
         return [TextContent(
             type="text",
@@ -1152,18 +1147,13 @@ async def _handle_get_circuit_state_mcp(arguments: dict[str, Any]) -> list[TextC
 
 async def _handle_list_breakers_mcp(arguments: dict[str, Any]) -> list[TextContent]:
     """Handle list_breakers tool call (F030)."""
-    from .cstp.circuit_breaker_service import _manager as cb_manager
+    from .cstp.circuit_breaker_service import get_circuit_breaker_manager
 
     # Validate input (no required fields, but validates structure)
     ListBreakersInput(**arguments)
 
-    if cb_manager is None or not cb_manager._initialized:
-        return [TextContent(
-            type="text",
-            text=json.dumps({"error": "Circuit breaker manager not initialized"}),
-        )]
-
-    breakers = await cb_manager.list_breakers()
+    mgr = await get_circuit_breaker_manager()
+    breakers = await mgr.list_breakers()
     return [TextContent(
         type="text",
         text=json.dumps({"breakers": breakers, "total": len(breakers)}, indent=2, default=str),

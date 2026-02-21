@@ -27,7 +27,12 @@
                     <span>Failures</span>
                     <span>{{ b.failure_count }} / {{ b.failure_threshold }}</span>
                 </div>
-                <div class="breaker-progress-bar">
+                <div class="breaker-progress-bar"
+                     role="progressbar"
+                     aria-valuenow="{{ b.failure_count }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ b.failure_threshold }}"
+                     aria-label="Failure count for {{ b.scope }}">
                     <div class="breaker-progress-fill breaker-progress-fill--{{ b.state }}"
                          style="width: {{ b.progress_pct }}%"></div>
                 </div>
@@ -54,7 +59,7 @@
 
         {% if b.state == 'open' %}
         <div class="breaker-card-footer">
-            <button class="btn btn--danger btn--sm" @click="$store.breakers.openReset('{{ b.scope }}')">
+            <button class="btn btn--danger btn--sm" @click="$store.breakers.openReset({{ b.scope|tojson }})">
                 Reset
             </button>
         </div>

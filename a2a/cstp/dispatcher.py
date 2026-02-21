@@ -615,29 +615,24 @@ async def _handle_check_guardrails(params: dict[str, Any], agent_id: str) -> dic
         from .circuit_breaker_service import get_circuit_breaker_manager
 
         mgr = await get_circuit_breaker_manager()
-        if mgr._initialized:
-            cb_results = await mgr.check(context)
-            cb_by_scope = {
-                cbr.scope: cbr for cbr in cb_results
-            }
-            # Enrich existing violations from breaker check
+        if mgr.is_initialized:
             for v in violations:
                 if v.guardrail_id.startswith("circuit_breaker:"):
                     scope = v.guardrail_id[len("circuit_breaker:"):]
-                    cbr = cb_by_scope.get(scope)
-                    if cbr:
+                    state_info = await mgr.get_state(scope)
+                    if state_info:
                         v.type = "circuit_breaker"
-                        v.state = cbr.state
-                        threshold = cbr.failure_threshold or 1
+                        v.state = state_info["state"]
+                        threshold = state_info.get("failure_threshold", 1)
                         v.failure_rate = (
-                            cbr.failure_count / threshold
+                            state_info["failure_count"] / max(threshold, 1)
                         )
-                        if cbr.cooldown_remaining_ms is not None:
+                        if state_info.get("cooldown_remaining_ms") is not None:
                             from datetime import timedelta
                             reset_dt = (
                                 datetime.now(UTC)
                                 + timedelta(
-                                    milliseconds=cbr.cooldown_remaining_ms,
+                                    milliseconds=state_info["cooldown_remaining_ms"],
                                 )
                             )
                             v.reset_at = reset_dt.isoformat()
@@ -1474,14 +1469,14 @@ async def _handle_review_decision(params: dict[str, Any], agent_id: str) -> dict
         from .decision_service import find_decision as _find_decision
 
         mgr = await get_circuit_breaker_manager()
-        if mgr._initialized:
+        if mgr.is_initialized:
             found_dec = await _find_decision(request.id)
             if found_dec:
                 _, dec_data = found_dec
                 cb_context: dict[str, Any] = {
                     "category": dec_data.get("category"),
                     "stakes": dec_data.get("stakes"),
-                    "agent_id": agent_id,
+                    "agent_id": dec_data.get("agent_id", agent_id),
                     "tags": dec_data.get("tags", []),
                 }
                 await mgr.record_outcome(

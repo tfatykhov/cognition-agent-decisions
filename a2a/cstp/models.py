@@ -286,7 +286,6 @@ class GuardrailViolation:
     type: str | None = None  # "static" or "circuit_breaker"
     state: str | None = None  # "open", "half_open"
     failure_rate: float | None = None
-    recent_failures: list[str] | None = None
     reset_at: str | None = None  # ISO datetime
 
     def to_dict(self) -> dict[str, Any]:
@@ -306,8 +305,6 @@ class GuardrailViolation:
             result["state"] = self.state
         if self.failure_rate is not None:
             result["failureRate"] = self.failure_rate
-        if self.recent_failures is not None:
-            result["recentFailures"] = self.recent_failures
         if self.reset_at:
             result["resetAt"] = self.reset_at
         return result

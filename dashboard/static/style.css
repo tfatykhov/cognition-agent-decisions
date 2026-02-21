@@ -1845,8 +1845,8 @@ details > :not(summary) {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-lg);
   padding: var(--sp-5);
-  min-width: 360px;
-  max-width: 480px;
+  min-width: min(360px, 90vw);
+  max-width: min(480px, 90vw);
 }
 .modal-title {
   font-size: var(--fs-lg);
