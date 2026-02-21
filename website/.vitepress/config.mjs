@@ -24,7 +24,7 @@ export default withMermaid(defineConfig({
       { text: 'Specs', link: '/specs/' },
       { text: 'Contact', link: '/contact' },
       {
-        text: 'v0.14.0',
+        text: 'v0.15.0',
         items: [
           { text: 'Changelog', link: '/changelog' },
           { text: 'GitHub', link: 'https://github.com/tfatykhov/cognition-agent-decisions' }
