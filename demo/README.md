@@ -68,6 +68,14 @@ async with streamablehttp_client("http://localhost:8100/mcp") as (r, w, _):
 
 See `demo-agent/agent.py` for a complete reference implementation.
 
+### FORGE Protocol
+
+The demo agent follows the [FORGE protocol](https://github.com/tfatykhov/cognition-engines-marketplace/tree/main/forge) — a Claude Code plugin that defines how agents should interact with Cognition Engines:
+
+**F**etch → **O**rient → **R**esolve → **G**o → **E**xtract
+
+Install FORGE in your Claude Code project to get automatic decision intelligence integration. See the [FORGE docs](https://cognition-engines.ai/guide/forge) for details.
+
 ## Configuration
 
 Override ports or intervals via environment variables:

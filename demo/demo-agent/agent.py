@@ -9,8 +9,10 @@ decision intelligence workflow:
   4. get_session_context (accumulated intelligence)
   5. ready (check what needs attention)
 
-This agent is a reference implementation - copy and adapt it
-for your own agents.
+This agent is a reference implementation following the FORGE protocol:
+  Fetch → Orient → Resolve → Go → Extract
+
+See: https://github.com/tfatykhov/cognition-engines-marketplace/tree/main/forge
 """
 
 import asyncio
@@ -93,24 +95,35 @@ async def scenario_architecture_decision(session: ClientSession) -> None:
 
     await asyncio.sleep(2)
 
-    # Step 2: Record thoughts during deliberation
-    logger.info("\n💭 Step 2: record_thought (capture reasoning)")
+    # Step 2: Record micro-thoughts during deliberation
+    # FORGE protocol: minimum 10 atomic signals per decision
+    logger.info("\n💭 Step 2: record_thought (micro-thought stream)")
 
-    await call_tool(session, "record_thought", {
-        "text": "Connection pooling reduces TCP handshake overhead. Pool size of 10-20 covers our concurrent request load. Per-request connections waste ~3ms per query on handshake alone.",
-        "decision_id": decision_id,
-        "agent_id": AGENT_ID,
-    })
-    logger.info("  Thought 1: Performance analysis recorded")
+    thoughts = [
+        "per-request connections waste ~3ms on TCP handshake alone",
+        "at 500 req/s that's 1.5 seconds of pure handshake overhead",
+        "connection pooling amortizes handshake across requests",
+        "pool size of 10-20 covers our P99 concurrent query count",
+        "risk: pool exhaustion under load spikes",
+        "mitigation: max_overflow parameter handles burst traffic",
+        "SQLAlchemy pool has built-in overflow and timeout support",
+        "wait — do we need cross-process pooling? pgbouncer handles that",
+        "no — single process per container, in-process pool is fine",
+        "pool_timeout=30s prevents indefinite waits on exhaustion",
+        "connection health checks prevent stale connection errors",
+        "decision: in-process pool with pool_size=15, max_overflow=5",
+    ]
 
-    await asyncio.sleep(1)
+    for i, thought in enumerate(thoughts, 1):
+        await call_tool(session, "record_thought", {
+            "text": thought,
+            "decision_id": decision_id,
+            "agent_id": AGENT_ID,
+        })
+        logger.info(f"  💭 {i}/{len(thoughts)}: {thought[:60]}")
+        await asyncio.sleep(0.5)
 
-    await call_tool(session, "record_thought", {
-        "text": "Risk: pool exhaustion under load spikes. Mitigation: configure max wait timeout and overflow connections. HikariCP handles this well in Java; SQLAlchemy pool in Python.",
-        "decision_id": decision_id,
-        "agent_id": AGENT_ID,
-    })
-    logger.info("  Thought 2: Risk analysis recorded")
+    logger.info(f"  Recorded {len(thoughts)} micro-thoughts")
 
     await asyncio.sleep(2)
 
@@ -122,7 +135,19 @@ async def scenario_architecture_decision(session: ClientSession) -> None:
         "context": "Deployed to staging. P95 query latency dropped from 12ms to 8ms. Pool utilization peaks at 60%.",
     })
     logger.info("  Decision updated with implementation details")
-    logger.info(f"  🎯 Decision {decision_id[:8]} complete!")
+
+    await asyncio.sleep(2)
+
+    # Step 4: Extract - review outcome (FORGE: every decision needs an outcome)
+    logger.info("\n📊 Step 4: review_outcome (FORGE Extract phase)")
+    await call_tool(session, "review_outcome", {
+        "id": decision_id,
+        "outcome": "success",
+        "actual_result": "P95 latency dropped 33% (12ms → 8ms). Pool utilization stable at 60%.",
+        "lessons": "In-process pooling sufficient for single-container deployments. pgbouncer only needed for multi-process.",
+    })
+    logger.info("  Outcome recorded: success")
+    logger.info(f"  🎯 Decision {decision_id[:8]} — full FORGE loop complete!")
 
 
 async def scenario_guardrail_block(session: ClientSession) -> None:
