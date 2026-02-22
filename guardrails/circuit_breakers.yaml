@@ -1,0 +1,23 @@
+# Circuit Breaker Guardrails
+# Automatically trip when repeated decision failures exceed thresholds.
+# Integrates transparently with checkGuardrails / pre_action flow.
+#
+# Scope formats:
+#   "global"           — matches all decisions
+#   "category:<value>" — matches decisions with that category
+#   "stakes:<value>"   — matches decisions with that stakes level
+#   "agent:<value>"    — matches decisions from that agent_id
+#   "tag:<value>"      — matches decisions containing that tag
+
+circuit_breakers:
+  - scope: "stakes:high"
+    failure_threshold: 3
+    window_ms: 86400000      # 24 hours
+    cooldown_ms: 3600000     # 1 hour
+    notify: true
+
+  - scope: "stakes:critical"
+    failure_threshold: 2
+    window_ms: 86400000      # 24 hours
+    cooldown_ms: 7200000     # 2 hours
+    notify: true
