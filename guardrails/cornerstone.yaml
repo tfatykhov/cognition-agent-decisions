@@ -1,13 +1,6 @@
 # Cornerstone Guardrails
 # These are non-negotiable block-level rules established day 1
 
-- id: no-production-without-review
-  description: Production changes require code review
-  condition_affects_production: true
-  requires_code_review: true
-  action: block
-  message: Production changes require completed code review
-
 - id: no-high-stakes-low-confidence
   description: High-stakes decisions need minimum confidence
   condition_stakes: high
@@ -23,3 +16,33 @@
   requires_backtest_completed: true
   action: block
   message: Trading strategy changes require completed backtest
+
+# Code review guardrails - these match on category values that involve code
+- id: require-code-review-tooling
+  description: All tooling changes require code review
+  condition_category: tooling
+  requires_code_review: true
+  action: block
+  message: "Tooling changes require code review. Set code_review=true after review is complete."
+
+- id: require-code-review-integration
+  description: All integration changes require code review
+  condition_category: integration
+  requires_code_review: true
+  action: block
+  message: "Integration changes require code review. Set code_review=true after review is complete."
+
+- id: require-code-review-security
+  description: All security changes require code review
+  condition_category: security
+  requires_code_review: true
+  action: block
+  message: "Security changes require code review. Set code_review=true after review is complete."
+
+# Architecture review guardrail
+- id: require-architecture-review
+  description: All architecture decisions require architecture review
+  condition_category: architecture
+  requires_architecture_review: true
+  action: block
+  message: "Architecture decisions require review. Set architecture_review=true after review."
