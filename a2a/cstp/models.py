@@ -221,17 +221,28 @@ class ActionContext:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ActionContext":
-        """Create ActionContext from dict."""
+        """Create ActionContext from dict.
+
+        Known fields (description, category, stakes, confidence) are extracted.
+        An explicit 'context' dict is merged in.
+        Any unknown top-level fields are also passed into context automatically,
+        so callers can write architecture_review=true at the top level.
+        """
         description = data.get("description", "")
         if not description:
             raise ValueError("Missing required field: action.description")
+
+        known_fields = {"description", "category", "stakes", "confidence", "context"}
+        extra = {k: v for k, v in data.items() if k not in known_fields}
+        context = data.get("context", {})
+        context.update(extra)
 
         return cls(
             description=description,
             category=data.get("category"),
             stakes=data.get("stakes", "medium"),
             confidence=data.get("confidence"),
-            context=data.get("context", {}),
+            context=context,
         )
 
 
