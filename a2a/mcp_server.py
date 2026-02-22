@@ -148,6 +148,8 @@ def _build_guardrails_params(args: CheckActionInput) -> dict[str, Any]:
         action["category"] = args.category
     if args.confidence is not None:
         action["confidence"] = args.confidence
+    if args.context:
+        action["context"] = args.context
     return {"action": action}
 
 
@@ -974,6 +976,8 @@ async def _handle_pre_action_mcp(arguments: dict[str, Any]) -> list[TextContent]
         params["action"]["category"] = args.action.category
     if args.action.confidence is not None:
         params["action"]["confidence"] = args.action.confidence
+    if args.action.context:
+        params["action"]["context"] = args.action.context
     if args.options:
         params["options"] = {
             "queryLimit": args.options.query_limit,

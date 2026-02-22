@@ -5,7 +5,7 @@ They map to the existing CSTP dataclass models but use Pydantic for automatic
 schema generation required by the MCP protocol.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -100,6 +100,10 @@ class CheckActionInput(BaseModel):
         ge=0.0,
         le=1.0,
         description="Your confidence in this action (0.0 to 1.0)",
+    )
+    context: dict[str, Any] | None = Field(
+        default=None,
+        description="Additional context for guardrail evaluation (e.g. {code_review: true, architecture_review: true})",
     )
 
 
@@ -459,6 +463,10 @@ class PreActionActionInput(BaseModel):
         ge=0.0,
         le=1.0,
         description="Your confidence in this action (0.0 to 1.0)",
+    )
+    context: dict[str, Any] | None = Field(
+        default=None,
+        description="Additional context for guardrail evaluation (e.g. {code_review: true, architecture_review: true})",
     )
 
 
