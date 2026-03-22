@@ -945,7 +945,7 @@ docker compose up -d
 
 Nous exposes a Streamable HTTP MCP server. Tools: `nous_recall`, `nous_chat`, `nous_teach`, `nous_decide`. Full REST API also available for programmatic access.
 
-→ [Full Installation Guide](/reference/installation) · [MCP Quick Start](/reference/mcp-quickstart) · [Agent Quick Start](/guide/agent-quickstart)
+→ [Nous on GitHub](https://github.com/tfatykhov/nous) · [Full Installation Guide](/reference/installation) · [MCP Quick Start](/reference/mcp-quickstart) · [Agent Quick Start](/guide/agent-quickstart)
 
 </div>
 
@@ -959,8 +959,8 @@ Nous exposes a Streamable HTTP MCP server. Tools: `nous_recall`, `nous_chat`, `n
 <p>Built on Minsky's Society of Mind. Powered by Cognition Engines.<br/>An agent that doesn't just respond — it remembers, decides, learns, and evolves.</p>
 
 <div class="cta-buttons">
-  <a href="/guide/what-is-cognition-engines" class="cta-btn primary">Learn About FORGE</a>
-  <a href="https://github.com/tfatykhov/cognition-agent-decisions" class="cta-btn secondary">View on GitHub</a>
+  <a href="https://github.com/tfatykhov/nous" class="cta-btn primary">Nous on GitHub</a>
+  <a href="/guide/what-is-cognition-engines" class="cta-btn secondary">Learn About FORGE</a>
 </div>
 
 </div>
