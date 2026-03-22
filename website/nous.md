@@ -96,7 +96,10 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 .stat-number {
   font-size: 1.8rem;
   font-weight: 800;
-  color: #a78bfa;
+  background: linear-gradient(135deg, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .stat-label {
@@ -139,11 +142,13 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   padding: 1.5rem;
-  transition: border-color 0.3s;
+  transition: all 0.25s ease;
 }
 
 .card:hover {
   border-color: #6366f1;
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.1);
 }
 
 .card .card-icon {
@@ -185,6 +190,15 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   padding: 1.5rem;
+}
+
+.organ-card {
+  transition: all 0.25s ease;
+}
+
+.organ-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }
 
 .organ-card.heart {
@@ -251,10 +265,10 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   content: '';
   position: absolute;
   left: 20px;
-  top: 0;
+  top: 42px;
   bottom: 0;
   width: 2px;
-  background: var(--vp-c-divider);
+  background: linear-gradient(to bottom, #6366f1, var(--vp-c-divider));
 }
 
 .loop-step:last-child::before {
@@ -368,6 +382,12 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   border-radius: 12px;
   padding: 1.25rem;
   text-align: center;
+  transition: all 0.25s ease;
+}
+
+.sleep-card:hover {
+  border-color: #6366f1;
+  transform: translateY(-3px);
 }
 
 .sleep-card .sleep-icon {
@@ -505,8 +525,14 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 }
 
 .cta-btn.primary {
-  background: #6366f1;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: white;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+}
+
+.cta-btn.primary:hover {
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
+  transform: translateY(-2px);
 }
 
 .cta-btn.secondary {
@@ -528,6 +554,12 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   padding: 1.25rem;
+  transition: all 0.25s ease;
+}
+
+.frame-card:hover {
+  border-color: #6366f1;
+  transform: translateY(-3px);
 }
 
 .frame-card h4 {
@@ -580,20 +612,24 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 <div class="stats-bar">
   <div class="stat-item">
+    <div class="stat-number">44K+</div>
+    <div class="stat-label">Lines of Code</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">1,900+</div>
+    <div class="stat-label">Tests</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-number">53+</div>
+    <div class="stat-label">Features Shipped</div>
+  </div>
+  <div class="stat-item">
     <div class="stat-number">5</div>
     <div class="stat-label">Memory Types</div>
   </div>
   <div class="stat-item">
-    <div class="stat-number">5</div>
-    <div class="stat-label">Cognitive Frames</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-number">3</div>
-    <div class="stat-label">Guardrail Levels</div>
-  </div>
-  <div class="stat-item">
-    <div class="stat-number">∞</div>
-    <div class="stat-label">Persistence</div>
+    <div class="stat-number">18</div>
+    <div class="stat-label">DB Tables</div>
   </div>
 </div>
 
@@ -888,20 +924,19 @@ cp .env.example .env
 docker compose up -d
 ```
 
-**MCP Integration (Claude Code / Claude Desktop):**
+**MCP Integration (Claude Desktop / any MCP client):**
 
 ```json
 {
   "mcpServers": {
-    "cognition-engines": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-proxy", "http://localhost:8080/mcp"]
+    "nous": {
+      "url": "http://localhost:8383/mcp/"
     }
   }
 }
 ```
 
-Then configure your agent's system prompt with the FORGE cognitive loop and point it at the Cognition Engines API.
+Nous exposes a Streamable HTTP MCP server. Tools: `nous_recall`, `nous_chat`, `nous_teach`, `nous_decide`. Full REST API also available for programmatic access.
 
 → [Full Installation Guide](/reference/installation) · [MCP Quick Start](/reference/mcp-quickstart) · [Agent Quick Start](/guide/agent-quickstart)
 
