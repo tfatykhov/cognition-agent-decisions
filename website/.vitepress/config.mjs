@@ -22,6 +22,7 @@ export default withMermaid(defineConfig({
       { text: 'Guide', link: '/guide/what-is-cognition-engines' },
       { text: 'Reference', link: '/reference/product-overview' },
       { text: 'Specs', link: '/specs/' },
+      { text: 'Nous', link: '/nous' },
       { text: 'Contact', link: '/contact' },
       {
         text: 'v0.15.0',
