@@ -21,11 +21,16 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 0.5rem;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  border-top: none !important;
+  line-height: 1.2;
 }
 
 .nous-hero .subtitle {
   font-size: 1.4rem;
   color: var(--vp-c-text-2);
+  margin-top: 0.5rem;
   margin-bottom: 1.5rem;
 }
 
@@ -120,6 +125,8 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   font-size: 1.8rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
   border-top: none !important;
 }
 
