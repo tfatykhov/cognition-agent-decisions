@@ -592,6 +592,25 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
   text-transform: uppercase;
 }
 
+/* Section spacer — replaces plain <hr> */
+.section-spacer {
+  width: 100%;
+  max-width: 900px;
+  margin: 1rem auto;
+  padding: 1.5rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-spacer::before {
+  content: '';
+  width: 60px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.4), transparent);
+}
+
 .frame-tag.debug { background: rgba(239, 68, 68, 0.15); color: #f87171; }
 .frame-tag.research { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
 .frame-tag.decision { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
@@ -642,7 +661,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- What Makes Nous Different -->
 <div class="nous-section">
@@ -686,7 +705,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- Two Organs -->
 <div class="nous-section">
@@ -722,7 +741,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- FORGE Cognitive Loop -->
 <div class="nous-section">
@@ -771,7 +790,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- Cognitive Frames -->
 <div class="nous-section">
@@ -810,7 +829,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- Memory in Action -->
 <div class="nous-section">
@@ -841,7 +860,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- Sleep Architecture -->
 <div class="nous-section">
@@ -875,7 +894,7 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- Guardrails -->
 <div class="nous-section">
@@ -905,51 +924,13 @@ description: "Meet Nous, the first cognitive agent built on the FORGE architectu
 
 </div>
 
----
+<div class="section-spacer"></div>
 
 <!-- Minsky Quote -->
 <div class="minsky-quote">
   <blockquote>"You don't really understand something until you can explain it to a computer. But you don't really understand intelligence until you can explain it as a society."</blockquote>
   <div class="attribution">— Marvin Minsky, <em>The Society of Mind</em> (1986)</div>
 </div>
-
----
-
-<!-- Get Started -->
-<div class="nous-section">
-
-## Get Started
-
-Nous runs on the FORGE architecture via Cognition Engines. Two ways to start:
-
-**Docker (full stack):**
-
-```bash
-git clone https://github.com/tfatykhov/cognition-agent-decisions
-cd cognition-agent-decisions
-cp .env.example .env
-docker compose up -d
-```
-
-**MCP Integration (Claude Desktop / any MCP client):**
-
-```json
-{
-  "mcpServers": {
-    "nous": {
-      "url": "http://localhost:8383/mcp/"
-    }
-  }
-}
-```
-
-Nous exposes a Streamable HTTP MCP server. Tools: `nous_recall`, `nous_chat`, `nous_teach`, `nous_decide`. Full REST API also available for programmatic access.
-
-→ [Nous on GitHub](https://github.com/tfatykhov/nous) · [Full Installation Guide](/reference/installation) · [MCP Quick Start](/reference/mcp-quickstart) · [Agent Quick Start](/guide/agent-quickstart)
-
-</div>
-
----
 
 <!-- CTA -->
 <div class="nous-cta">
