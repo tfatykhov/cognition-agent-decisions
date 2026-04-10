@@ -1,6 +1,7 @@
 """Guardrails evaluation service for CSTP.
 
 Wraps the existing check.py guardrail evaluation logic.
+F054: CEL expression guardrails — CelGuardrailEvaluator added.
 """
 
 import json
@@ -11,6 +12,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+# F054: CEL support (optional — fails open if not installed)
+try:
+    import celpy
+
+    _CEL_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _CEL_AVAILABLE = False
 
 # Configure audit logger
 _audit_logger = logging.getLogger("cstp.guardrails.audit")
@@ -105,6 +114,8 @@ class Guardrail:
     scope: list[str] = field(default_factory=list)
     action: str = "warn"
     message: str = ""
+    # F054: CEL expression (if set, CEL evaluation replaces legacy logic)
+    cel_expression: str | None = None
 
     def applies_to(self, context: dict[str, Any]) -> bool:
         """Check if guardrail applies to this context."""
@@ -158,6 +169,181 @@ class Guardrail:
         }
 
 
+# F054: Fields that live directly under action.* in the CEL activation context.
+# Everything else from the flat evaluation context goes into action.context.*.
+_STANDARD_ACTION_FIELDS: frozenset[str] = frozenset({
+    "description", "stakes", "confidence", "category", "tags",
+    "reason_count", "pattern", "quality_score", "has_pattern", "has_tags",
+    "phase", "deliberation_inputs_count", "has_deliberation", "has_reasoning",
+    "scope", "project",
+})
+
+# Suffix → CEL operator
+_SUFFIX_TO_CEL_OP: dict[str, str] = {
+    "_lt": "<",
+    "_gt": ">",
+    "_lte": "<=",
+    "_gte": ">=",
+}
+
+# Special field name remapping for legacy JSONB keys
+_LEGACY_FIELD_REMAP: dict[str, str] = {
+    "quality_lt": "quality_score",
+    "quality_gt": "quality_score",
+    "quality_lte": "quality_score",
+    "quality_gte": "quality_score",
+}
+
+
+def _cel_literal(value: Any) -> str:
+    """Render a Python value as a CEL literal."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        escaped = value.replace("'", "\\'")
+        return f"'{escaped}'"
+    return str(value)
+
+
+def _jsonb_condition_to_cel(cond_dict: dict[str, Any]) -> str:
+    """Convert a legacy JSONB condition dict to a CEL expression string.
+
+    Handles formats from the spec migration table:
+      {"stakes": "high", "confidence_lt": 0.5}  →  "action.stakes == 'high' && action.confidence < 0.5"
+    """
+    parts: list[str] = []
+    for key, value in cond_dict.items():
+        if key == "cel":
+            # Already CEL — handled by caller
+            continue
+
+        # Check for suffix operators (_lt, _gt, _lte, _gte)
+        cel_op: str | None = None
+        field_name = key
+        for suffix, op in _SUFFIX_TO_CEL_OP.items():
+            if key.endswith(suffix):
+                cel_op = op
+                base = key[: -len(suffix)]
+                # Apply field remapping (e.g. quality_lt → quality_score)
+                field_name = _LEGACY_FIELD_REMAP.get(key, base)
+                break
+
+        cel_field = (
+            f"action.{field_name}"
+            if field_name in _STANDARD_ACTION_FIELDS
+            else f"action.context.{field_name}"
+        )
+
+        if cel_op:
+            parts.append(f"{cel_field} {cel_op} {_cel_literal(value)}")
+        else:
+            parts.append(f"{cel_field} == {_cel_literal(value)}")
+
+    return " && ".join(parts) if parts else "true"
+
+
+def _build_cel_activation(flat_ctx: dict[str, Any]) -> dict[str, Any]:
+    """Build the CEL activation dict from the flat evaluation context.
+
+    The flat context mixes standard action fields (stakes, confidence, …)
+    with caller-supplied extras (code_review, architecture_review, …).
+    This function separates them into action.* and action.context.*.
+    """
+    action: dict[str, Any] = {}
+    extra: dict[str, Any] = {}
+
+    for k, v in flat_ctx.items():
+        if k in _STANDARD_ACTION_FIELDS:
+            action[k] = v
+        else:
+            extra[k] = v
+
+    # Ensure numeric/bool defaults so CEL comparisons don't error on None
+    action.setdefault("description", "")
+    action.setdefault("stakes", "medium")
+    action["confidence"] = float(action.get("confidence") or 0.0)
+    action.setdefault("category", "")
+    action.setdefault("tags", [])
+    action.setdefault("reason_count", 0)
+    action.setdefault("pattern", "")
+    action.setdefault("quality_score", 0.0)
+    action["has_tags"] = bool(action.get("tags"))
+    action["has_pattern"] = bool(action.get("pattern"))
+    action["context"] = extra
+
+    return {"action": action}
+
+
+_logger = logging.getLogger(__name__)
+
+
+class CelGuardrailEvaluator:
+    """F054: Evaluate guardrail CEL expressions.
+
+    Compiles each unique CEL expression once and caches the program.
+    Builds a structured activation context (action.*) from the flat
+    evaluation context dict used by evaluate_guardrails().
+
+    Fails open: if a CEL expression is invalid or raises an error during
+    evaluation, the guardrail is skipped (not triggered) and a warning is
+    logged.
+    """
+
+    def __init__(self) -> None:
+        # Cache: expression string → compiled CEL program
+        self._programs: dict[str, Any] = {}
+
+    def _get_program(self, expression: str) -> Any | None:
+        """Compile (or retrieve cached) CEL program for expression."""
+        if not _CEL_AVAILABLE:
+            return None
+        if expression in self._programs:
+            return self._programs[expression]
+        try:
+            env = celpy.Environment()
+            ast = env.compile(expression)
+            prog = env.program(ast)
+            self._programs[expression] = prog
+            return prog
+        except Exception as exc:
+            _logger.warning("CEL compile error for expression %r: %s", expression, exc)
+            self._programs[expression] = None
+            return None
+
+    def evaluate(
+        self,
+        guardrail_id: str,
+        expression: str,
+        flat_ctx: dict[str, Any],
+    ) -> bool:
+        """Evaluate a CEL expression against the flat context.
+
+        Returns True if the guardrail should trigger, False otherwise.
+        On any error (compile or runtime) returns False (fail open).
+        """
+        prog = self._get_program(expression)
+        if prog is None:
+            return False
+
+        activation_data = _build_cel_activation(flat_ctx)
+        try:
+            activation = celpy.json_to_cel(activation_data)
+            result = prog.evaluate(activation)
+            return bool(result)
+        except Exception as exc:
+            _logger.warning(
+                "CEL eval error for guardrail %r expression %r: %s",
+                guardrail_id,
+                expression,
+                exc,
+            )
+            return False  # fail open
+
+
+# Module-level evaluator (program cache persists across calls)
+_cel_evaluator = CelGuardrailEvaluator()
+
+
 def _parse_condition(field_name: str, value: Any) -> GuardrailCondition:
     """Parse a condition from YAML."""
     if isinstance(value, str) and value.startswith(("<", ">", "=")):
@@ -175,27 +361,43 @@ def _parse_condition(field_name: str, value: Any) -> GuardrailCondition:
 
 
 def _parse_guardrail(data: dict[str, Any]) -> Guardrail:
-    """Parse a guardrail from dict."""
-    conditions = []
-    requirements = []
+    """Parse a guardrail from dict.
+
+    F054: Detects CEL expressions in the condition field (string, dict with
+    'cel' key, or legacy JSONB dict) and stores them in cel_expression.
+    Flat condition_*/requires_* fields continue to use legacy evaluation.
+    """
+    conditions: list[GuardrailCondition] = []
+    requirements: list[GuardrailRequirement] = []
     scope: list[str] = []
+    cel_expression: str | None = None
 
-    # Support nested format: condition: {field: value, ...}
-    if "condition" in data and isinstance(data["condition"], dict):
-        for field_name, value in data["condition"].items():
-            conditions.append(_parse_condition(field_name, value))
+    raw_condition = data.get("condition")
 
-    # Support nested format: requires: {field: value, ...}
+    if isinstance(raw_condition, str):
+        # F054: CEL string condition — use directly
+        cel_expression = raw_condition
+    elif isinstance(raw_condition, dict):
+        if "cel" in raw_condition:
+            # F054: Explicit CEL dict — {"cel": "action.stakes == 'high'"}
+            cel_expression = str(raw_condition["cel"])
+        else:
+            # F054: Legacy JSONB dict — auto-convert to CEL
+            cel_expression = _jsonb_condition_to_cel(raw_condition)
+
+    # If no CEL from condition, fall through to flat legacy format
+    if cel_expression is None:
+        # Support flat format: condition_field, requires_field
+        for key, value in data.items():
+            if key.startswith("condition_"):
+                conditions.append(_parse_condition(key[10:], value))
+            elif key.startswith("requires_"):
+                requirements.append(GuardrailRequirement(key[9:], value))
+
+    # Support nested requires: {field: value, ...} dict (legacy, always parsed)
     if "requires" in data and isinstance(data["requires"], dict):
         for field_name, value in data["requires"].items():
             requirements.append(GuardrailRequirement(field_name, value))
-
-    # Support flat format: condition_field, requires_field
-    for key, value in data.items():
-        if key.startswith("condition_"):
-            conditions.append(_parse_condition(key[10:], value))
-        elif key.startswith("requires_"):
-            requirements.append(GuardrailRequirement(key[9:], value))
 
     if "scope" in data:
         scope = data["scope"] if isinstance(data["scope"], list) else [data["scope"]]
@@ -208,6 +410,7 @@ def _parse_guardrail(data: dict[str, Any]) -> Guardrail:
         scope=scope,
         action=data.get("action", "warn"),
         message=data.get("message", ""),
+        cel_expression=cel_expression,
     )
 
 
@@ -393,21 +596,42 @@ async def evaluate_guardrails(
     allowed = True
 
     for g in guardrails:
-        result = g.evaluate(context)
-        if result.get("matched") and result.get("action") != "skip":
-            if not result.get("passed", True):
+        if g.cel_expression is not None:
+            # F054: CEL evaluation path
+            triggered = _cel_evaluator.evaluate(g.id, g.cel_expression, context)
+            if triggered:
+                message = g.message or f"Guardrail {g.id} triggered"
+                for k, v in context.items():
+                    message = message.replace(f"{{{k}}}", str(v))
                 gr = GuardrailResult(
-                    guardrail_id=result["id"],
-                    name=result.get("description", result["id"]),
-                    message=result.get("message", ""),
-                    severity=result["action"],
+                    guardrail_id=g.id,
+                    name=g.description or g.id,
+                    message=message,
+                    severity=g.action,
                     suggestion=None,
                 )
-                if result["action"] == "block":
+                if g.action == "block":
                     violations.append(gr)
                     allowed = False
                 else:
                     warnings.append(gr)
+        else:
+            # Legacy evaluation path (condition_*/requires_* flat format)
+            result = g.evaluate(context)
+            if result.get("matched") and result.get("action") != "skip":
+                if not result.get("passed", True):
+                    gr = GuardrailResult(
+                        guardrail_id=result["id"],
+                        name=result.get("description", result["id"]),
+                        message=result.get("message", ""),
+                        severity=result["action"],
+                        suggestion=None,
+                    )
+                    if result["action"] == "block":
+                        violations.append(gr)
+                        allowed = False
+                    else:
+                        warnings.append(gr)
 
     # F030: Circuit breaker evaluation
     try:

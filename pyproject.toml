@@ -24,6 +24,7 @@ dependencies = [
     "chromadb>=0.4.0",
     "rank-bm25>=0.2.2",  # F017: BM25 keyword search
     "networkx>=3.0",  # F045: Decision graph storage
+    "cel-python>=0.4,<1.0",  # F054: CEL expression guardrails
 ]
 
 [project.optional-dependencies]
