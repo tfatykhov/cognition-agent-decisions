@@ -17,8 +17,6 @@ import pytest
 from a2a.cstp.guardrails_service import (
     CelGuardrailEvaluator,
     Guardrail,
-    GuardrailCondition,
-    GuardrailRequirement,
     _build_cel_activation,
     _jsonb_condition_to_cel,
     _parse_guardrail,
