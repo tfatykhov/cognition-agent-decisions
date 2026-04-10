@@ -26,6 +26,8 @@ jobs:
           pip install pyyaml chromadb rank-bm25 networkx
           # A2A dependencies for tests
           pip install fastapi uvicorn httpx pydantic
+          # F054: CEL expression guardrails
+          pip install "cel-python>=0.4,<1.0"
       
       - name: Run tests
         run: |
