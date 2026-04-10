@@ -275,9 +275,12 @@ class TestBuildReadyQueue:
     @pytest.mark.asyncio
     async def test_recent_pending_excluded(self) -> None:
         """Pending decisions younger than STALE_DAYS should not appear."""
+        from datetime import UTC, datetime, timedelta
+
+        recent_date = (datetime.now(UTC) - timedelta(days=10)).strftime("%Y-%m-%d")
         decisions = [
             {"id": "new12345", "summary": "Recent", "status": "pending",
-             "date": "2026-02-10"},
+             "date": recent_date},
         ]
         items = await _build_ready_queue(decisions, limit=5)
         assert len(items) == 0
