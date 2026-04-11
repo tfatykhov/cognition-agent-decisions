@@ -6,7 +6,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
 
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
-
   /* ===== CSS VARIABLES ===== */
   .nous-page {
     --bg-primary: #0a0a0f;
@@ -30,7 +29,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     margin: 0 auto;
     padding: 0 1rem;
   }
-
   /* Override VitePress defaults */
   .nous-page h1, .nous-page h2, .nous-page h3, .nous-page h4, .nous-page h5 {
     border: none !important;
@@ -41,7 +39,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
   .nous-page a { text-decoration: none; }
   .nous-page ul { list-style: none; padding: 0; margin: 0; }
   .nous-page p { margin: 0; }
-
   /* ===== ANIMATED BACKGROUND ===== */
   .nous-bg-grid {
     position: fixed;
@@ -81,7 +78,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     0%, 100% { transform: translate(0, 0); }
     50% { transform: translate(80px, -80px); }
   }
-
   /* ===== SECTIONS ===== */
   .nous-section {
     padding: 4rem 0;
@@ -91,7 +87,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
   .nous-section:nth-child(even) {
     background: linear-gradient(180deg, transparent, rgba(79, 125, 245, 0.02), transparent);
   }
-
   /* ===== HERO ===== */
   .nous-hero {
     min-height: 85vh;
@@ -175,7 +170,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     width: 100%;
     height: auto;
   }
-
   /* ===== SECTION HEADERS ===== */
   .nous-section-header {
     text-align: center;
@@ -202,7 +196,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     max-width: 600px;
     margin: 0 auto;
   }
-
   /* ===== PROBLEM / SOLUTION ===== */
   .nous-ps-grid {
     display: grid;
@@ -264,7 +257,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
   }
   .problem .nous-ps-list li::before { background: var(--accent-red); }
   .solution .nous-ps-list li::before { background: var(--accent-green); }
-
   /* ===== BRAIN/HEART DUALITY ===== */
   .nous-duality-grid {
     display: grid;
@@ -337,7 +329,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     justify-content: center;
     font-size: 1rem;
   }
-
   /* ===== LOOP DIAGRAM ===== */
   .nous-loop-container {
     display: flex;
@@ -349,7 +340,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     width: 100%;
     height: auto;
   }
-
   /* ===== MEMORY TYPES ===== */
   .nous-memory-grid {
     display: grid;
@@ -388,7 +378,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     width: 40px; height: 3px;
     border-radius: 0 0 3px 3px;
   }
-
   /* ===== FEATURES GRID ===== */
   .nous-features-grid {
     display: grid;
@@ -431,7 +420,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
   .nous-f-tag.shipped { background: rgba(16,185,129,0.1); color: var(--accent-green); }
   .nous-f-tag.live { background: rgba(0,212,255,0.1); color: var(--accent-cyan); }
   .nous-f-tag.unique { background: rgba(139,92,246,0.1); color: var(--accent-purple); }
-
   /* ===== COMPETITIVE MOAT ===== */
   .nous-moat-grid {
     display: grid;
@@ -471,7 +459,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     color: var(--text-secondary);
     line-height: 1.5;
   }
-
   /* ===== METRICS BAR ===== */
   .nous-metrics-bar {
     display: grid;
@@ -500,7 +487,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     font-weight: 600;
     margin-top: 0.25rem;
   }
-
   /* ===== RESEARCH GRID ===== */
   .nous-research-grid {
     display: grid;
@@ -526,7 +512,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     color: var(--text-muted);
     line-height: 1.4;
   }
-
   /* ===== BRAND BAR ===== */
   .nous-brand-bar {
     display: flex;
@@ -556,7 +541,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     color: var(--text-muted);
     font-size: 1.25rem;
   }
-
   /* ===== FOOTER ===== */
   .nous-footer {
     padding: 3rem 0;
@@ -571,7 +555,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     color: var(--accent-cyan);
     text-decoration: none;
   }
-
   /* ===== RESPONSIVE ===== */
   @media (max-width: 900px) {
     .nous-hero-content { grid-template-columns: 1fr; }
@@ -588,17 +571,30 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     .nous-brand-bar { flex-direction: column; gap: 1rem; }
     .nous-brand-arrow { transform: rotate(90deg); }
   }
-
   /* ===== SCROLL ANIMATIONS ===== */
   .nous-fade-up {
-    opacity: 0;
-    transform: translateY(30px);
-    transition: all 0.6s ease;
+    animation: nous-fade-up-anim 0.6s ease forwards;
   }
-  .nous-fade-up.visible {
-    opacity: 1;
-    transform: translateY(0);
+  @keyframes nous-fade-up-anim {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
+  .nous-section:nth-child(2) .nous-fade-up { animation-delay: 0s; }
+  .nous-section:nth-child(3) .nous-fade-up { animation-delay: 0.1s; }
+  .nous-section:nth-child(4) .nous-fade-up { animation-delay: 0.15s; }
+  .nous-section:nth-child(5) .nous-fade-up { animation-delay: 0.2s; }
+  .nous-section:nth-child(6) .nous-fade-up { animation-delay: 0.25s; }
+  .nous-section:nth-child(7) .nous-fade-up { animation-delay: 0.3s; }
+  .nous-section:nth-child(8) .nous-fade-up { animation-delay: 0.35s; }
+  .nous-section:nth-child(9) .nous-fade-up { animation-delay: 0.4s; }
+  .nous-section:nth-child(10) .nous-fade-up { animation-delay: 0.45s; }
+  .nous-section:nth-child(n+11) .nous-fade-up { animation-delay: 0.5s; }
 </style>
 <div class="nous-page">
 <div class="nous-bg-grid"></div>
@@ -1144,18 +1140,3 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
   <p style="margin-top: 1rem; font-size: 0.75rem; color: #4a4a60;">© 2026 Cognition Engines. All rights reserved.</p>
 </div>
 </div>
-<script setup>
-import { onMounted } from 'vue'
-
-onMounted(() => {
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('visible')
-      }
-    })
-  }, { threshold: 0.1 })
-
-  document.querySelectorAll('.nous-fade-up').forEach(el => observer.observe(el))
-})
-</script>
