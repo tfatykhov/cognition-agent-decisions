@@ -600,13 +600,10 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     transform: translateY(0);
   }
 </style>
-
 <div class="nous-page">
-
 <div class="nous-bg-grid"></div>
 <div class="nous-bg-glow-1"></div>
 <div class="nous-bg-glow-2"></div>
-
 <!-- ===== HERO ===== -->
 <div class="nous-section nous-hero">
   <div class="nous-hero-content">
@@ -638,7 +635,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
         </div>
       </div>
     </div>
-
     <!-- Hero Architecture Diagram -->
     <div class="nous-hero-diagram">
       <svg viewBox="0 0 500 480" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -727,7 +723,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== PROBLEM / SOLUTION ===== -->
 <div class="nous-section">
   <div class="nous-section-header nous-fade-up">
@@ -762,7 +757,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== ARCHITECTURE: BRAIN / HEART ===== -->
 <div class="nous-section" id="architecture">
   <div class="nous-section-header nous-fade-up">
@@ -803,7 +797,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== COGNITIVE LOOP ===== -->
 <div class="nous-section">
   <div class="nous-section-header nous-fade-up">
@@ -885,7 +878,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </svg>
   </div>
 </div>
-
 <!-- ===== MEMORY TYPES ===== -->
 <div class="nous-section" id="memory">
   <div class="nous-section-header nous-fade-up">
@@ -926,7 +918,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== KEY FEATURES ===== -->
 <div class="nous-section" id="features">
   <div class="nous-section-header nous-fade-up">
@@ -991,7 +982,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== COMPETITIVE MOAT ===== -->
 <div class="nous-section" id="moat">
   <div class="nous-section-header nous-fade-up">
@@ -1044,7 +1034,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== METRICS ===== -->
 <div class="nous-section" id="metrics">
   <div class="nous-section-header nous-fade-up">
@@ -1077,7 +1066,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
       <div class="nous-metric-label">Features Shipped</div>
     </div>
   </div>
-
   <!-- Research Foundation -->
   <div style="margin-top: 4rem;">
     <div class="nous-section-header nous-fade-up">
@@ -1128,7 +1116,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
       </div>
     </div>
   </div>
-
   <!-- Brand Hierarchy -->
   <div class="nous-brand-bar nous-fade-up">
     <div class="nous-brand-item">
@@ -1147,7 +1134,6 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
     </div>
   </div>
 </div>
-
 <!-- ===== FOOTER ===== -->
 <div class="nous-footer">
   <p style="margin-bottom: 0.5rem;">
@@ -1157,9 +1143,7 @@ description: "AI that remembers, learns, and gets smarter. Built on the FORGE co
   <p>Built by a single engineer. Powered by cognitive science. Ready to scale.</p>
   <p style="margin-top: 1rem; font-size: 0.75rem; color: #4a4a60;">© 2026 Cognition Engines. All rights reserved.</p>
 </div>
-
 </div>
-
 <script setup>
 import { onMounted } from 'vue'
 
