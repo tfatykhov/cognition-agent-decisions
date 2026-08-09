@@ -174,9 +174,23 @@ class TestWisdomInSessionContext:
         mock_guardrails: AsyncMock,
     ) -> None:
         """Wisdom should be empty when all decisions are recent."""
-        # Only recent decisions (< 90 days old)
+        from datetime import UTC, datetime, timedelta
+
+        # Use genuinely recent dates (5 days ago from now) so the
+        # wall-clock age check in build_wisdom correctly classifies them
+        # as non-wisdom-age regardless of when the test runs.
+        recent_date = (datetime.now(UTC) - timedelta(days=5)).isoformat()
         mock_load.return_value = [
-            _make_decision(decision_id=f"r{i}", age_days=5)
+            {
+                "id": f"r{i}",
+                "summary": f"Test decision r{i}",
+                "decision": f"Test decision r{i}",
+                "category": "architecture",
+                "confidence": 0.9,
+                "status": "reviewed",
+                "outcome": "success",
+                "date": recent_date,
+            }
             for i in range(10)
         ]
         mock_query.return_value = MockQueryResponse()
