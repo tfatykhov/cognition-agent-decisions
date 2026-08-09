@@ -512,16 +512,15 @@ class TestPerClassCoverage:
             "Separate observed.coverage_pct and attested.coverage_pct are required."
         )
 
-    def test_rpc_response_has_no_blended_coverage(self, tmp_path):
+    async def test_rpc_response_has_no_blended_coverage(self, tmp_path):
         """cstp.mapControls response must not contain a top-level coverage_pct."""
-        import asyncio
         db_path = str(tmp_path / "no_blend.db")
         init_db(db_path)
         append_event("gh", "pr_opened", "observed",
                      {"pr_number": 1, "is_agent_authored": True},
                      ts="2026-01-01T00:00:00Z", db_path=db_path)
         params = {"db_path": db_path}
-        result = asyncio.get_event_loop().run_until_complete(map_controls(params, "test-agent"))
+        result = await map_controls(params, "test-agent")
         assert "coverage_pct" not in result, (
             "cstp.mapControls must not return a blended coverage_pct. "
             "Only coverage.observed.coverage_pct and coverage.attested.coverage_pct are allowed."
@@ -530,9 +529,8 @@ class TestPerClassCoverage:
         assert "observed" in result["coverage"]
         assert "attested" in result["coverage"]
 
-    def test_bundle_has_no_blended_coverage(self, tmp_path):
+    async def test_bundle_has_no_blended_coverage(self, tmp_path):
         """exportEvidenceBundle JSON bundle must not contain a top-level coverage_pct."""
-        import asyncio
         db_path = str(tmp_path / "bundle_blend.db")
         output_dir = tmp_path / "out"
         init_db(db_path)
@@ -540,9 +538,7 @@ class TestPerClassCoverage:
                      {"pr_number": 1, "is_agent_authored": True},
                      ts="2026-01-01T00:00:00Z", db_path=db_path)
         params = {"db_path": db_path, "format": "json", "output_dir": str(output_dir)}
-        result = asyncio.get_event_loop().run_until_complete(
-            export_evidence_bundle(params, "test-agent")
-        )
+        result = await export_evidence_bundle(params, "test-agent")
         # The service-level result must not have blended coverage
         assert "coverage_pct" not in result, (
             "exportEvidenceBundle must not return a blended coverage_pct."
