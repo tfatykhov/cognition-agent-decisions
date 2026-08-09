@@ -1,0 +1,121 @@
+version: "1.0"
+framework: "NIST AI RMF"
+evidence_class: "observed"
+description: >
+  NIST Artificial Intelligence Risk Management Framework (AI RMF 1.0, January 2023).
+  Maps GitHub PR events to GOVERN, MAP, MEASURE, and MANAGE function subcategories.
+  All rules in this file produce observed-class evidence (third-party GitHub events).
+  Reference: https://airc.nist.gov/RMF
+
+rules:
+  # GOVERN: Policies and accountability for AI risk management
+  - id: "NIST-GOVERN-1.1-agent-disclosure"
+    stage: "GOVERN"
+    function_id: "GOVERN-1.1"
+    control_name: "AI Risk Policies — Agent Contribution Disclosure"
+    description: >
+      GOVERN-1.1 requires organizational policies for AI risk management.
+      Agent-authored PRs with Co-Authored-By trailers provide a machine-readable
+      disclosure of AI involvement, enabling policy enforcement at the commit level.
+    match:
+      event_type: "pr_opened"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+
+  # MAP: Context and risk identification
+  # stretch: true — PROOF.md rates this "weak; would not survive an audit question".
+  # MAP-1.1 envisions a systematic risk-context assessment, not a code-change description.
+  # Retained for traceability but surfaced as partial/contested in output bundles.
+  - id: "NIST-MAP-1.1-change-context"
+    stage: "MAP"
+    function_id: "MAP-1.1"
+    control_name: "AI Risk Context Identification"
+    confidence: low
+    stretch: true
+    description: >
+      MAP-1.1 requires identifying the context in which AI systems operate.
+      Each PR opening captures the risk context: what changed, how much,
+      whether AI was involved, and what issue or requirement it addresses.
+      NOTE: This is a stretch mapping — a PR description is not a formal risk-context
+      assessment. Treat as partial evidence only.
+    match:
+      event_type: "pr_opened"
+
+  # MEASURE: Analysis and evaluation of AI risk
+  - id: "NIST-MEASURE-2.5-human-review"
+    stage: "MEASURE"
+    function_id: "MEASURE-2.5"
+    control_name: "AI Risk Evaluation via Human Review"
+    description: >
+      MEASURE-2.5 requires evaluating AI risks through independent assessment.
+      A human reviewer's approval constitutes a documented risk evaluation:
+      a qualified person attested that the AI output is acceptable for deployment.
+    match:
+      event_type: "pr_review_approved"
+
+  # MEASURE: Review comments as risk evaluation evidence
+  - id: "NIST-MEASURE-2.6-review-challenge"
+    stage: "MEASURE"
+    function_id: "MEASURE-2.6"
+    control_name: "Risk Identification via Review Challenge"
+    description: >
+      MEASURE-2.6 covers evaluation of AI risk factors. Review comments and
+      change requests document identified risks and required remediations,
+      constituting evidence of ongoing risk assessment.
+    match:
+      event_type: "pr_review_comment"
+
+  # MANAGE: Risk response — approved deployment (agent-authored only)
+  # is_agent_authored condition required: MANAGE-1.1 is "AI Risk Response".
+  # Claiming AI risk management credit for purely human-authored merges is a category error.
+  - id: "NIST-MANAGE-1.1-approved-deployment"
+    stage: "MANAGE"
+    function_id: "MANAGE-1.1"
+    control_name: "AI Risk Response — Approved Change Deployment"
+    description: >
+      MANAGE-1.1 requires responding to identified AI risks with appropriate actions.
+      Merging a reviewed and approved agent-authored change demonstrates that the risk
+      evaluation was completed and the organization accepted the residual risk for deployment.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "approval_count"
+          gt: 0
+        - field: "is_agent_authored"
+          equals: true
+
+  # MANAGE: INSUFFICIENT EVIDENCE — agent change deployed without human oversight
+  - id: "NIST-MANAGE-2.2-ie-no-human-oversight"
+    stage: "MANAGE"
+    function_id: "MANAGE-2.2"
+    control_name: "Human Oversight of AI Decisions"
+    insufficient_evidence: true
+    reason: >
+      INSUFFICIENT EVIDENCE: Agent-authored change was deployed without human oversight.
+      NIST AI RMF MANAGE-2.2 requires human oversight mechanisms for AI system outputs.
+      Merging agent-authored code without any human approval removes the human-in-the-loop
+      control. No evidence of risk evaluation or acceptance before deployment.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+        - field: "approval_count"
+          equals: 0
+
+  # GOVERN: Commit-level agent attribution as governance record
+  - id: "NIST-GOVERN-6.1-commit-attribution"
+    stage: "GOVERN"
+    function_id: "GOVERN-6.1"
+    control_name: "AI System Accountability Records"
+    description: >
+      GOVERN-6.1 requires accountability mechanisms for AI systems.
+      Each agent-authored commit with a Co-Authored-By trailer creates
+      an immutable, commit-level record of AI contribution — a governance artifact
+      that survives repository history even if PR metadata is lost.
+    match:
+      event_type: "pr_commit"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true

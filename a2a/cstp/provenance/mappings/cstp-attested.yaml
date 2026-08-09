@@ -1,0 +1,57 @@
+version: "1.0"
+framework: "CSTP Attested"
+evidence_class: "attested"
+description: >
+  Framework mappings for first-party CSTP decision records (attested evidence).
+  These rules apply to cstp_decision_linked events created by cstp.linkEvidence.
+  Attested evidence is self-reported by the agent and discounted heavily by auditors
+  compared to observed third-party evidence.
+  Controls satisfied ONLY by these rules are flagged attested_only=true in bundles.
+
+rules:
+  # Agent decision documentation — attested evidence of decision intent
+  - id: "CSTP-SR117-MV1-decision-record"
+    stage: "Model Development"
+    function_id: "MV-1"
+    control_name: "Agent Decision Documentation (Self-Attested)"
+    description: >
+      A recorded CSTP decision provides self-attested documentation of the agent's
+      reasoning, confidence score, stakes assessment, and rationale at decision time.
+      Weaker than observed PR evidence — an agent can write anything into this record.
+      Useful as a corroborating signal, not as primary evidence.
+    match:
+      event_type: "cstp_decision_linked"
+
+  # Reviewed CSTP decision — attested post-hoc review evidence
+  - id: "CSTP-SR117-MV3-reviewed-decision"
+    stage: "Model Validation"
+    function_id: "MV-3"
+    control_name: "Agent Decision Review (Self-Attested)"
+    description: >
+      A CSTP decision with a recorded outcome and review provides self-attested
+      evidence of post-decision quality assessment. The review is performed by the
+      agent or its operator, not an independent third party — treat as weak MV-3
+      evidence pending independent validation.
+    match:
+      event_type: "cstp_decision_linked"
+      conditions:
+        - field: "has_outcome"
+          truthy: true
+
+  # High-stakes CSTP decisions — governance evidence
+  - id: "CSTP-NIST-GOVERN-1.1-high-stakes-decision"
+    stage: "GOVERN"
+    function_id: "GOVERN-1.1"
+    control_name: "High-Stakes AI Decision Governance (Self-Attested)"
+    description: >
+      GOVERN-1.1 requires policies for AI risk management.
+      A recorded high-stakes CSTP decision demonstrates that the agent applied
+      governance criteria (confidence, stakes, reasons) before acting.
+      Self-attested; an examiner will ask for corroborating observed evidence.
+    match:
+      event_type: "cstp_decision_linked"
+      conditions:
+        - field: "stakes"
+          in:
+            - "high"
+            - "critical"

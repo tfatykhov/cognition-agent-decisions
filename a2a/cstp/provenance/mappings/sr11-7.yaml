@@ -1,0 +1,132 @@
+version: "1.0"
+framework: "SR 11-7"
+evidence_class: "observed"
+description: >
+  Federal Reserve SR 11-7 Supervisory Guidance on Model Risk Management.
+  Maps GitHub PR events to SR 11-7 model development/validation/governance stages.
+  All rules in this file produce observed-class evidence (third-party GitHub events).
+  Reference: https://www.federalreserve.gov/supervisionreg/srletters/sr1107a1.pdf
+
+rules:
+  # Model Development stage: agent-authored code change documented
+  - id: "SR11-7-MV1-agent-pr-opened"
+    stage: "Model Development"
+    function_id: "MV-1"
+    control_name: "Agent-Authored Change Documentation"
+    description: >
+      SR 11-7 MV-1 requires documentation of model development activities.
+      An agent-authored PR opening provides a record of what the agent produced,
+      including diff stats, linked issues, and authorship attribution.
+    match:
+      event_type: "pr_opened"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+
+  # Model Development stage: human-authored code change (reduced scrutiny but tracked)
+  - id: "SR11-7-MV1-human-pr-opened"
+    stage: "Model Development"
+    function_id: "MV-1"
+    control_name: "Human-Authored Change Documentation"
+    description: >
+      Human-authored changes are also documented as part of the change record
+      for completeness of the development audit trail.
+    match:
+      event_type: "pr_opened"
+      conditions:
+        - field: "is_agent_authored"
+          equals: false
+
+  # Model Validation stage: independent human reviewer approved the change
+  - id: "SR11-7-MV3-human-approval"
+    stage: "Model Validation"
+    function_id: "MV-3"
+    control_name: "Independent Human Review and Approval"
+    description: >
+      SR 11-7 MV-3 requires independent review of model outputs and decisions.
+      A human reviewer's approval provides evidence of independent oversight
+      of the agent-generated or human-generated code change.
+    match:
+      event_type: "pr_review_approved"
+
+  # Model Validation stage: review feedback (CHANGES_REQUESTED or COMMENTED)
+  - id: "SR11-7-MV3-review-feedback"
+    stage: "Model Validation"
+    function_id: "MV-3"
+    control_name: "Review Feedback and Challenge"
+    description: >
+      SR 11-7 MV-3 values critical challenge of model outputs.
+      Review comments and change requests demonstrate active oversight
+      rather than rubber-stamp approval.
+    match:
+      event_type: "pr_review_comment"
+
+  # Change Management stage: approved agent-authored change was merged
+  - id: "SR11-7-CM1-approved-agent-merge"
+    stage: "Change Management"
+    function_id: "CM-1"
+    control_name: "Approved Agent Change Deployment"
+    description: >
+      SR 11-7 CM-1 requires documented approval before deploying model changes.
+      Merging an agent-authored PR with prior human approval satisfies this control.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+        - field: "approval_count"
+          gt: 0
+
+  # Change Management stage: human-authored change merged (informational)
+  - id: "SR11-7-CM1-human-merge"
+    stage: "Change Management"
+    function_id: "CM-1"
+    control_name: "Human Change Deployment"
+    description: >
+      Human-authored change merged after review. Tracked for completeness
+      of change management evidence.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: false
+        - field: "approval_count"
+          gt: 0
+
+  # INSUFFICIENT EVIDENCE: agent-authored PR merged without any human approval
+  - id: "SR11-7-MV3-ie-no-approval-on-merge"
+    stage: "Model Validation"
+    function_id: "MV-3"
+    control_name: "Independent Human Review and Approval"
+    insufficient_evidence: true
+    reason: >
+      INSUFFICIENT EVIDENCE: Agent-authored PR was merged without any human approval.
+      SR 11-7 MV-3 requires independent review of agent/model outputs before deployment.
+      Self-merge of agent-authored code without a second reviewer violates the independence
+      requirement and creates an unverifiable change in the audit trail.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+        - field: "approval_count"
+          equals: 0
+
+  # INSUFFICIENT EVIDENCE: human PR merged without any review
+  - id: "SR11-7-CM1-ie-no-approval-human"
+    stage: "Change Management"
+    function_id: "CM-1"
+    control_name: "Approved Change Deployment"
+    insufficient_evidence: true
+    reason: >
+      INSUFFICIENT EVIDENCE: Human-authored PR merged without any recorded approval.
+      While SR 11-7 primarily targets model/agent changes, change management controls
+      require documented approval for production changes. Solo-merge without review
+      creates a gap in the change evidence trail.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: false
+        - field: "approval_count"
+          equals: 0
