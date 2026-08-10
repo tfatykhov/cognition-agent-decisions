@@ -62,6 +62,13 @@ from .models import (
     SessionContextRequest,
 )
 from .preaction_service import pre_action
+from .provenance_service import (
+    export_evidence_bundle,
+    ingest_evidence,
+    link_evidence,
+    map_controls,
+    verify_evidence_chain,
+)
 from .query_service import query_decisions, load_all_decisions
 from .reindex_service import reindex_decisions
 from .session_context_service import get_session_context
@@ -1094,6 +1101,38 @@ async def _handle_reset_circuit(
     return response.to_dict()
 
 
+# ── F055: Decision Provenance handlers ───────────────────────────────────────
+
+
+async def _handle_ingest_evidence(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.ingestEvidence method (F055)."""
+    return await ingest_evidence(params, agent_id)
+
+
+async def _handle_link_evidence(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.linkEvidence method (F055)."""
+    return await link_evidence(params, agent_id)
+
+
+async def _handle_map_controls(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
+    """Handle cstp.mapControls method (F055)."""
+    return await map_controls(params, agent_id)
+
+
+async def _handle_export_evidence_bundle(
+    params: dict[str, Any], agent_id: str
+) -> dict[str, Any]:
+    """Handle cstp.exportEvidenceBundle method (F055)."""
+    return await export_evidence_bundle(params, agent_id)
+
+
+async def _handle_verify_evidence_chain(
+    params: dict[str, Any], agent_id: str
+) -> dict[str, Any]:
+    """Handle cstp.verifyEvidenceChain method (F055)."""
+    return await verify_evidence_chain(params, agent_id)
+
+
 def register_methods(dispatcher: CstpDispatcher) -> None:
     """Register all CSTP method handlers.
 
@@ -1148,6 +1187,13 @@ def register_methods(dispatcher: CstpDispatcher) -> None:
 
     # F126: Debug Tracker
     dispatcher.register("cstp.debugTracker", _handle_debug_tracker)
+
+    # F055: Decision Provenance & Control Evidence
+    dispatcher.register("cstp.ingestEvidence", _handle_ingest_evidence)
+    dispatcher.register("cstp.linkEvidence", _handle_link_evidence)
+    dispatcher.register("cstp.mapControls", _handle_map_controls)
+    dispatcher.register("cstp.exportEvidenceBundle", _handle_export_evidence_bundle)
+    dispatcher.register("cstp.verifyEvidenceChain", _handle_verify_evidence_chain)
 
 
 async def _handle_debug_tracker(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
