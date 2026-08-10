@@ -7,6 +7,14 @@ description: >
   All rules in this file produce observed-class evidence (third-party GitHub events).
   Reference: https://www.federalreserve.gov/supervisionreg/srletters/sr1107a1.pdf
 
+  Finding 8 — human actor signal required:
+  Rules that assert "Independent Human Review" now require actor_is_human=true on
+  approval events, and human_approval_count>0 on merge events. If the upstream
+  GitHub webhook integration does not supply these fields, the rules fail closed
+  (no control credit) and the IE rules below surface the gap. Required upstream
+  signals: actor_is_human (bool) on pr_review_approved events;
+  human_approval_count (int) on pr_merged events.
+
 rules:
   # Model Development stage: agent-authored code change documented
   - id: "SR11-7-MV1-agent-pr-opened"
@@ -37,17 +45,23 @@ rules:
         - field: "is_agent_authored"
           equals: false
 
-  # Model Validation stage: independent human reviewer approved the change
+  # Model Validation stage: verified human reviewer approved the change
+  # Finding 8 fix: actor_is_human must be true — bot approvals do not satisfy MV-3.
+  # Fails closed: if actor_is_human is absent or false, this rule does not fire.
   - id: "SR11-7-MV3-human-approval"
     stage: "Model Validation"
     function_id: "MV-3"
     control_name: "Independent Human Review and Approval"
     description: >
       SR 11-7 MV-3 requires independent review of model outputs and decisions.
-      A human reviewer's approval provides evidence of independent oversight
-      of the agent-generated or human-generated code change.
+      A verified human reviewer's approval provides evidence of independent oversight.
+      actor_is_human must be true — approvals from bots or agents do not satisfy
+      the independence requirement.
     match:
       event_type: "pr_review_approved"
+      conditions:
+        - field: "actor_is_human"
+          equals: true
 
   # Model Validation stage: review feedback (CHANGES_REQUESTED or COMMENTED)
   - id: "SR11-7-MV3-review-feedback"
@@ -62,6 +76,8 @@ rules:
       event_type: "pr_review_comment"
 
   # Change Management stage: approved agent-authored change was merged
+  # Finding 8 fix: human_approval_count>0 required — bot-only approval_count
+  # does not satisfy CM-1. Fails closed if human_approval_count is absent or 0.
   - id: "SR11-7-CM1-approved-agent-merge"
     stage: "Change Management"
     function_id: "CM-1"
@@ -69,38 +85,39 @@ rules:
     description: >
       SR 11-7 CM-1 requires documented approval before deploying model changes.
       Merging an agent-authored PR with prior human approval satisfies this control.
+      human_approval_count must be >0 to confirm approvals came from human actors.
     match:
       event_type: "pr_merged"
       conditions:
         - field: "is_agent_authored"
           equals: true
-        - field: "approval_count"
+        - field: "human_approval_count"
           gt: 0
 
-  # Change Management stage: human-authored change merged (informational)
+  # Change Management stage: human-authored change merged with human approval
   - id: "SR11-7-CM1-human-merge"
     stage: "Change Management"
     function_id: "CM-1"
     control_name: "Human Change Deployment"
     description: >
-      Human-authored change merged after review. Tracked for completeness
+      Human-authored change merged after human review. Tracked for completeness
       of change management evidence.
     match:
       event_type: "pr_merged"
       conditions:
         - field: "is_agent_authored"
           equals: false
-        - field: "approval_count"
+        - field: "human_approval_count"
           gt: 0
 
-  # INSUFFICIENT EVIDENCE: agent-authored PR merged without any human approval
+  # INSUFFICIENT EVIDENCE: agent-authored PR merged without any approval at all
   - id: "SR11-7-MV3-ie-no-approval-on-merge"
     stage: "Model Validation"
     function_id: "MV-3"
     control_name: "Independent Human Review and Approval"
     insufficient_evidence: true
     reason: >
-      INSUFFICIENT EVIDENCE: Agent-authored PR was merged without any human approval.
+      INSUFFICIENT EVIDENCE: Agent-authored PR was merged without any approval.
       SR 11-7 MV-3 requires independent review of agent/model outputs before deployment.
       Self-merge of agent-authored code without a second reviewer violates the independence
       requirement and creates an unverifiable change in the audit trail.
@@ -111,6 +128,29 @@ rules:
           equals: true
         - field: "approval_count"
           equals: 0
+
+  # INSUFFICIENT EVIDENCE: agent-authored PR merged with approvals but none from humans
+  # Finding 8: bot or agent approvals do not satisfy MV-3 independence requirement.
+  - id: "SR11-7-MV3-ie-bot-approval-only"
+    stage: "Model Validation"
+    function_id: "MV-3"
+    control_name: "Independent Human Review and Approval"
+    insufficient_evidence: true
+    reason: >
+      INSUFFICIENT EVIDENCE: Agent-authored PR was merged with approval(s), but
+      human_approval_count is absent or zero, indicating all approvals may be from
+      bots or automated agents. SR 11-7 MV-3 requires INDEPENDENT HUMAN review —
+      a bot approving its own or another agent's output does not constitute independent
+      oversight. Upstream webhook must supply human_approval_count to evidence this control.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+        - field: "approval_count"
+          gt: 0
+        - field: "human_approval_count"
+          truthy: false
 
   # INSUFFICIENT EVIDENCE: human PR merged without any review
   - id: "SR11-7-CM1-ie-no-approval-human"

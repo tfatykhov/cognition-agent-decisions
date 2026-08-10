@@ -13,6 +13,7 @@ See website/specs/f055-decision-provenance.md for the full design spec.
 import json
 import logging
 import os
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,11 +28,15 @@ from .storage.provenance import (
     EVIDENCE_CLASS_ATTESTED,
     EVIDENCE_CLASS_OBSERVED,
     append_event,
-    get_events,
+    append_events_batch,
+    get_head,
     get_head_hash,
-    get_last_bundle_head_hash,
+    get_last_bundle_checkpoint,
+    get_seq_for_hash,
     init_db,
-    store_bundle_head_hash,
+    store_bundle_checkpoint,
+    validate_observed_seqs,
+    verify_at_checkpoint,
     verify_chain,
 )
 
@@ -44,12 +49,24 @@ DEFAULT_PROVENANCE_DB = os.environ.get(
 
 
 def _get_db_path(params: dict[str, Any]) -> str:
-    return params.get("db_path") or DEFAULT_PROVENANCE_DB
+    """Return the server-configured provenance DB path.
+
+    The path is determined by the PROVENANCE_DB environment variable or the
+    compiled-in default. RPC callers cannot override the path — doing so would
+    allow any authenticated agent to redirect reads/writes to an arbitrary file.
+    """
+    return DEFAULT_PROVENANCE_DB
 
 
 def _ensure_db(db_path: str) -> None:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     init_db(db_path)
+
+
+def _unique_ts_tag() -> str:
+    """Generate a unique timestamp tag for bundle filenames (microseconds + UUID)."""
+    now = datetime.now(UTC)
+    return now.strftime("%Y%m%dT%H%M%S") + f"_{now.microsecond:06d}_{uuid.uuid4().hex[:8]}Z"
 
 
 # ── cstp.ingestEvidence ───────────────────────────────────────────────────────
@@ -61,10 +78,12 @@ async def ingest_evidence(params: dict[str, Any], agent_id: str) -> dict[str, An
     Params:
         events   — list of event dicts, each with: event_type, ts, source, payload
         source   — default source label if not specified per-event (default: "external")
-        db_path  — optional override for the provenance DB path
 
     All ingested events receive evidence_class='observed'. The caller cannot override
     this — observed events must come from external systems only.
+
+    The entire batch is validated before any event is committed. If any event is
+    invalid, no events are appended (atomic batch semantics).
 
     Returns:
         ingested      — count of events appended
@@ -79,9 +98,9 @@ async def ingest_evidence(params: dict[str, Any], agent_id: str) -> dict[str, An
         raise ValueError("'events' must be a non-empty list")
 
     default_source = params.get("source", "external")
-    ingested = 0
-    first_seq: int | None = None
 
+    # Validate ALL events before committing any (atomic batch — finding 11)
+    validated: list[tuple[str, str, str, dict, str | None]] = []
     for ev in raw_events:
         if not isinstance(ev, dict):
             raise ValueError("Each event must be a dict")
@@ -90,24 +109,23 @@ async def ingest_evidence(params: dict[str, Any], agent_id: str) -> dict[str, An
             raise ValueError("Each event must have 'event_type'")
 
         payload = ev.get("payload", {})
+        # Reject non-dict payloads before they can poison the store (finding 10)
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"Event payload must be a dict, got: {type(payload).__name__}"
+            )
+
         ts = ev.get("ts")
         source = ev.get("source") or default_source
+        validated.append((source, event_type, EVIDENCE_CLASS_OBSERVED, payload, ts))
 
-        seq, _ = append_event(
-            source=source,
-            event_type=event_type,
-            evidence_class=EVIDENCE_CLASS_OBSERVED,
-            payload=payload,
-            ts=ts,
-            db_path=db_path,
-        )
-        if first_seq is None:
-            first_seq = seq
-        ingested += 1
-
+    # Append atomically in one transaction (finding 11)
+    results = append_events_batch(validated, db_path)
+    first_seq = results[0][0] if results else None
     head_hash = get_head_hash(db_path)
+
     return {
-        "ingested": ingested,
+        "ingested": len(results),
         "head_hash": head_hash,
         "first_seq": first_seq,
     }
@@ -129,7 +147,6 @@ async def link_evidence(params: dict[str, Any], agent_id: str) -> dict[str, Any]
         event_seqs   — list of observed event sequence numbers being linked
         stakes       — stakes level from the CSTP decision (optional, for mapping)
         has_outcome  — whether the decision has a recorded outcome (optional)
-        db_path      — optional override for the provenance DB path
 
     Returns:
         linked        — count of event seqs linked
@@ -146,6 +163,9 @@ async def link_evidence(params: dict[str, Any], agent_id: str) -> dict[str, Any]
     event_seqs = params.get("event_seqs", [])
     if not isinstance(event_seqs, list):
         raise ValueError("'event_seqs' must be a list")
+
+    # Validate event_seqs: must exist, be observed class, no duplicates (finding 4)
+    validate_observed_seqs(event_seqs, db_path)
 
     stakes = params.get("stakes")
     has_outcome = params.get("has_outcome", False)
@@ -214,7 +234,6 @@ async def map_controls(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     Controls satisfied only by attested evidence are flagged attested_only=True.
 
     Params:
-        db_path       — optional override for the provenance DB path
         mappings_dir  — optional override for the YAML rules directory
 
     Returns:
@@ -230,11 +249,17 @@ async def map_controls(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     mappings_dir_override = params.get("mappings_dir")
     mappings_dir = Path(mappings_dir_override) if mappings_dir_override else MAPPINGS_DIR
 
-    events = get_events(db_path)
+    events = get_events_from_db(db_path)
     rules = load_rules(mappings_dir)
     mr = apply_rules(events, rules)
 
     return _mapping_result_to_dict(mr)
+
+
+def get_events_from_db(db_path: str) -> list[dict]:
+    """Load all events from the provenance DB (thin wrapper for service use)."""
+    from .storage.provenance import get_events
+    return get_events(db_path)
 
 
 # ── cstp.exportEvidenceBundle ─────────────────────────────────────────────────
@@ -243,27 +268,34 @@ async def map_controls(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
 async def export_evidence_bundle(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     """Emit the evidence bundle as JSON (and optionally PDF).
 
-    P2 fix: the bundle persists the head hash at generation time. Subsequent calls
-    to cstp.verifyEvidenceChain use that stored hash to detect tail truncation.
+    The bundle checkpoint is only promoted after successful chain verification
+    to prevent a tampered chain from self-healing on the next export (finding 5+6).
+    Verification uses verify_at_checkpoint so legitimate chain growth after the
+    previous export does not falsely report the chain broken (finding 5+6).
 
     Params:
         format        — "json" (default) or "pdf" or "both"
         output_dir    — directory to write bundle files (default: ./bundles)
-        db_path       — optional override for the provenance DB path
         mappings_dir  — optional override for the YAML rules directory
 
     Returns:
         json_path      — path to JSON bundle file (if format includes json)
         pdf_path       — path to PDF bundle file (if format includes pdf)
-        chain_head_hash — head hash persisted at generation time
-        chain_intact   — result of verify_chain using the persisted head hash (P2 fix)
+        chain_head_hash — head hash at generation time
+        chain_intact   — result of checkpoint-based verification
         coverage       — per-class coverage (observed and attested, never blended)
         insufficient_evidence_count — count of control gaps
     """
     db_path = _get_db_path(params)
     _ensure_db(db_path)
 
+    # Validate format before creating directories (finding 13)
     fmt = params.get("format", "json").lower()
+    if fmt not in ("json", "pdf", "both"):
+        raise ValueError(
+            f"Unsupported bundle format: {fmt!r}. Must be 'json', 'pdf', or 'both'."
+        )
+
     output_dir = Path(params.get("output_dir", "bundles"))
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -271,24 +303,38 @@ async def export_evidence_bundle(params: dict[str, Any], agent_id: str) -> dict[
     mappings_dir = Path(mappings_dir_override) if mappings_dir_override else MAPPINGS_DIR
 
     # Run mapping engine
-    events = get_events(db_path)
+    events = get_events_from_db(db_path)
     rules = load_rules(mappings_dir)
     mr = apply_rules(events, rules)
 
-    # P2 fix: load the previously stored head hash to detect tail truncation,
-    # then store the current head hash for future verifications.
-    prev_bundle_hash = get_last_bundle_head_hash(db_path)
-    chain_head = get_head_hash(db_path)
-    store_bundle_head_hash(chain_head or "", "json", db_path)
-    # If a previous bundle hash exists, verify against it (catches tail truncation).
-    # First-time export has no previous hash: fall back to internal-only verification.
-    if prev_bundle_hash:
-        chain_intact = verify_chain(db_path, expected_head_hash=prev_bundle_hash) is None
+    # Checkpoint state machine (findings 5+6):
+    #
+    # :286 fix — use verify_at_checkpoint so legitimate new events beyond the last
+    # checkpoint do NOT cause a false "chain broken" result.
+    #
+    # :282 fix — only store a new checkpoint after successful verification. If the
+    # chain is broken, the checkpoint stays at the last trusted state, preventing
+    # the tampered head from being recorded as "trusted" and self-healing on the
+    # next verify call.
+    prev_checkpoint = get_last_bundle_checkpoint(db_path)
+    head = get_head(db_path)
+    chain_head = head[1] if head else None
+    chain_head_seq = head[0] if head else 0
+
+    if prev_checkpoint:
+        cp_seq, cp_hash = prev_checkpoint
+        broken_at = verify_at_checkpoint(db_path, cp_seq, cp_hash)
+        chain_intact = broken_at is None
     else:
-        chain_intact = verify_chain(db_path) is None
+        broken_at = verify_chain(db_path)
+        chain_intact = broken_at is None
+
+    # Only promote checkpoint when chain is intact
+    if chain_intact and head:
+        store_bundle_checkpoint(chain_head_seq, chain_head or "", fmt, db_path)
 
     generated_at = datetime.now(UTC).isoformat()
-    ts_tag = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    ts_tag = _unique_ts_tag()
 
     result: dict[str, Any] = {
         "chain_head_hash": chain_head,
@@ -316,10 +362,15 @@ async def export_evidence_bundle(params: dict[str, Any], agent_id: str) -> dict[
 
     if fmt in ("json", "both"):
         json_path = output_dir / f"bundle_{ts_tag}.json"
-        json_path.write_text(
-            json.dumps(bundle_data, indent=2, sort_keys=False, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        # O_EXCL: fail if file already exists to prevent clobbering immutable bundles
+        try:
+            with open(json_path, "x", encoding="utf-8") as f:
+                f.write(json.dumps(bundle_data, indent=2, sort_keys=False, ensure_ascii=False))
+        except FileExistsError:
+            ts_tag = _unique_ts_tag()
+            json_path = output_dir / f"bundle_{ts_tag}.json"
+            with open(json_path, "x", encoding="utf-8") as f:
+                f.write(json.dumps(bundle_data, indent=2, sort_keys=False, ensure_ascii=False))
         result["json_path"] = str(json_path)
 
     if fmt in ("pdf", "both"):
@@ -353,7 +404,8 @@ def _generate_pdf(
     except ImportError as exc:
         raise RuntimeError(
             "reportlab is required for PDF generation. "
-            "Install it with: pip install reportlab"
+            "Install it with: pip install 'cognition-agent-decisions[pdf]' "
+            "or: pip install reportlab"
         ) from exc
 
     path = output_dir / f"bundle_{ts_tag}.pdf"
@@ -565,16 +617,16 @@ def _generate_pdf(
     story.append(Paragraph(
         "The observed event store uses a SHA-256 hash chain. Each record's hash covers "
         "its sequence number, timestamp, event type, evidence class, canonical payload, "
-        "and the hash of the previous record. The head hash is persisted at bundle "
-        "generation time; verification is performed against that stored hash to detect "
-        "tail truncation (P2 fix).", body))
+        "and the hash of the previous record (as canonical JSON). The checkpoint is "
+        "stored at bundle generation time; verification is performed against that "
+        "checkpoint to detect tail truncation and tampering.", body))
     chain_data = [
         ["Chain status", "INTACT — all hashes verified" if chain_intact
                         else "BROKEN — records have been tampered with"],
         ["Head hash", chain_head or "N/A"],
         ["Hash algorithm", "SHA-256"],
         ["Preimage format",
-         "{seq}\\n{ts}\\n{event_type}\\n{evidence_class}\\n{canonical_json(payload)}\\n{prev_hash}"],
+         'canonical_json({"seq":N,"ts":T,"event_type":E,"evidence_class":C,"payload":P,"prev_hash":H})'],
     ]
     chain_tbl = Table(chain_data, colWidths=[1.8 * inch, 4.7 * inch])
     chain_tbl.setStyle(TableStyle([
@@ -603,34 +655,54 @@ def _generate_pdf(
 async def verify_evidence_chain(params: dict[str, Any], agent_id: str) -> dict[str, Any]:
     """Verify hash chain integrity.
 
-    Uses expected_head_hash (P1 fix) so tail truncation is detectable.
-    If the caller does not supply expected_head_hash, the value from the most
-    recent bundle generation is used (P2 fix). If neither is available, falls
-    back to internal-only verification (tail truncation invisible — warn caller).
+    Uses verify_at_checkpoint so tail-truncation is detectable while allowing
+    the chain to grow beyond the last checkpoint without false positives.
+
+    If the caller supplies expected_head_hash, the seq for that hash is looked
+    up in the chain and used as the checkpoint. If the stored bundle checkpoint
+    exists (from a previous export), that is used. Otherwise falls back to
+    internal-only verification (tail truncation invisible — warn caller via
+    tail_check=False in the response).
 
     Params:
-        expected_head_hash — optional; overrides the stored bundle head hash
-        db_path            — optional override for the provenance DB path
+        expected_head_hash — optional; overrides the stored bundle checkpoint
 
     Returns:
-        intact         — True if chain is intact (all hashes valid + head matches)
+        intact         — True if chain is intact up to the checkpoint
         broken_at_seq  — seq of broken record, or None if intact
         head_hash      — current chain head hash
-        expected_hash  — the hash verified against (from param or stored bundle)
+        expected_hash  — the hash verified against
         tail_check     — True if tail-truncation detection was active
     """
     db_path = _get_db_path(params)
     _ensure_db(db_path)
 
-    # Resolve expected_head_hash
     caller_hash: str | None = params.get("expected_head_hash")
-    stored_hash = get_last_bundle_head_hash(db_path)
-    expected_hash = caller_hash or stored_hash
+    tail_check = False
+    broken_at: int | None = None
+    expected_hash: str | None = None
 
-    tail_check = expected_hash is not None
-    broken_at = verify_chain(db_path, expected_head_hash=expected_hash)
+    if caller_hash:
+        # Look up where this hash sits in the chain
+        seq = get_seq_for_hash(caller_hash, db_path)
+        if seq is None:
+            broken_at = 0  # hash not found in current chain
+        else:
+            broken_at = verify_at_checkpoint(db_path, seq, caller_hash)
+        tail_check = True
+        expected_hash = caller_hash
+    else:
+        stored_checkpoint = get_last_bundle_checkpoint(db_path)
+        if stored_checkpoint:
+            cp_seq, cp_hash = stored_checkpoint
+            broken_at = verify_at_checkpoint(db_path, cp_seq, cp_hash)
+            tail_check = True
+            expected_hash = cp_hash
+        else:
+            broken_at = verify_chain(db_path)
 
-    head_hash = get_head_hash(db_path)
+    head = get_head(db_path)
+    head_hash = head[1] if head else None
 
     return {
         "intact": broken_at is None,
