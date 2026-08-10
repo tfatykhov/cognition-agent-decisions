@@ -7,12 +7,26 @@ Two-class evidence model is the non-negotiable design constraint:
   observed  — third-party events (hash-chained)
   attested  — first-party CSTP records (self-reported)
 Coverage must be reported separately per class. Any blended metric is a bug.
+
+Finding 3 — db_path removed from RPC params:
+  Service functions no longer accept db_path via params. All service-layer
+  tests inject the test DB via monkeypatch on DEFAULT_PROVENANCE_DB. Storage-layer
+  tests (TestAppendAndGet, TestHashChainIntegrity, etc.) still pass db_path
+  directly to the storage functions — that API is not changed.
+
+Finding 8 — human actor signal required:
+  Tests that previously used approval_count>0 without actor_is_human/human_approval_count
+  have been updated deliberately: those events encoded the buggy behavior. Updated events
+  now include actor_is_human=True and human_approval_count as appropriate.
 """
 
 import json
 import sqlite3
+import threading
 import pytest
 from pathlib import Path
+
+import a2a.cstp.provenance_service as _svc
 
 from a2a.cstp.storage.provenance import (
     EVIDENCE_CLASS_OBSERVED,
@@ -21,10 +35,14 @@ from a2a.cstp.storage.provenance import (
     compute_hash,
     event_count,
     get_events,
+    get_head,
     get_head_hash,
+    get_last_bundle_checkpoint,
     get_last_bundle_head_hash,
     init_db,
     store_bundle_head_hash,
+    validate_observed_seqs,
+    verify_at_checkpoint,
     verify_chain,
 )
 from a2a.cstp.provenance.mapping import (
@@ -47,40 +65,61 @@ from a2a.cstp.provenance_service import (
 
 @pytest.fixture
 def db(tmp_path):
+    """Low-level storage DB fixture. Does NOT patch the service default."""
     path = str(tmp_path / "test.db")
     init_db(path)
     return path
 
 
 @pytest.fixture
-def db_with_observed(db):
-    """A DB with a handful of typical observed PR events."""
+def db_with_observed(db, monkeypatch):
+    """DB fixture with pre-loaded observed PR events.
+
+    Also patches DEFAULT_PROVENANCE_DB so service-layer tests that take this
+    fixture directly (without going through service_params_observed) correctly
+    route to this temp DB.
+
+    Events include actor_is_human and human_approval_count fields required by
+    the finding-8 human-actor rules (updated deliberately from the prior
+    buggy behavior).
+    """
     events = [
         ("gh", "pr_opened", {"pr_number": 1, "is_agent_authored": True, "agent_type": "Claude",
                               "title": "Add risk scorer", "approval_count": 0}),
-        ("gh", "pr_review_approved", {"pr_number": 1, "reviewer": "alice"}),
+        ("gh", "pr_review_approved", {"pr_number": 1, "reviewer": "alice",
+                                       "actor_is_human": True}),
         ("gh", "pr_merged", {"pr_number": 1, "is_agent_authored": True, "approval_count": 1,
-                              "merged_by": "alice"}),
+                              "human_approval_count": 1, "merged_by": "alice"}),
         ("gh", "pr_opened", {"pr_number": 2, "is_agent_authored": True, "agent_type": "Claude",
                               "title": "Agent risk scorer v2", "approval_count": 0}),
         ("gh", "pr_merged", {"pr_number": 2, "is_agent_authored": True, "approval_count": 0,
-                              "merged_by": "claude-bot"}),  # no human approval — IE gap
+                              "human_approval_count": 0, "merged_by": "claude-bot"}),
     ]
     for ts_idx, (source, etype, payload) in enumerate(events):
         append_event(
             source=source, event_type=etype, evidence_class=EVIDENCE_CLASS_OBSERVED,
             payload=payload, ts=f"2026-07-0{ts_idx + 1}T10:00:00Z", db_path=db,
         )
+    monkeypatch.setattr(_svc, "DEFAULT_PROVENANCE_DB", db)
     return db
 
 
 @pytest.fixture
-def service_params(db):
+def service_params(db, monkeypatch):
+    """Service-layer params fixture. Patches DEFAULT_PROVENANCE_DB to test DB.
+
+    Returns a dict that still includes db_path for any test code that reads the
+    path directly (e.g. to call get_events). The service ignores db_path in params
+    (finding 3 fix).
+    """
+    monkeypatch.setattr(_svc, "DEFAULT_PROVENANCE_DB", db)
     return {"db_path": db}
 
 
 @pytest.fixture
-def service_params_observed(db_with_observed):
+def service_params_observed(db_with_observed, monkeypatch):
+    """service_params variant with pre-loaded observed events."""
+    monkeypatch.setattr(_svc, "DEFAULT_PROVENANCE_DB", db_with_observed)
     return {"db_path": db_with_observed}
 
 
@@ -157,6 +196,21 @@ class TestComputeHash:
         h2 = compute_hash(1, "ts", "et", "observed", {"a": 2, "z": 1}, "")
         assert h1 == h2
 
+    def test_hash_preimage_injective(self):
+        """Finding 1: (ts='a\\nb', event_type='c') and (ts='a', event_type='b\\nc') must differ.
+
+        The old newline-delimited preimage collapsed these two tuples to the same
+        byte string. The canonical-JSON preimage encodes each field separately so
+        no two distinct (seq, ts, event_type, ...) tuples share a preimage.
+        FAILS before fix, PASSES after.
+        """
+        h1 = compute_hash(1, "a\nb", "c", "observed", {}, "")
+        h2 = compute_hash(1, "a", "b\nc", "observed", {}, "")
+        assert h1 != h2, (
+            "Hash preimage must be injective — collisions allow hash chain forgery "
+            "by swapping field values without changing the hash"
+        )
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Store: append / get
@@ -212,6 +266,36 @@ class TestAppendAndGet:
     def test_invalid_evidence_class_rejected(self, db):
         with pytest.raises(ValueError, match="evidence_class"):
             append_event("src", "et", "unknown", {}, db_path=db)
+
+    def test_concurrent_append_produces_valid_chain(self, db):
+        """Finding 2: concurrent appenders must not break the chain.
+
+        Before fix (no BEGIN IMMEDIATE): two threads could read the same head seq,
+        compute the next hash with the same next_seq, then INSERT — one gets the
+        right seq, the other has a hash that doesn't match its actual row.
+        After fix (BEGIN IMMEDIATE + explicit seq): writes serialize, chain stays intact.
+        FAILS (non-deterministically) before fix, PASSES reliably after.
+        """
+        errors: list[Exception] = []
+
+        def appender(i: int) -> None:
+            try:
+                append_event(
+                    "src", f"et_{i}", "observed", {"i": i},
+                    ts=f"2026-{(i % 12) + 1:02d}-01T00:00:00Z", db_path=db,
+                )
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=appender, args=(i,)) for i in range(1, 11)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent append errors: {errors}"
+        assert verify_chain(db) is None, "Concurrent appends left the chain broken"
+        assert event_count(db) == 10, "Some events were lost under concurrent writes"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -314,6 +398,57 @@ class TestHashChainIntegrity:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Store: verify_at_checkpoint
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestVerifyAtCheckpoint:
+    def test_intact_chain_passes_at_head(self, db):
+        for i in range(5):
+            append_event("src", "evt", "observed", {"i": i},
+                         ts=f"2026-01-0{i+1}T00:00:00Z", db_path=db)
+        head = get_head(db)
+        assert head is not None
+        assert verify_at_checkpoint(db, head[0], head[1]) is None
+
+    def test_valid_extension_passes(self, db):
+        """Finding 5+6: chain growth beyond checkpoint must NOT be flagged as broken."""
+        for i in range(3):
+            append_event("src", "evt", "observed", {"i": i},
+                         ts=f"2026-01-0{i+1}T00:00:00Z", db_path=db)
+        checkpoint = get_head(db)
+        assert checkpoint is not None
+        # Add two more events (valid extension)
+        for i in range(3, 5):
+            append_event("src", "evt", "observed", {"i": i},
+                         ts=f"2026-01-0{i+1}T00:00:00Z", db_path=db)
+        # Checkpoint at seq 3 must still pass even though chain has grown to seq 5
+        assert verify_at_checkpoint(db, checkpoint[0], checkpoint[1]) is None
+
+    def test_tail_truncation_detected(self, db):
+        """Checkpoint record deleted — verify_at_checkpoint returns 0."""
+        for i in range(5):
+            append_event("src", "evt", "observed", {"i": i},
+                         ts=f"2026-01-0{i+1}T00:00:00Z", db_path=db)
+        checkpoint = get_head(db)
+        assert checkpoint is not None
+        with sqlite3.connect(db) as conn:
+            conn.execute("DELETE FROM events WHERE seq >= 4")
+            conn.commit()
+        assert verify_at_checkpoint(db, checkpoint[0], checkpoint[1]) == 0
+
+    def test_tampered_record_detected(self, db):
+        for i in range(5):
+            append_event("src", "evt", "observed", {"i": i},
+                         ts=f"2026-01-0{i+1}T00:00:00Z", db_path=db)
+        head = get_head(db)
+        assert head is not None
+        with sqlite3.connect(db) as conn:
+            conn.execute("UPDATE events SET payload_json = '{\"x\":99}' WHERE seq = 3")
+            conn.commit()
+        assert verify_at_checkpoint(db, head[0], head[1]) == 3
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Store: bundle metadata (P2 fix)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -339,6 +474,46 @@ class TestBundleMetadata:
         h2 = get_head_hash(db)
         store_bundle_head_hash(h2, "json", db)
         assert get_last_bundle_head_hash(db) == h2
+
+    def test_checkpoint_stores_seq(self, db):
+        """Checkpoint stores head_seq so verify_at_checkpoint can verify without head comparison."""
+        for i in range(5):
+            append_event("src", "evt", "observed", {"i": i},
+                         ts=f"2026-01-0{i+1}T00:00:00Z", db_path=db)
+        h = get_head_hash(db)
+        store_bundle_head_hash(h, "json", db)
+        cp = get_last_bundle_checkpoint(db)
+        assert cp is not None
+        assert cp == (5, h)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Store: validate_observed_seqs
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestValidateObservedSeqs:
+    def test_empty_list_is_valid(self, db):
+        validate_observed_seqs([], db)  # should not raise
+
+    def test_valid_observed_seqs_pass(self, db):
+        for _ in range(3):
+            append_event("src", "evt", "observed", {}, ts="2026-01-01T00:00:00Z", db_path=db)
+        validate_observed_seqs([1, 2, 3], db)  # should not raise
+
+    def test_rejects_nonexistent_seq(self, db):
+        append_event("src", "evt", "observed", {}, ts="2026-01-01T00:00:00Z", db_path=db)
+        with pytest.raises(ValueError, match="nonexistent"):
+            validate_observed_seqs([999], db)
+
+    def test_rejects_attested_seq(self, db):
+        append_event("src", "evt", "attested", {}, ts="2026-01-01T00:00:00Z", db_path=db)
+        with pytest.raises(ValueError, match="observed"):
+            validate_observed_seqs([1], db)
+
+    def test_rejects_duplicate_seqs(self, db):
+        append_event("src", "evt", "observed", {}, ts="2026-01-01T00:00:00Z", db_path=db)
+        with pytest.raises(ValueError, match="duplicate"):
+            validate_observed_seqs([1, 1], db)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -366,6 +541,17 @@ class TestLoadRules:
             assert "match" in rule, f"Missing 'match' in rule {rule}"
             assert "event_type" in rule["match"], f"Missing match.event_type in rule {rule}"
 
+    def test_rules_carry_evidence_class(self):
+        """Finding 7: each rule must carry _evidence_class from its YAML file."""
+        rules = load_rules(MAPPINGS_DIR)
+        for rule in rules:
+            assert "_evidence_class" in rule, f"Rule {rule.get('id')} missing _evidence_class"
+        observed_frameworks = {r["_framework"] for r in rules if r["_evidence_class"] == "observed"}
+        attested_frameworks = {r["_framework"] for r in rules if r["_evidence_class"] == "attested"}
+        assert "SR 11-7" in observed_frameworks
+        assert "NIST AI RMF" in observed_frameworks
+        assert "CSTP Attested" in attested_frameworks
+
     def test_ie_rules_have_reason(self):
         rules = load_rules(MAPPINGS_DIR)
         for rule in rules:
@@ -392,6 +578,30 @@ class TestLoadRules:
         )
         assert has_agent_condition, "MANAGE-1.1 must require is_agent_authored=true"
 
+    def test_mv3_human_approval_requires_actor_is_human(self):
+        """Finding 8: SR11-7 MV-3 human-approval rule must require actor_is_human."""
+        rules = load_rules(MAPPINGS_DIR)
+        mv3_approval = [r for r in rules if r.get("id") == "SR11-7-MV3-human-approval"]
+        assert mv3_approval, "SR11-7-MV3-human-approval rule not found"
+        conditions = mv3_approval[0]["match"].get("conditions", [])
+        has_human_condition = any(
+            c.get("field") == "actor_is_human" and c.get("equals") is True
+            for c in conditions
+        )
+        assert has_human_condition, "MV-3 human-approval must require actor_is_human=true"
+
+    def test_cm1_requires_human_approval_count(self):
+        """Finding 8: CM-1 approved-agent-merge must require human_approval_count>0."""
+        rules = load_rules(MAPPINGS_DIR)
+        cm1 = [r for r in rules if r.get("id") == "SR11-7-CM1-approved-agent-merge"]
+        assert cm1, "SR11-7-CM1-approved-agent-merge rule not found"
+        conditions = cm1[0]["match"].get("conditions", [])
+        has_human_count = any(
+            c.get("field") == "human_approval_count" and c.get("gt", -1) >= 0
+            for c in conditions
+        )
+        assert has_human_count, "CM-1 must require human_approval_count>0"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Mapping: apply rules
@@ -413,17 +623,21 @@ class TestApplyRules:
         mr = apply_rules(events, rules)
         assert mr.observed.mapped_events == 1
 
-    def test_approval_maps_to_mv3(self):
+    def test_approval_maps_to_mv3_when_actor_is_human(self):
+        """Finding 8 (updated): approval must have actor_is_human=True to map to MV-3."""
         rules = load_rules(MAPPINGS_DIR)
-        events = [_make_event(1, "pr_review_approved", {"pr_number": 1, "reviewer": "bob"})]
+        events = [_make_event(1, "pr_review_approved",
+                               {"pr_number": 1, "reviewer": "bob", "actor_is_human": True})]
         mr = apply_rules(events, rules)
         mv3 = [m for m in mr.mappings if m.get("function_id") == "MV-3"]
         assert len(mv3) >= 1
 
-    def test_agent_merge_with_approval_maps_cm1(self):
+    def test_agent_merge_with_human_approval_maps_cm1(self):
+        """Finding 8 (updated): merge must have human_approval_count>0 to map to CM-1."""
         rules = load_rules(MAPPINGS_DIR)
         events = [_make_event(1, "pr_merged",
-                               {"pr_number": 1, "is_agent_authored": True, "approval_count": 2})]
+                               {"pr_number": 1, "is_agent_authored": True,
+                                "approval_count": 2, "human_approval_count": 2})]
         mr = apply_rules(events, rules)
         cm = [m for m in mr.mappings if "CM" in m.get("function_id", "")]
         assert len(cm) >= 1
@@ -459,6 +673,73 @@ class TestApplyRules:
         assert mr.observed.total_events == 1
         assert mr.attested.total_events == 1
 
+    def test_bot_approval_does_not_satisfy_mv3(self):
+        """Finding 8 regression: bot approval (no actor_is_human) must not map to MV-3.
+
+        FAILS before fix (MV-3 fires unconditionally on pr_review_approved).
+        PASSES after fix (actor_is_human must be True).
+        """
+        rules = load_rules(MAPPINGS_DIR)
+        events = [_make_event(1, "pr_review_approved",
+                               {"pr_number": 1, "reviewer": "dependabot[bot]"})]
+        mr = apply_rules(events, rules)
+        mv3_maps = [m for m in mr.mappings if m.get("function_id") == "MV-3"]
+        assert len(mv3_maps) == 0, (
+            "Bot approval (no actor_is_human field) must NOT satisfy MV-3 — "
+            "a bot approving an agent's output is not independent human review"
+        )
+
+    def test_no_human_approval_count_no_cm1_credit(self):
+        """Finding 8 regression: approval_count>0 without human_approval_count must not map CM-1.
+
+        FAILS before fix (CM-1 fires on approval_count>0).
+        PASSES after fix (human_approval_count>0 required).
+        """
+        rules = load_rules(MAPPINGS_DIR)
+        events = [_make_event(1, "pr_merged",
+                               {"pr_number": 1, "is_agent_authored": True, "approval_count": 1})]
+        mr = apply_rules(events, rules)
+        cm1 = [m for m in mr.mappings if m.get("function_id") == "CM-1"]
+        assert len(cm1) == 0, (
+            "approval_count>0 without human_approval_count must not satisfy CM-1 — "
+            "bot approvals should not award change management credit"
+        )
+
+    def test_observed_event_does_not_match_attested_rules(self):
+        """Finding 7 regression: observed events must not match attested-class rules.
+
+        FAILS before fix (cstp-attested.yaml rules matched any event with the right
+        event_type regardless of evidence_class).
+        PASSES after fix (class isolation enforced in _rule_matches).
+        """
+        rules = load_rules(MAPPINGS_DIR)
+        # Observed event of type cstp_decision_linked (evidence_class="observed")
+        events = [_make_event(1, "cstp_decision_linked",
+                               {"decision_id": "x", "event_seqs": [], "has_outcome": True},
+                               evidence_class="observed")]
+        mr = apply_rules(events, rules)
+        attested_maps = [m for m in mr.mappings if "CSTP" in m.get("framework", "")]
+        assert len(attested_maps) == 0, (
+            "Observed events must never match attested-class rules — "
+            "doing so awards high-trust observed credit for self-reported data"
+        )
+
+    def test_attested_event_does_not_match_observed_rules(self):
+        """Finding 7 regression: attested events must not match observed-class rules.
+
+        FAILS before fix. PASSES after fix.
+        """
+        rules = load_rules(MAPPINGS_DIR)
+        # Attested event of type pr_opened — must not match SR 11-7 or NIST observed rules
+        events = [_make_event(1, "pr_opened",
+                               {"pr_number": 1, "is_agent_authored": True},
+                               evidence_class="attested")]
+        mr = apply_rules(events, rules)
+        sr_maps = [m for m in mr.mappings if "SR 11-7" in m.get("framework", "")]
+        nist_maps = [m for m in mr.mappings if "NIST" in m.get("framework", "")]
+        assert len(sr_maps) == 0, "Attested events must not match SR 11-7 observed rules"
+        assert len(nist_maps) == 0, "Attested events must not match NIST AI RMF observed rules"
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Mapping: two-class coverage (THE NON-NEGOTIABLE CONSTRAINT)
@@ -470,7 +751,8 @@ class TestPerClassCoverage:
         events = [
             _make_event(1, "pr_opened", {"pr_number": 1, "is_agent_authored": True},
                         evidence_class="observed"),
-            _make_event(2, "pr_review_approved", {"pr_number": 1}, evidence_class="observed"),
+            _make_event(2, "pr_review_approved", {"pr_number": 1, "actor_is_human": True},
+                        evidence_class="observed"),
         ]
         mr = apply_rules(events, rules)
         assert mr.observed.total_events == 2
@@ -512,15 +794,16 @@ class TestPerClassCoverage:
             "Separate observed.coverage_pct and attested.coverage_pct are required."
         )
 
-    async def test_rpc_response_has_no_blended_coverage(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_rpc_response_has_no_blended_coverage(self, tmp_path, monkeypatch):
         """cstp.mapControls response must not contain a top-level coverage_pct."""
         db_path = str(tmp_path / "no_blend.db")
         init_db(db_path)
         append_event("gh", "pr_opened", "observed",
                      {"pr_number": 1, "is_agent_authored": True},
                      ts="2026-01-01T00:00:00Z", db_path=db_path)
-        params = {"db_path": db_path}
-        result = await map_controls(params, "test-agent")
+        monkeypatch.setattr(_svc, "DEFAULT_PROVENANCE_DB", db_path)
+        result = await map_controls({}, "test-agent")
         assert "coverage_pct" not in result, (
             "cstp.mapControls must not return a blended coverage_pct. "
             "Only coverage.observed.coverage_pct and coverage.attested.coverage_pct are allowed."
@@ -529,7 +812,8 @@ class TestPerClassCoverage:
         assert "observed" in result["coverage"]
         assert "attested" in result["coverage"]
 
-    async def test_bundle_has_no_blended_coverage(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_bundle_has_no_blended_coverage(self, tmp_path, monkeypatch):
         """exportEvidenceBundle JSON bundle must not contain a top-level coverage_pct."""
         db_path = str(tmp_path / "bundle_blend.db")
         output_dir = tmp_path / "out"
@@ -537,8 +821,9 @@ class TestPerClassCoverage:
         append_event("gh", "pr_opened", "observed",
                      {"pr_number": 1, "is_agent_authored": True},
                      ts="2026-01-01T00:00:00Z", db_path=db_path)
-        params = {"db_path": db_path, "format": "json", "output_dir": str(output_dir)}
-        result = await export_evidence_bundle(params, "test-agent")
+        monkeypatch.setattr(_svc, "DEFAULT_PROVENANCE_DB", db_path)
+        result = await export_evidence_bundle({"format": "json", "output_dir": str(output_dir)},
+                                               "test-agent")
         # The service-level result must not have blended coverage
         assert "coverage_pct" not in result, (
             "exportEvidenceBundle must not return a blended coverage_pct."
@@ -611,7 +896,7 @@ class TestInsufficientEvidence:
         events = [
             _make_event(1, "pr_opened", {"pr_number": 3, "is_agent_authored": True}),
             _make_event(2, "pr_merged", {"pr_number": 3, "is_agent_authored": True,
-                                          "approval_count": 0}),
+                                          "approval_count": 0, "human_approval_count": 0}),
         ]
         mr = apply_rules(events, rules)
         ie = [i for i in mr.insufficient_evidence if i["type"] == INSUFFICIENT_EVIDENCE_TAG]
@@ -621,17 +906,18 @@ class TestInsufficientEvidence:
         rules = load_rules(MAPPINGS_DIR)
         events = [
             _make_event(1, "pr_merged", {"pr_number": 3, "is_agent_authored": True,
-                                          "approval_count": 0}),
+                                          "approval_count": 0, "human_approval_count": 0}),
         ]
         mr = apply_rules(events, rules)
         for ie in mr.insufficient_evidence:
             assert ie["reason"] and len(ie["reason"]) > 20
 
-    def test_agent_merged_with_approval_no_ie(self):
+    def test_agent_merged_with_human_approval_no_mv3_ie(self):
+        """Finding 8 (updated): merge with human_approval_count>0 must not fire MV-3 IE."""
         rules = load_rules(MAPPINGS_DIR)
         events = [
             _make_event(1, "pr_merged", {"pr_number": 2, "is_agent_authored": True,
-                                          "approval_count": 1}),
+                                          "approval_count": 1, "human_approval_count": 1}),
         ]
         mr = apply_rules(events, rules)
         mv3_ie = [i for i in mr.insufficient_evidence
@@ -643,12 +929,27 @@ class TestInsufficientEvidence:
         rules = load_rules(MAPPINGS_DIR)
         events = [
             _make_event(1, "pr_merged", {"pr_number": 5, "is_agent_authored": False,
-                                          "approval_count": 2}),
+                                          "approval_count": 2, "human_approval_count": 2}),
         ]
         mr = apply_rules(events, rules)
         manage11 = [m for m in mr.mappings
                      if m.get("function_id") == "MANAGE-1.1" and m.get("pr_number") == 5]
         assert len(manage11) == 0, "MANAGE-1.1 must not fire on human-authored merges"
+
+    def test_bot_approval_only_fires_ie(self):
+        """Finding 8: approvals without human_approval_count>0 must fire bot-only IE."""
+        rules = load_rules(MAPPINGS_DIR)
+        events = [
+            _make_event(1, "pr_merged", {"pr_number": 7, "is_agent_authored": True,
+                                          "approval_count": 1}),  # no human_approval_count
+        ]
+        mr = apply_rules(events, rules)
+        bot_ie = [i for i in mr.insufficient_evidence
+                   if i.get("pr_number") == 7 and "bot" in i.get("reason", "").lower()]
+        assert len(bot_ie) >= 1, (
+            "Agent PR merged with approval_count>0 but no human_approval_count "
+            "must surface as INSUFFICIENT EVIDENCE (bot-only approval)"
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -703,6 +1004,49 @@ class TestIngestEvidence:
         with pytest.raises(ValueError, match="event_type"):
             await ingest_evidence(params, "agent-1")
 
+    @pytest.mark.asyncio
+    async def test_ingest_rejects_non_dict_payload(self, service_params):
+        """Finding 10: non-dict payload must be rejected before persisting."""
+        params = {
+            **service_params,
+            "events": [{"event_type": "pr_opened", "payload": ["not", "a", "dict"]}],
+        }
+        with pytest.raises(ValueError, match="dict"):
+            await ingest_evidence(params, "agent-1")
+        # Verify nothing was persisted
+        assert event_count(service_params["db_path"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_ingest_batch_is_atomic(self, service_params):
+        """Finding 11: if any event is invalid, no events in the batch are committed."""
+        params = {
+            **service_params,
+            "events": [
+                {"event_type": "pr_opened", "payload": {}, "ts": "2026-01-01T00:00:00Z"},
+                {"event_type": "pr_merged", "payload": "not_a_dict", "ts": "2026-01-02T00:00:00Z"},
+            ],
+        }
+        with pytest.raises(ValueError, match="dict"):
+            await ingest_evidence(params, "agent-1")
+        # Both events must be absent — atomicity requirement
+        assert event_count(service_params["db_path"]) == 0, (
+            "Finding 11: batch ingest must be atomic — partial commit on error is a bug"
+        )
+
+    @pytest.mark.asyncio
+    async def test_ingest_unsupported_format_rejected(self, service_params, tmp_path):
+        """Finding 13: unsupported format must raise ValueError before creating any files."""
+        params = {
+            **service_params,
+            "format": "jsn",  # typo
+            "output_dir": str(tmp_path / "bundles"),
+        }
+        with pytest.raises(ValueError, match="Unsupported bundle format"):
+            await export_evidence_bundle(params, "agent-1")
+        assert not (tmp_path / "bundles").exists(), (
+            "Finding 13: output_dir must not be created for invalid format"
+        )
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # RPC: cstp.linkEvidence
@@ -744,6 +1088,56 @@ class TestLinkEvidence:
         )
         att = [e for e in events if e["evidence_class"] == "attested"]
         assert len(att) == 1
+
+    @pytest.mark.asyncio
+    async def test_link_rejects_nonexistent_seq(self, service_params_observed):
+        """Finding 4 regression: linking a nonexistent seq must fail.
+
+        FAILS before fix (link_evidence appended attested record regardless).
+        PASSES after fix (validate_observed_seqs rejects missing seqs).
+        """
+        params = {
+            **service_params_observed,
+            "decision_id": "dec-xyz",
+            "event_seqs": [999],  # seq 999 does not exist
+        }
+        with pytest.raises(ValueError, match="nonexistent"):
+            await link_evidence(params, "agent-1")
+
+    @pytest.mark.asyncio
+    async def test_link_rejects_attested_seq(self, db_with_observed, service_params_observed):
+        """Finding 4 regression: linking an attested seq must fail.
+
+        FAILS before fix. PASSES after fix.
+        """
+        # First, create an attested event (the seq we'll try to reuse)
+        att_result = await link_evidence(
+            {**service_params_observed, "decision_id": "dec-1", "event_seqs": [1]},
+            "agent-1",
+        )
+        attested_seq = att_result["attested_seq"]
+
+        # Now try to link to that attested seq — must be rejected
+        with pytest.raises(ValueError, match="observed"):
+            await link_evidence(
+                {**service_params_observed, "decision_id": "dec-2",
+                 "event_seqs": [attested_seq]},
+                "agent-1",
+            )
+
+    @pytest.mark.asyncio
+    async def test_link_rejects_duplicate_seqs(self, service_params_observed):
+        """Finding 4 regression: duplicate seqs in event_seqs must fail.
+
+        FAILS before fix. PASSES after fix.
+        """
+        params = {
+            **service_params_observed,
+            "decision_id": "dec-xyz",
+            "event_seqs": [1, 1, 2],  # seq 1 duplicated
+        }
+        with pytest.raises(ValueError, match="duplicate"):
+            await link_evidence(params, "agent-1")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -840,17 +1234,15 @@ class TestExportEvidenceBundle:
 
     @pytest.mark.asyncio
     async def test_chain_intact_false_after_tamper(self, db_with_observed, tmp_path):
-        """Tampered chain must make chain_intact=False (uses stored head hash — P2 fix)."""
-        db_path = db_with_observed
+        """Tampered chain must make chain_intact=False (uses stored checkpoint — P2 fix)."""
         params = {
-            "db_path": db_path,
             "format": "json",
             "output_dir": str(tmp_path / "bundles"),
         }
-        # First export to capture head hash
+        # First export to capture head hash / checkpoint
         await export_evidence_bundle(params, "agent-1")
         # Tamper and re-export
-        with sqlite3.connect(db_path) as conn:
+        with sqlite3.connect(db_with_observed) as conn:
             conn.execute("UPDATE events SET payload_json = '{\"tampered\":true}' WHERE seq = 1")
             conn.commit()
         result = await export_evidence_bundle(params, "agent-1")
@@ -858,23 +1250,102 @@ class TestExportEvidenceBundle:
 
     @pytest.mark.asyncio
     async def test_p2_tail_truncation_detected(self, db_with_observed, tmp_path):
-        """Tail truncation must be detected via stored head hash (P2 fix)."""
-        db_path = db_with_observed
+        """Tail truncation must be detected via stored checkpoint (P2 fix)."""
         params = {
-            "db_path": db_path,
             "format": "json",
             "output_dir": str(tmp_path / "bundles"),
         }
-        # First bundle stores the head hash
+        # First bundle stores checkpoint
         await export_evidence_bundle(params, "agent-1")
         # Delete tail events
-        with sqlite3.connect(db_path) as conn:
+        with sqlite3.connect(db_with_observed) as conn:
             conn.execute("DELETE FROM events WHERE seq >= 4")
             conn.commit()
-        # Second bundle: chain appears internally intact, but head hash won't match
+        # Second bundle: chain appears internally intact, but checkpoint mismatch
         result2 = await export_evidence_bundle(params, "agent-1")
         assert result2["chain_intact"] is False, (
-            "P2 fix: tail truncation must be detected via persisted head hash"
+            "P2 fix: tail truncation must be detected via persisted checkpoint"
+        )
+
+    @pytest.mark.asyncio
+    async def test_valid_extension_stays_intact(self, db_with_observed, tmp_path):
+        """Finding 5+6 regression: adding new events after export must not break chain.
+
+        Before fix (:286): verify_chain(db, expected_head_hash=prev_hash) returned 0
+        when the current head differed from prev_hash — treating valid growth as tampering.
+        After fix: verify_at_checkpoint checks only up to the checkpoint seq, so new events
+        do not cause a false positive.
+        FAILS before fix. PASSES after fix.
+        """
+        params = {
+            "format": "json",
+            "output_dir": str(tmp_path / "bundles"),
+        }
+
+        # First export — captures checkpoint at seq 5
+        r1 = await export_evidence_bundle(params, "agent-1")
+        assert r1["chain_intact"] is True
+
+        # Add a new legitimate event (valid chain extension)
+        append_event("src", "pr_opened", "observed", {"pr_number": 99},
+                     ts="2026-08-01T00:00:00Z", db_path=db_with_observed)
+
+        # Second export: checkpoint at seq 5 still valid, chain extended to seq 6
+        r2 = await export_evidence_bundle(params, "agent-1")
+        assert r2["chain_intact"] is True, (
+            "Finding 5+6: valid chain extension must not be reported as broken — "
+            "verify_at_checkpoint allows growth beyond the checkpoint"
+        )
+
+    @pytest.mark.asyncio
+    async def test_tail_deletion_then_verify_remains_detected(self, db_with_observed, tmp_path):
+        """Finding 5+6 regression: tampering must remain detected after re-export (no self-healing).
+
+        Before fix (:282): export stored the NEW (truncated) head as checkpoint even when
+        chain_intact=False. The next verify_evidence_chain then used that head as the
+        expected hash and reported intact — self-healing the tampered state.
+        After fix: checkpoint is only promoted when chain_intact=True.
+        FAILS before fix. PASSES after fix.
+        """
+        params = {
+            "format": "json",
+            "output_dir": str(tmp_path / "bundles"),
+        }
+
+        # First export (intact) — stores trusted checkpoint
+        r1 = await export_evidence_bundle(params, "agent-1")
+        assert r1["chain_intact"] is True
+
+        # Delete tail events (tamper)
+        with sqlite3.connect(db_with_observed) as conn:
+            conn.execute("DELETE FROM events WHERE seq >= 4")
+            conn.commit()
+
+        # Second export: must detect the tampering
+        r2 = await export_evidence_bundle(params, "agent-1")
+        assert r2["chain_intact"] is False, "Tail deletion must be detected on re-export"
+
+        # Subsequent verify: must STILL detect tampering — checkpoint was not promoted
+        verify_result = await verify_evidence_chain({}, "agent-1")
+        assert verify_result["intact"] is False, (
+            "Finding 5+6: tampering must remain detected after re-export — "
+            "checkpoint must not be self-healed to a tampered state"
+        )
+
+    @pytest.mark.asyncio
+    async def test_unsupported_format_rejected_before_creating_dirs(self, service_params_observed,
+                                                                      tmp_path):
+        """Finding 13: unsupported format must raise ValueError, not create dirs."""
+        bundle_dir = tmp_path / "bundles"
+        params = {
+            **service_params_observed,
+            "format": "jsn",  # typo
+            "output_dir": str(bundle_dir),
+        }
+        with pytest.raises(ValueError, match="Unsupported bundle format"):
+            await export_evidence_bundle(params, "agent-1")
+        assert not bundle_dir.exists(), (
+            "Finding 13: output_dir must not be created when format is invalid"
         )
 
     @pytest.mark.asyncio
@@ -887,7 +1358,7 @@ class TestExportEvidenceBundle:
             "output_dir": str(tmp_path / "bundles"),
         }
         r1 = await export_evidence_bundle(params, "agent-1")
-        await aio.sleep(1)  # ensure different timestamp in filename
+        await aio.sleep(1)  # extra guard for ts-based names
         r2 = await export_evidence_bundle(params, "agent-1")
         assert r1["json_path"] != r2["json_path"]
         assert Path(r1["json_path"]).exists()
@@ -922,18 +1393,17 @@ class TestVerifyEvidenceChain:
 
     @pytest.mark.asyncio
     async def test_uses_stored_bundle_head_hash(self, db_with_observed, tmp_path):
-        """Without explicit expected_head_hash, uses last bundle head (P2 fix)."""
-        db_path = db_with_observed
-        # Generate a bundle to store the head hash
+        """Without explicit expected_head_hash, uses last bundle checkpoint (P2 fix)."""
+        # Generate a bundle to store the checkpoint
         await export_evidence_bundle(
-            {"db_path": db_path, "format": "json", "output_dir": str(tmp_path / "b")},
+            {"format": "json", "output_dir": str(tmp_path / "b")},
             "agent-1",
         )
-        # Delete tail events — truncation should be detectable via stored hash
-        with sqlite3.connect(db_path) as conn:
+        # Delete tail events — truncation should be detectable via stored checkpoint
+        with sqlite3.connect(db_with_observed) as conn:
             conn.execute("DELETE FROM events WHERE seq >= 4")
             conn.commit()
-        result = await verify_evidence_chain({"db_path": db_path}, "agent-1")
+        result = await verify_evidence_chain({}, "agent-1")
         assert result["intact"] is False
         assert result["tail_check"] is True
 
@@ -944,9 +1414,7 @@ class TestVerifyEvidenceChain:
                 "UPDATE events SET payload_json = '{\"tampered\":true}' WHERE seq = 2"
             )
             conn.commit()
-        result = await verify_evidence_chain(
-            {"db_path": db_with_observed}, "agent-1"
-        )
+        result = await verify_evidence_chain({}, "agent-1")
         assert result["intact"] is False
         assert result["broken_at_seq"] == 2
 
@@ -957,29 +1425,29 @@ class TestVerifyEvidenceChain:
 
 class TestEndToEndWorkflow:
     @pytest.mark.asyncio
-    async def test_full_workflow(self, tmp_path):
+    async def test_full_workflow(self, tmp_path, monkeypatch):
         """Ingest → Link → MapControls → Export → Verify."""
         db_path = str(tmp_path / "workflow.db")
         output_dir = str(tmp_path / "bundles")
         init_db(db_path)
+        monkeypatch.setattr(_svc, "DEFAULT_PROVENANCE_DB", db_path)
 
-        # 1. Ingest observed events
+        # 1. Ingest observed events (with human actor signals — finding 8)
         ingest_result = await ingest_evidence({
-            "db_path": db_path,
             "events": [
                 {"event_type": "pr_opened", "ts": "2026-01-01T10:00:00Z",
                  "payload": {"pr_number": 10, "is_agent_authored": True, "approval_count": 0}},
                 {"event_type": "pr_review_approved", "ts": "2026-01-01T11:00:00Z",
-                 "payload": {"pr_number": 10, "reviewer": "bob"}},
+                 "payload": {"pr_number": 10, "reviewer": "bob", "actor_is_human": True}},
                 {"event_type": "pr_merged", "ts": "2026-01-01T12:00:00Z",
-                 "payload": {"pr_number": 10, "is_agent_authored": True, "approval_count": 1}},
+                 "payload": {"pr_number": 10, "is_agent_authored": True,
+                              "approval_count": 1, "human_approval_count": 1}},
             ],
         }, "test-agent")
         assert ingest_result["ingested"] == 3
 
         # 2. Link a CSTP decision to observed events
         link_result = await link_evidence({
-            "db_path": db_path,
             "decision_id": "dec-workflow-test",
             "event_seqs": [1, 2, 3],
             "has_outcome": True,
@@ -988,14 +1456,13 @@ class TestEndToEndWorkflow:
         assert link_result["linked"] == 3
 
         # 3. Map controls
-        map_result = await map_controls({"db_path": db_path}, "test-agent")
+        map_result = await map_controls({}, "test-agent")
         assert map_result["coverage"]["observed"]["total_events"] == 3
         assert map_result["coverage"]["attested"]["total_events"] == 1
         assert "coverage_pct" not in map_result  # No blended metric
 
         # 4. Export bundle
         export_result = await export_evidence_bundle({
-            "db_path": db_path,
             "format": "json",
             "output_dir": output_dir,
         }, "test-agent")
@@ -1005,5 +1472,5 @@ class TestEndToEndWorkflow:
         assert bundle["coverage"]["observed"]["total_events"] == 3
 
         # 5. Verify chain
-        verify_result = await verify_evidence_chain({"db_path": db_path}, "test-agent")
+        verify_result = await verify_evidence_chain({}, "test-agent")
         assert verify_result["intact"] is True

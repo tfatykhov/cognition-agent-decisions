@@ -7,6 +7,11 @@ description: >
   All rules in this file produce observed-class evidence (third-party GitHub events).
   Reference: https://airc.nist.gov/RMF
 
+  Finding 8 — human actor signal required:
+  MEASURE-2.5 (Human Review) requires actor_is_human=true on pr_review_approved events.
+  MANAGE-1.1 (Approved Deployment) requires human_approval_count>0 on pr_merged events.
+  These conditions fail closed when the upstream webhook does not supply the fields.
+
 rules:
   # GOVERN: Policies and accountability for AI risk management
   - id: "NIST-GOVERN-1.1-agent-disclosure"
@@ -42,17 +47,23 @@ rules:
     match:
       event_type: "pr_opened"
 
-  # MEASURE: Analysis and evaluation of AI risk
+  # MEASURE: Analysis and evaluation of AI risk via verified human review
+  # Finding 8 fix: actor_is_human must be true — bot approvals do not constitute
+  # an independent risk evaluation. Fails closed if actor_is_human is absent.
   - id: "NIST-MEASURE-2.5-human-review"
     stage: "MEASURE"
     function_id: "MEASURE-2.5"
     control_name: "AI Risk Evaluation via Human Review"
     description: >
       MEASURE-2.5 requires evaluating AI risks through independent assessment.
-      A human reviewer's approval constitutes a documented risk evaluation:
-      a qualified person attested that the AI output is acceptable for deployment.
+      A verified human reviewer's approval constitutes a documented risk evaluation:
+      a qualified human attested that the AI output is acceptable for deployment.
+      actor_is_human must be true — a bot approval is not an independent evaluation.
     match:
       event_type: "pr_review_approved"
+      conditions:
+        - field: "actor_is_human"
+          equals: true
 
   # MEASURE: Review comments as risk evaluation evidence
   - id: "NIST-MEASURE-2.6-review-challenge"
@@ -66,9 +77,10 @@ rules:
     match:
       event_type: "pr_review_comment"
 
-  # MANAGE: Risk response — approved deployment (agent-authored only)
+  # MANAGE: Risk response — approved deployment (agent-authored, human-reviewed only)
+  # Finding 8 fix: human_approval_count>0 required. Bot approvals do not constitute
+  # risk response — a bot approving an agent's output is not independent oversight.
   # is_agent_authored condition required: MANAGE-1.1 is "AI Risk Response".
-  # Claiming AI risk management credit for purely human-authored merges is a category error.
   - id: "NIST-MANAGE-1.1-approved-deployment"
     stage: "MANAGE"
     function_id: "MANAGE-1.1"
@@ -76,11 +88,12 @@ rules:
     description: >
       MANAGE-1.1 requires responding to identified AI risks with appropriate actions.
       Merging a reviewed and approved agent-authored change demonstrates that the risk
-      evaluation was completed and the organization accepted the residual risk for deployment.
+      evaluation was completed and the organization accepted the residual risk for
+      deployment. human_approval_count must be >0 to confirm human oversight.
     match:
       event_type: "pr_merged"
       conditions:
-        - field: "approval_count"
+        - field: "human_approval_count"
           gt: 0
         - field: "is_agent_authored"
           equals: true
@@ -103,6 +116,28 @@ rules:
           equals: true
         - field: "approval_count"
           equals: 0
+
+  # MANAGE: INSUFFICIENT EVIDENCE — agent change deployed with bot-only approvals
+  # Finding 8: approvals from bots do not satisfy MANAGE-2.2 human oversight requirement.
+  - id: "NIST-MANAGE-2.2-ie-bot-approval-only"
+    stage: "MANAGE"
+    function_id: "MANAGE-2.2"
+    control_name: "Human Oversight of AI Decisions"
+    insufficient_evidence: true
+    reason: >
+      INSUFFICIENT EVIDENCE: Agent-authored change was merged with approval(s) but
+      human_approval_count is absent or zero. NIST AI RMF MANAGE-2.2 requires human
+      oversight — approvals from bots or automated agents do not constitute independent
+      human oversight of AI decisions. Upstream webhook must supply human_approval_count.
+    match:
+      event_type: "pr_merged"
+      conditions:
+        - field: "is_agent_authored"
+          equals: true
+        - field: "approval_count"
+          gt: 0
+        - field: "human_approval_count"
+          truthy: false
 
   # GOVERN: Commit-level agent attribution as governance record
   - id: "NIST-GOVERN-6.1-commit-attribution"

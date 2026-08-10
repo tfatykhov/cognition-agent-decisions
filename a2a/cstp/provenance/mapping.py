@@ -9,6 +9,10 @@ Coverage is computed and reported SEPARATELY per evidence class — never blende
 
 A control satisfied only by attested evidence is flagged attested_only=True and
 must be rendered distinctly in any bundle output (including PDF).
+
+Evidence class isolation: each YAML file declares its evidence_class at the top
+level. Rules from that file only match events of the same class — observed rules
+never match attested events and vice versa (finding 7).
 """
 
 from dataclasses import dataclass, field
@@ -51,16 +55,22 @@ class MappingResult:
 
 
 def load_rules(mappings_dir: Path = MAPPINGS_DIR) -> list[dict]:
-    """Load all YAML rule files from mappings_dir. Returns combined list of rules."""
+    """Load all YAML rule files from mappings_dir. Returns combined list of rules.
+
+    Each rule carries '_evidence_class' from the file header so that
+    _rule_matches can enforce class isolation (finding 7).
+    """
     all_rules = []
     for yaml_file in sorted(mappings_dir.glob("*.yaml")):
         with open(yaml_file) as f:
             data = yaml.safe_load(f)
         framework = data.get("framework", yaml_file.stem)
+        file_evidence_class = data.get("evidence_class", "observed")
         for rule in data.get("rules", []):
             rule = dict(rule)
             rule["_framework"] = framework
             rule["_file"] = yaml_file.name
+            rule["_evidence_class"] = file_evidence_class
             all_rules.append(rule)
     return all_rules
 
@@ -84,7 +94,19 @@ def _check_condition(payload: dict, condition: dict) -> bool:
 
 
 def _rule_matches(event: dict, rule: dict) -> bool:
-    """Return True if a rule's match block applies to this event."""
+    """Return True if a rule's match block applies to this event.
+
+    Evidence class isolation (finding 7): a rule from an 'observed' file only
+    matches observed events; a rule from an 'attested' file only matches attested
+    events. This prevents high-trust observed credit from being awarded to
+    self-reported attested events and vice versa.
+    """
+    # Class isolation: reject cross-class matches
+    rule_class = rule.get("_evidence_class", "observed")
+    event_class = event.get("evidence_class", "observed")
+    if rule_class != event_class:
+        return False
+
     match = rule.get("match", {})
     if match.get("event_type") != event.get("event_type"):
         return False
