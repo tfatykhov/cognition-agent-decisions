@@ -385,6 +385,8 @@ def build_wisdom(
     decisions: list[dict[str, Any]],
     min_decisions: int = 5,
     category_filter: str | None = None,
+    *,
+    now: datetime | None = None,
 ) -> list[WisdomEntry]:
     """Aggregate decisions into category-level wisdom entries.
 
@@ -396,11 +398,13 @@ def build_wisdom(
         decisions: All decision dicts.
         min_decisions: Minimum reviewed decisions per category.
         category_filter: Optional single-category filter.
+        now: Reference time for age calculation (injectable for testing).
 
     Returns:
         List of WisdomEntry aggregates per category.
     """
-    now = datetime.now(UTC)
+    if now is None:
+        now = datetime.now(UTC)
 
     # Group reviewed decisions by category
     by_category: dict[str, list[dict[str, Any]]] = defaultdict(list)

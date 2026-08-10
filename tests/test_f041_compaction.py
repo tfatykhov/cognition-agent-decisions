@@ -837,10 +837,10 @@ class TestBuildWisdom:
     def test_recent_decisions_excluded(self) -> None:
         """Only wisdom-age (90+ day) decisions count."""
         decisions = self._wisdom_decisions(count=10)
-        # Override to recent dates
+        # Override to recent dates (5 days before NOW)
         for d in decisions:
             d["date"] = (NOW - timedelta(days=5)).isoformat()
-        wisdom = build_wisdom(decisions, min_decisions=1)
+        wisdom = build_wisdom(decisions, min_decisions=1, now=NOW)
         assert len(wisdom) == 0
 
     def test_multiple_categories(self) -> None:
