@@ -1,5 +1,70 @@
 # Changelog
 
+## v0.16.0 - Provenance, CEL Guardrails & Circuit Breakers
+*Unreleased — merged to `main`*
+
+Audit-grade decision provenance mapped to SR 11-7 and NIST AI RMF, CEL expression guardrails, circuit breakers, and the full-stack Docker demo.
+
+### F055: Decision Provenance & Control Evidence
+
+Five new JSON-RPC methods that turn CSTP's decision history into an artifact an auditor can accept. JSON-RPC only — no MCP tools.
+
+- **Two-class evidence model** — `observed` (third-party events the agent does not control) and `attested` (first-party CSTP records). Coverage is reported **separately per class**; there is no blended percentage anywhere in the API, the JSON bundle, or the PDF
+- **`cstp.ingestEvidence`** - ingest observed events (GitHub PR opens, reviews, approvals, merges) into a SHA-256 hash chain
+- **`cstp.linkEvidence`** - correlate an existing CSTP decision to observed events, stored as attested evidence
+- **`cstp.mapControls`** - run the YAML rules engine over stored evidence; returns per-class coverage, `insufficient_evidence` entries, and `attested_only_controls`
+- **`cstp.exportEvidenceBundle`** - emit the full bundle as JSON, or PDF with the optional `pdf` extra
+- **`cstp.verifyEvidenceChain`** - verify chain integrity; accepts `expected_head_hash` and falls back to the last bundle's head hash so tail truncation is detectable
+- **Control frameworks** - hand-written YAML rules for SR 11-7 (Federal Reserve MRM), NIST AI RMF 1.0, and CSTP-attested. Mappings are deliberately not ML-inferred
+- **Honest gaps** - where evidence does not support a control, the mapper emits `INSUFFICIENT_EVIDENCE` with a plain-English reason instead of stretching the mapping
+- **Separate store** - SQLite WAL database at `PROVENANCE_DB` (default `~/.cstp/provenance.db`), independent of the decision store
+
+### F055 Security Hardening
+
+13 verified findings from the PR #193 review were resolved before merge:
+
+- **Injective hash preimage** - preimage is now canonical JSON of all six fields (chain format version 2). The previous newline-delimited preimage allowed collisions on embedded newlines. **Breaking:** version 1 chains fail `verify_chain` and must be re-ingested
+- **Hash chain race** - `BEGIN IMMEDIATE` plus explicit `seq` serializes concurrent writers
+- **`db_path` RPC escape removed** - the service always uses the server-configured `PROVENANCE_DB`; callers can no longer redirect reads or writes to an arbitrary file
+- **Evidence class isolation** - mapping rules only match events of their own class
+- **Bot approvals fail closed** - MV-3 / MEASURE-2.5 require `actor_is_human`, CM-1 / MANAGE-1.1 require a human approval count above zero
+- Plus seq validation on `linkEvidence`, checkpoint state-machine fixes, non-dict payload rejection, atomic batch ingest, and collision-resistant bundle filenames
+
+### F054: CEL Expression Guardrails
+
+- **CEL conditions** - guardrail `condition` accepts a [CEL](https://github.com/google/cel-spec) expression string or `{"cel": "..."}` alongside the legacy key/value form
+- **Reaches `action.context.*`** - fixes the gap where MCP clients could not pass context, so category-specific rules like `require-architecture-review` no longer always block through MCP
+- **Legacy auto-conversion** - existing key/value conditions are converted to CEL at evaluation time; no guardrail files need changing and no migration is required
+- **Fails open** - an expression that fails to compile or raises at runtime is skipped and logged, never treated as a block
+- **Compiled once** - programs are cached per expression string
+- **New dependency** - `cel-python>=0.4,<1.0`, now a core dependency
+
+### F030: Circuit Breaker Guardrails
+
+- `cstp.listBreakers`, `cstp.getCircuitState`, `cstp.resetCircuit` and the `get_circuit_state` / `list_breakers` MCP tools
+- Category-specific code-review and architecture-review guardrails replace the earlier broad production guard
+- Guardrail `context` is now threaded through both the JSON-RPC and MCP check paths
+
+### F051: Docker-Compose Full Stack Demo
+
+- `demo/` brings up CSTP server, ChromaDB, dashboard, and a reference FORGE-protocol MCP agent
+- `demo/seed_data.py` generates sample decisions
+
+### Website
+
+- New [Nous](/nous) agent landing page, linked from the top nav
+- Mermaid removed from the VitePress build; diagrams are inline SVG
+
+### Bug Fixes
+
+- **F041** - `build_wisdom()` accepts an optional `now` parameter, removing wall-clock coupling that made the wisdom recency filter fail as fixture dates aged past the compaction threshold
+- **Encoding correctness on non-UTF-8 hosts** - every text-mode file operation across `a2a/`, `src/`, `scripts/`, and the test suite now passes `encoding="utf-8"` explicitly. Previously these relied on the platform default, which is cp1252 on Windows: F055 control rules loaded with 10 of 20 entries as mojibake, putting garbled regulatory text into auditor-facing bundles, and decision YAML could round-trip through a mis-decode into storage. Linux CI is UTF-8 by default, so none of it was visible there. Ruff `PLW1514` is now enabled to stop the defect class recurring
+
+### Packaging
+
+- `cel-python` added to core dependencies
+- New `pdf` extra (`reportlab>=4.0`) for F055 PDF bundles, included in `[all]`
+
 ## v0.15.0 - SQLite Storage & Performance
 *February 21, 2026*
 

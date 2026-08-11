@@ -162,7 +162,20 @@ Pure Python, maintained by Cloud Custodian (Google-backed). ~10KB, minimal trans
 | `a2a/mcp_schemas.py` | Add `context` field to `CheckActionInput` |
 | `a2a/mcp_server.py` | Forward `context` in `_build_guardrails_params` |
 | `pyproject.toml` | Add `cel-python` dependency |
-| `tests/test_guardrails.py` | New CEL tests + verify legacy compat |
+| `tests/test_f054_cel_guardrails.py` | New CEL tests + verify legacy compat |
+
+## As Shipped
+
+Two details differ from the plan above and are worth knowing when authoring rules:
+
+- **`condition:` disables the flat format.** When a `condition` key is present — string, `{"cel": …}`,
+  or legacy dict — the guardrail is evaluated only through CEL, and sibling `condition_*` /
+  `requires_*` keys are ignored. The nested `requires:` dict is still parsed.
+- **`cel-python` is a core dependency, not an extra.** If it is missing, the import fails softly and
+  every CEL guardrail is skipped rather than erroring at startup.
+
+See the [guardrails authoring guide](/reference/guardrails-authoring#cel-expressions) for the full
+activation field reference.
 
 ## Backward Compatibility
 

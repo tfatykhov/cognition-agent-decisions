@@ -52,6 +52,16 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 | [F045](/specs/f045-graph-storage-layer) | Decision Graph Storage Layer |
 | [F048](/specs/f048-multi-vectordb) | Multi-Vector-DB Support (P1: ABCs + MemoryStore) |
 
+## Shipped (v0.16.0 — unreleased)
+
+Merged to `main`; no tag has been cut yet.
+
+| Spec | Feature |
+|------|---------|
+| [F030](/specs/f030-circuit-breaker-guardrails) | Circuit Breaker Guardrails |
+| [F054](/specs/f054-cel-guardrails) | CEL Expression Guardrails |
+| [F055](/specs/f055-decision-provenance) | Decision Provenance & Control Evidence |
+
 ## Roadmap
 
 ### Research & Observability
@@ -60,7 +70,6 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 |------|---------|
 | [F020](/specs/f020-reasoning-traces) | Structured Reasoning Traces |
 | [F029](/specs/f029-task-router) | Task Router |
-| [F030](/specs/f030-circuit-breaker-guardrails) | Circuit Breaker Guardrails |
 | [F031](/specs/f031-source-trust-scoring) | Source Trust Scoring |
 | [F032](/specs/f032-error-amplification-tracking) | Error Amplification Tracking |
 

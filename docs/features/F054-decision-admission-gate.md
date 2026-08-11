@@ -1,5 +1,8 @@
 # F054 — Decision Admission Gate
 
+> **⚠️ ID collision:** the `F054` number is also used by [CEL Expression Guardrails](F054-cel-guardrails.md),
+> which has shipped. This spec is tracked as **F054-b** in `INDEX.md` until it is renumbered.
+>
 > **Status:** Draft v1
 > **Priority:** P1
 > **Depends on:** F027 (Decision Quality), F050 (SQLite Storage)

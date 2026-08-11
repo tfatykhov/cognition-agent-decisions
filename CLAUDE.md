@@ -12,8 +12,11 @@ Decision intelligence layer for AI agents providing semantic search, guardrails,
 ## Build and run
 
 ```bash
-# Install all dependencies (core + a2a + mcp + dev)
+# Install all dependencies (core + a2a + mcp + dev + pdf)
 pip install -e ".[all]"
+
+# PDF evidence bundles only (F055) — reportlab
+pip install -e ".[pdf]"
 
 # Run CSTP server (defaults: VECTOR_BACKEND=chromadb, EMBEDDING_PROVIDER=gemini)
 cstp-server
@@ -54,7 +57,9 @@ ruff check --fix src/ tests/ a2a/
 mypy src/ a2a/
 ```
 
-Ruff config: line-length 100, target Python 3.11, rules `E F I N W UP B C4 SIM`. See `pyproject.toml [tool.ruff]` for ignored rules.
+Ruff config: line-length 100, target Python 3.11, rules `E F I N W UP B C4 SIM PLW1514`. `PLW1514` (text IO must name an encoding) is preview-gated, so `preview` and `explicit-preview-rules` are both on — the latter keeps the rest of the preview ruleset out. See `pyproject.toml [tool.ruff]` for ignored rules.
+
+`scripts/` and `dashboard/` are outside the lint scope; `scripts/` currently has 40 pre-existing style errors.
 
 ## Architecture
 
@@ -63,11 +68,14 @@ AI Agents → POST /cstp (JSON-RPC 2.0, Bearer auth)
   → a2a/server.py → CstpDispatcher → *_service.py handlers
     → VectorStore (chromadb | memory)  + EmbeddingProvider (gemini)
     → GraphStore (networkx | memory)   + JSONL persistence (F045)
+    → Provenance store (SQLite WAL, hash-chained) — F055, separate DB
     → src/cognition_engines/ (SemanticIndex, GuardrailEngine, PatternDetector)
     → YAML files (decisions/guardrails)
 ```
 
 Vector storage and embeddings are abstracted behind `VectorStore` and `EmbeddingProvider` ABCs (F048). Graph storage is abstracted behind `GraphStore` ABC (F045). Services access backends via factory singletons (`get_vector_store()`, `get_embedding_provider()`, `get_graph_store()`). Backend selection is driven by `VECTOR_BACKEND`, `EMBEDDING_PROVIDER`, and `GRAPH_BACKEND` env vars.
+
+F055 provenance evidence lives in its own SQLite WAL database at `PROVENANCE_DB` (default `~/.cstp/provenance.db`), deliberately separate from the decision store. The path is server-configured only — RPC callers cannot override it.
 
 **Key constraint**: `src/cognition_engines/` must never import from `a2a/`. Core uses dataclasses, the a2a layer uses Pydantic.
 
@@ -79,6 +87,7 @@ Vector storage and embeddings are abstracted behind `VectorStore` and `Embedding
 - Naming: modules `snake_case`, classes `PascalCase`, constants `UPPER_SNAKE`, CSTP methods `cstp.camelCase`, handlers `_handle_snake_case`
 - Test files: `test_<module>.py` or `test_f0XX_<feature>.py`
 - Use `pathlib.Path` for file operations (cross-platform)
+- **Always pass `encoding="utf-8"` to text-mode file IO** (`open`, `os.fdopen`, `read_text`, `write_text`). The platform default is cp1252 on Windows, which silently mis-decodes non-ASCII rather than raising — and Linux CI cannot see it. Enforced by ruff `PLW1514`, but that rule does not catch `os.fdopen` or untyped `read_text`, so it is a safety net, not a guarantee
 - Mock all external APIs (ChromaDB, Gemini) in tests — tests must run offline
 - Use `MemoryStore` + mock `EmbeddingProvider` via factory injection (`set_vector_store()` / `set_embedding_provider()`) instead of patching internal HTTP functions
 - Config pattern: YAML → env var → default (see `a2a/config.py`)
@@ -110,6 +119,11 @@ Vector storage and embeddings are abstracted behind `VectorStore` and `Embedding
 - `a2a/cstp/graphdb/memory.py` — In-memory graph backend (tests/dev)
 - `a2a/cstp/graphdb/factory.py` — Graph backend selection via `GRAPH_BACKEND` env var
 - `a2a/cstp/graph_service.py` — Graph business logic (link, query, init from YAML)
+- `a2a/cstp/guardrails_service.py` — Guardrail evaluation + `CelGuardrailEvaluator` (F054)
+- `a2a/cstp/provenance_service.py` — F055 evidence ingest, control mapping, bundle export
+- `a2a/cstp/provenance/mapping.py` — F055 YAML rules engine
+- `a2a/cstp/provenance/mappings/` — SR 11-7, NIST AI RMF, CSTP-attested control rules
+- `a2a/cstp/storage/provenance.py` — F055 hash-chained SQLite evidence store
 - `a2a/config.py` — Server configuration (YAML + env)
 - `guardrails/cornerstone.yaml` — Default guardrail rules
 - `config/server.yaml` — Default server config

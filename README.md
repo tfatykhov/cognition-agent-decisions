@@ -10,8 +10,9 @@ Cognition Engines gives AI agents a memory of their decisions — what they deci
 ## Key Capabilities
 
 - **Decision Memory**: Semantic search over past decisions with hybrid retrieval (vector + BM25)
-- **Guardrails**: Policy enforcement that blocks unsafe actions before they happen
+- **Guardrails**: Policy enforcement that blocks unsafe actions before they happen, with [CEL](https://github.com/google/cel-spec) expressions for arbitrary conditions
 - **Calibration**: Brier scoring tracks whether confidence predictions match actual outcomes
+- **Provenance & Control Evidence**: Hash-chained audit evidence mapped to SR 11-7 and NIST AI RMF, exportable as a single bundle
 - **Deliberation Traces**: Auto-captures the reasoning chain (queries, guardrail checks) leading to each decision
 - **Bridge Search**: Query by structure ("what does it look like?") or function ("what problem does it solve?")
 - **MCP + JSON-RPC**: Framework-agnostic — works with Claude Code, Claude Desktop, OpenClaw, LangChain, or raw curl
@@ -142,6 +143,13 @@ Each agent's thoughts are tracked separately via composite keys (`agent:{id}:dec
 | `get_graph` | Query subgraph around a decision with configurable depth and edge type filters |
 | `get_neighbors` | Lightweight neighbor query - direct connections for a decision with edge types and weights |
 
+### Circuit Breaker Tools (F030)
+
+| Tool | Purpose |
+|------|---------|
+| `get_circuit_state` | Current breaker state (`closed` / `open` / `half_open`) for a category |
+| `list_breakers` | All tripped and recovering breakers |
+
 ## JSON-RPC API
 
 All tools are also available via JSON-RPC 2.0 at `POST /cstp`:
@@ -167,7 +175,21 @@ curl -X POST http://localhost:8100/cstp \
   }'
 ```
 
-**Available methods:** `cstp.queryDecisions`, `cstp.checkGuardrails`, `cstp.recordDecision`, `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getDecision`, `cstp.getReasonStats`, `cstp.updateDecision`, `cstp.recordThought`, `cstp.preAction`, `cstp.getSessionContext`, `cstp.ready`, `cstp.linkDecisions`, `cstp.getGraph`, `cstp.getNeighbors`, `cstp.debugTracker`, `cstp.checkDrift`, `cstp.reindex`, `cstp.listGuardrails`, `cstp.attributeOutcomes`
+**Available methods** (34 registered in `a2a/cstp/dispatcher.py`):
+
+| Group | Methods |
+|-------|---------|
+| Decisions | `cstp.queryDecisions`, `cstp.recordDecision`, `cstp.updateDecision`, `cstp.getDecision`, `cstp.listDecisions`, `cstp.recordThought` |
+| Guardrails | `cstp.checkGuardrails`, `cstp.listGuardrails` |
+| Calibration | `cstp.reviewDecision`, `cstp.getCalibration`, `cstp.getStats`, `cstp.getReasonStats`, `cstp.attributeOutcomes`, `cstp.checkDrift` |
+| Agentic loop | `cstp.preAction`, `cstp.getSessionContext`, `cstp.ready` |
+| Graph (F045) | `cstp.linkDecisions`, `cstp.getGraph`, `cstp.getNeighbors` |
+| Compaction (F041) | `cstp.compact`, `cstp.getCompacted`, `cstp.setPreserve`, `cstp.getWisdom` |
+| Circuit breakers (F030) | `cstp.listBreakers`, `cstp.getCircuitState`, `cstp.resetCircuit` |
+| Provenance (F055) | `cstp.ingestEvidence`, `cstp.linkEvidence`, `cstp.mapControls`, `cstp.exportEvidenceBundle`, `cstp.verifyEvidenceChain` |
+| Ops | `cstp.reindex`, `cstp.debugTracker` |
+
+The F055 provenance methods are JSON-RPC only — they have no MCP tool equivalents.
 
 ### Auto-Linking
 
@@ -240,6 +262,69 @@ action: block
 message: "High-stakes decisions require ≥50% confidence"
 ```
 
+### CEL Expression Guardrails (F054)
+
+Conditions can also be written as [CEL](https://github.com/google/cel-spec) expressions, which reach
+fields the legacy key/value form cannot — in particular the caller-supplied `context` dict:
+
+```yaml
+id: require-architecture-review
+description: Architecture decisions require an architecture review
+condition: "action.category == 'architecture' && !action.context.architecture_review"
+action: block
+message: "Architecture decisions require architecture_review: true"
+```
+
+The activation exposes `action.description`, `.stakes`, `.confidence`, `.category`, `.tags`,
+`.reason_count`, `.pattern`, `.quality_score`, `.has_tags`, `.has_pattern`, and everything else
+the caller passed under `action.context.*`. Full boolean logic, comparisons, `in`, `size()`, and
+`contains()` are available.
+
+Legacy key/value conditions are auto-converted to CEL at evaluation time, so existing guardrail
+files keep working unchanged — no migration needed. Evaluation **fails open**: a guardrail whose
+expression fails to compile or raises at runtime is skipped and logged, never treated as a block.
+
+See the [guardrails authoring guide](https://cognition-engines.ai/reference/guardrails-authoring) for
+the full field reference.
+
+### Decision Provenance & Control Evidence (F055)
+
+Turns CSTP's decision history into an artifact an auditor can accept. Evidence falls into exactly
+two classes that are **never blended into one number**:
+
+- **Observed** — third-party events from a system the agent does not control (GitHub PR opens,
+  reviews, approvals, merges). Ingested via `cstp.ingestEvidence` and SHA-256 hash-chained, so any
+  later edit breaks the chain.
+- **Attested** — first-party CSTP decision records linked to observed events via `cstp.linkEvidence`.
+  Self-reported, and an auditor discounts them accordingly.
+
+Coverage is reported separately per class. A control satisfied only by attested evidence is flagged
+`attested_only`. Hand-written YAML rules in `a2a/cstp/provenance/mappings/` map evidence to
+**SR 11-7** (Federal Reserve MRM) and **NIST AI RMF 1.0** controls; where evidence does not honestly
+support a control, the mapper emits `INSUFFICIENT_EVIDENCE` with a plain-English reason rather than
+stretching the mapping.
+
+```bash
+# Map stored evidence to controls
+curl -X POST http://localhost:8100/cstp \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"jsonrpc":"2.0","method":"cstp.mapControls","params":{},"id":1}'
+
+# Export the auditor-facing bundle
+curl -X POST http://localhost:8100/cstp \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"jsonrpc":"2.0","method":"cstp.exportEvidenceBundle","params":{"format":"json"},"id":1}'
+```
+
+Evidence lives in its own SQLite WAL database, separate from the decision store:
+
+```bash
+PROVENANCE_DB=~/.cstp/provenance.db   # default
+```
+
+PDF bundles need the optional `pdf` extra (`pip install -e ".[pdf]"`, included in `[all]`). JSON
+bundles have no extra dependency. See [website/specs/f055-decision-provenance.md](website/specs/f055-decision-provenance.md).
+
 ## Roadmap
 
 See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature catalog and [TODO.md](TODO.md) for prioritized work items.
@@ -252,14 +337,17 @@ See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature ca
 | v0.11.0 | Pre-Action Hook, Session Context, Website (F046-F048) | ✅ Shipped |
 | v0.14.0 | Multi-Agent Isolation, Live Deliberation Viewer, Memory Compaction, Graph Storage (F041, F044-F045, F049) | ✅ Shipped |
 | v0.15.0 | SQLite Storage, Auto-Migration, 8-42x Performance, Enriched Search, Dashboard Integration (F050) | ✅ Shipped |
+| v0.16.0 | Full Stack Demo, Circuit Breakers, CEL Guardrails, Decision Provenance (F051, F030, F054, F055) | 🚧 On `main`, unreleased |
+
+`pyproject.toml` still reports `0.15.0`; the v0.16.0 features above are merged to `main` but not yet tagged.
 
 ### Upcoming
 
 | Priority | Features |
 |----------|----------|
-| **P1** | F051 Docker-Compose Full Stack Demo ✅, F030 Circuit Breakers, Weaviate/pgvector backends |
-| **P2** | F052 Dashboard Export (Grafana/Prometheus), F053 Query Deduplication Cache |
-| **P3** | F034 Decomposed Confidence, F035-F039 Multi-Agent Federation, F043 Distributed Merge |
+| **P1** | F054-b Decision Admission Gate, Weaviate/pgvector backends |
+| **P2** | F052 Dashboard Export (Grafana/Prometheus), F053 Query Deduplication Cache, F055 P2 PDF bundle improvements |
+| **P3** | F034 Decomposed Confidence, F035-F039 Multi-Agent Federation, F043 Distributed Merge, F055 P3 EU AI Act mapping |
 
 ### Research Foundations
 
@@ -273,28 +361,33 @@ See [docs/features/INDEX.md](docs/features/INDEX.md) for the complete feature ca
 ```
 cognition-agent-decisions/
 ├── a2a/cstp/                  # CSTP services
-│   ├── dispatcher.py          # JSON-RPC routing (15 methods)
+│   ├── dispatcher.py          # JSON-RPC routing (34 methods)
 │   ├── query_service.py       # Hybrid retrieval
 │   ├── decision_service.py    # Record, update, retrieve
 │   ├── calibration_service.py # Brier scoring, rolling windows
-│   ├── guardrails_service.py  # Policy evaluation
+│   ├── guardrails_service.py  # Policy evaluation + F054 CEL evaluator
 │   ├── preaction_service.py   # F046 Pre-action hook
 │   ├── session_context_service.py # F047 Session context
 │   ├── deliberation_tracker.py # F023 Auto-capture
+│   ├── provenance_service.py  # F055 Evidence ingest, mapping, bundles
+│   ├── provenance/            # F055 Control framework mapping
+│   │   ├── mapping.py         # YAML rules engine
+│   │   └── mappings/          # sr11-7, nist-ai-rmf, cstp-attested
 │   ├── vectordb/              # F048 Pluggable vector storage
 │   │   ├── chromadb.py        # ChromaDB backend
 │   │   └── memory.py          # In-memory backend (testing)
 │   └── embeddings/            # F048 Pluggable embeddings
 │       └── gemini.py          # Gemini backend
-├── a2a/mcp_server.py          # MCP Server (14+ tools)
+├── a2a/mcp_server.py          # MCP Server (17 tools)
 ├── a2a/cstp/storage/          # F050 Pluggable decision storage
 │   ├── sqlite.py              # SQLite backend (WAL, FTS5)
 │   ├── yaml_fs.py             # YAML backend (legacy)
-│   └── memory.py              # In-memory backend (testing)
+│   ├── memory.py              # In-memory backend (testing)
+│   └── provenance.py          # F055 Hash-chained evidence store
 ├── a2a/server.py              # FastAPI server
 ├── dashboard/                 # Web dashboard (Flask)
 ├── demo/                      # Full stack demo (docker compose)
-├── docs/features/             # Feature specs (F001-F053)
+├── docs/features/             # Feature specs (F001-F055)
 ├── guardrails/                # YAML guardrail definitions
 ├── tests/                     # Test suite
 ├── website/                   # VitePress docs (cognition-engines.ai)

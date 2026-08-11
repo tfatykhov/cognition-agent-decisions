@@ -730,6 +730,265 @@ Delete and rebuild the ChromaDB collection from YAML files.
 
 ---
 
+## Provenance & Control Evidence (F055)
+
+Five methods that produce audit-grade evidence for regulated decisions. **JSON-RPC only — these
+have no MCP tool equivalents.**
+
+Evidence is stored in its own SQLite WAL database, separate from the decision store, at the path
+given by `PROVENANCE_DB` (default `~/.cstp/provenance.db`). The path is server-configured and
+cannot be overridden per request.
+
+### The Two-Class Evidence Model
+
+Every evidence record carries an `evidence_class` that is never nullable and never defaulted:
+
+| Class | Source | Trust |
+|-------|--------|-------|
+| `observed` | Third-party events from a system of record the agent does not control — GitHub PR opens, commits, reviews, approvals, merges | Hash-chained and tamper-evident |
+| `attested` | First-party CSTP decision records linked to observed events | Self-reported; an auditor discounts these |
+
+Coverage is reported **separately per class**. There is no blended `coverage_pct` in the API
+response, the JSON bundle, or the PDF — merging the two would weaken the strong half.
+
+---
+
+### `cstp.ingestEvidence` — Ingest Observed Events
+
+Append third-party events to the hash chain. All ingested events receive
+`evidence_class: "observed"`; this is not overridable. A batch is ingested atomically.
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `source` | string | ✅ | Ingest origin, e.g. `"github"` |
+| `events` | array | ✅ | Event objects with `event_type`, `ts`, and a `payload` object |
+
+**Example request:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cstp.ingestEvidence",
+  "params": {
+    "source": "github",
+    "events": [
+      {
+        "event_type": "pr_opened",
+        "ts": "2026-07-01T10:00:00Z",
+        "payload": {
+          "pr_number": 42,
+          "title": "Add risk scorer v2",
+          "is_agent_authored": true,
+          "agent_type": "Claude",
+          "approval_count": 0
+        }
+      },
+      {
+        "event_type": "pr_review_approved",
+        "ts": "2026-07-01T14:00:00Z",
+        "payload": { "pr_number": 42, "reviewer": "alice", "actor_is_human": true }
+      }
+    ]
+  },
+  "id": "ie-001"
+}
+```
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "ingested": 2,
+    "head_hash": "65b58d83a0b5be919...",
+    "first_seq": 1
+  },
+  "id": "ie-001"
+}
+```
+
+---
+
+### `cstp.linkEvidence` — Correlate a Decision to Observed Events
+
+Links an existing CSTP decision to observed event sequence numbers, creating one
+`cstp_decision_linked` record with `evidence_class: "attested"`.
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `decision_id` | string | ✅ | Existing CSTP decision ID |
+| `event_seqs` | array | ✅ | Observed event `seq` values. Nonexistent, duplicate, and attested-class seqs are rejected |
+| `stakes` | string | ❌ | Stakes recorded on the attestation |
+| `has_outcome` | boolean | ❌ | Whether the decision has a reviewed outcome |
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": { "linked": 3, "decision_id": "dec-7e2f9a", "attested_seq": 4 },
+  "id": "le-001"
+}
+```
+
+---
+
+### `cstp.mapControls` — Map Evidence to Control Frameworks
+
+Runs the YAML rules engine over all stored evidence. Rules only match events of their own
+evidence class.
+
+**Parameters:** none.
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "coverage": {
+      "observed": { "total_events": 50, "mapped_events": 41, "unmapped_events": 9, "coverage_pct": 82.0 },
+      "attested": { "total_events": 3, "mapped_events": 3, "unmapped_events": 0, "coverage_pct": 100.0 }
+    },
+    "mappings": [
+      {
+        "seq": 1, "event_type": "pr_opened", "pr_number": 42,
+        "rule_id": "SR11-7-MV1-agent-pr-opened",
+        "framework": "SR 11-7", "stage": "Model Development",
+        "function_id": "MV-1", "control_name": "Agent-Authored Change Documentation",
+        "evidence_class": "observed", "type": "mapping"
+      }
+    ],
+    "insufficient_evidence": [
+      {
+        "seq": 10, "pr_number": 3, "framework": "SR 11-7",
+        "function_id": "MV-3", "control_name": "Independent Human Review and Approval",
+        "evidence_class": "observed", "type": "INSUFFICIENT_EVIDENCE",
+        "reason": "INSUFFICIENT EVIDENCE: Agent-authored PR was merged without any human approval..."
+      }
+    ],
+    "insufficient_evidence_count": 2,
+    "unmapped": [],
+    "attested_only_controls": ["MV-3"]
+  },
+  "id": "mc-001"
+}
+```
+
+Rules live in `a2a/cstp/provenance/mappings/`:
+
+| File | Framework | Evidence class |
+|------|-----------|----------------|
+| `sr11-7.yaml` | SR 11-7 (Federal Reserve MRM) | observed |
+| `nist-ai-rmf.yaml` | NIST AI RMF 1.0 | observed |
+| `cstp-attested.yaml` | CSTP Attested | attested |
+
+Mappings are hand-written on purpose — an ML-inferred control mapping is itself an audit
+liability. Where evidence does not honestly support a control, the engine emits
+`INSUFFICIENT_EVIDENCE` with a plain-English reason instead of stretching the mapping. Controls
+requiring human review (`MV-3`, `MEASURE-2.5`) fail closed unless `actor_is_human` is true;
+`CM-1` / `MANAGE-1.1` require a nonzero human approval count.
+
+---
+
+### `cstp.exportEvidenceBundle` — Export the Auditor Bundle
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `format` | string | ❌ | `"json"` (default) or `"pdf"`. Validated before any output directory is created |
+| `output_dir` | string | ❌ | Destination directory |
+
+PDF export requires the optional `pdf` extra (`pip install -e ".[pdf]"`, included in `[all]`).
+Without `reportlab` installed, a `format: "pdf"` request raises. Bundle filenames include a UUID
+and microsecond timestamp, so concurrent exports cannot collide.
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "json_path": "/var/bundles/2026-Q3/bundle_20260809T173649Z.json",
+    "chain_head_hash": "65b58d83a0b5be919...",
+    "chain_intact": true,
+    "coverage": { "observed": {}, "attested": {} },
+    "insufficient_evidence_count": 2,
+    "attested_only_controls": ["MV-3"]
+  },
+  "id": "eb-001"
+}
+```
+
+The bundle persists `chain_head_hash` at generation time, which is what makes tail truncation
+detectable later.
+
+---
+
+### `cstp.verifyEvidenceChain` — Verify Chain Integrity
+
+**Parameters:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `expected_head_hash` | string | ❌ | Detects tail truncation. Defaults to the head hash stored by the most recent bundle export |
+
+**Example response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "intact": true,
+    "broken_at_seq": null,
+    "head_hash": "65b58d83a0b5be919...",
+    "expected_hash": "65b58d83a0b5be919...",
+    "tail_check": true
+  },
+  "id": "vc-001"
+}
+```
+
+If no hash is supplied and no bundle has ever been generated, tail-truncation detection is
+inactive and `tail_check` is `false` — internal tampering is still detected.
+
+::: warning Chain format version 2
+The hash preimage is the canonical JSON of `{seq, ts, event_type, evidence_class, payload,
+prev_hash}`. Stores written under format version 1 (newline-delimited preimage) fail
+`verify_chain` and must be re-ingested.
+:::
+
+See the [F055 spec](/specs/f055-decision-provenance) for the full evidence model and hash chain
+design.
+
+---
+
+## Methods Not Yet Documented Here
+
+The dispatcher registers 34 methods. Beyond those above, the following are live but not yet
+covered in this reference — see the linked specs for parameters and responses:
+
+| Method | Feature |
+|--------|---------|
+| `cstp.preAction` | [F046 Pre-Action Hook](/specs/f046-pre-action-hook) |
+| `cstp.getSessionContext` | [F047 Session Context](/specs/f047-session-context) |
+| `cstp.ready` | [F044 Agent Work Discovery](/specs/f044-agent-work-discovery) |
+| `cstp.linkDecisions`, `cstp.getGraph`, `cstp.getNeighbors` | [F045 Graph Storage](/specs/f045-graph-storage-layer) |
+| `cstp.compact`, `cstp.getCompacted`, `cstp.setPreserve`, `cstp.getWisdom` | [F041 Memory Compaction](/specs/f041-memory-compaction) |
+| `cstp.listDecisions`, `cstp.getStats` | F050 Structured Storage |
+| `cstp.listBreakers`, `cstp.getCircuitState`, `cstp.resetCircuit` | [F030 Circuit Breakers](/specs/f030-circuit-breaker-guardrails) |
+| `cstp.debugTracker` | Live deliberation tracker inspection |
+
+Most of these are also exposed as MCP tools — see the tool table below.
+
+---
+
 ## MCP Interface (Model Context Protocol)
 
 Since v0.9.0, CSTP exposes decision intelligence capabilities as **MCP tools** for native integration with any MCP-compliant agent. The MCP layer is a thin bridge — each tool maps 1:1 to an existing CSTP service method with zero code duplication.
