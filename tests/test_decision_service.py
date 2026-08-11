@@ -286,7 +286,7 @@ class TestWriteDecisionFile:
         assert path.endswith(".yaml")
 
         # Verify content
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             loaded = yaml.safe_load(f)
         assert loaded["id"] == "test1234"
         assert loaded["summary"] == "Test decision"
@@ -393,7 +393,7 @@ class TestRecordDecision:
 
         response = await record_decision(req, decisions_path=str(tmp_path))
 
-        with open(response.path) as f:
+        with open(response.path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         assert data["summary"] == "Use Redis for caching"

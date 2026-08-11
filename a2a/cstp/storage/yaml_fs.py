@@ -69,7 +69,7 @@ class YAMLFileSystemStore(DecisionStore):
         try:
             fd, temp_path = tempfile.mkstemp(suffix=".yaml", dir=str(year_month_dir))
             try:
-                with os.fdopen(fd, "w") as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
                 os.replace(temp_path, file_path)
             except Exception:
@@ -208,7 +208,7 @@ class YAMLFileSystemStore(DecisionStore):
         pattern = f"*-decision-{decision_id}.yaml"
         for yaml_file in self._base.rglob(pattern):
             try:
-                with open(yaml_file) as f:
+                with open(yaml_file, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
                 if data:
                     return (yaml_file, data)
@@ -225,7 +225,7 @@ class YAMLFileSystemStore(DecisionStore):
 
         for yaml_file in self._base.rglob("*-decision-*.yaml"):
             try:
-                with open(yaml_file) as f:
+                with open(yaml_file, encoding="utf-8") as f:
                     data = yaml.safe_load(f)
                 if not data:
                     continue
@@ -251,7 +251,7 @@ class YAMLFileSystemStore(DecisionStore):
                 suffix=".yaml", dir=str(file_path.parent)
             )
             try:
-                with os.fdopen(fd, "w") as f:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
                     yaml.dump(data, f, default_flow_style=False, sort_keys=False)
                 os.replace(temp_path, file_path)
             except Exception:

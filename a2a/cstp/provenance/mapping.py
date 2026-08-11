@@ -62,8 +62,10 @@ def load_rules(mappings_dir: Path = MAPPINGS_DIR) -> list[dict]:
     """
     all_rules = []
     for yaml_file in sorted(mappings_dir.glob("*.yaml")):
-        with open(yaml_file) as f:
-            data = yaml.safe_load(f)
+        # encoding is explicit: the rule files carry non-ASCII control text that
+        # reaches auditor-facing bundles, and the platform default (cp1252 on
+        # Windows) mis-decodes it silently rather than raising.
+        data = yaml.safe_load(yaml_file.read_text(encoding="utf-8"))
         framework = data.get("framework", yaml_file.stem)
         file_evidence_class = data.get("evidence_class", "observed")
         for rule in data.get("rules", []):

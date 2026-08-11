@@ -266,7 +266,7 @@ async def load_all_decisions(
 
     for yaml_file in base.rglob("*-decision-*.yaml"):
         try:
-            with open(yaml_file) as f:
+            with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
             if not data:

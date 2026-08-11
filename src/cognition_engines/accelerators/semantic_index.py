@@ -34,7 +34,7 @@ def load_gemini_key() -> str:
 
     for path in secrets_paths:
         if path.exists():
-            for line in path.read_text().splitlines():
+            for line in path.read_text(encoding="utf-8").splitlines():
                 if line.startswith("GEMINI_API_KEY="):
                     GEMINI_API_KEY = line.split("=", 1)[1].strip().strip('"').strip("'")
                     return GEMINI_API_KEY

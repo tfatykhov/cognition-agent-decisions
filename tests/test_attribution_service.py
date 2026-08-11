@@ -42,7 +42,7 @@ def create_pending_decision(
         data["pr"] = pr
 
     file_path = year_dir / f"2026-02-05-decision-{decision_id}.yaml"
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f)
 
     return file_path
@@ -108,10 +108,10 @@ class TestFindPendingDecisions:
         path = create_pending_decision(tmp_path, "dec1", "owner/repo", pr=1)
 
         # Mark as reviewed
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         data["status"] = "reviewed"
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             yaml.dump(data, f)
 
         results = await find_pending_decisions(
@@ -195,7 +195,7 @@ class TestUpdateDecisionOutcome:
         assert result is True
 
         # Verify file was updated
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         assert data["status"] == "reviewed"
@@ -218,7 +218,7 @@ class TestUpdateDecisionOutcome:
         assert result is True
 
         # Verify file was NOT updated
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         assert data["status"] == "pending"
@@ -276,6 +276,6 @@ class TestAttributeOutcomes:
         assert len(response.decisions) == 1
 
         # Verify file was NOT modified
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         assert data["status"] == "pending"

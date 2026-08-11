@@ -20,6 +20,8 @@ Finding 8 — human actor signal required:
   now include actor_is_human=True and human_approval_count as appropriate.
 """
 
+import builtins
+import io
 import json
 import sqlite3
 import threading
@@ -532,6 +534,45 @@ class TestLoadRules:
         frameworks = {r["_framework"] for r in rules}
         assert "CSTP Attested" in frameworks
 
+    def test_rules_preserve_non_ascii_under_non_utf8_default_encoding(self, monkeypatch):
+        """Control text must decode as UTF-8 regardless of the platform default.
+
+        The mapping YAML files contain em-dashes in control_name and reason text,
+        and that text is copied verbatim into auditor-facing bundles. If load_rules
+        relies on the ambient locale encoding, a cp1252 host (Windows) silently
+        decodes those bytes as mojibake instead of raising — a corrupted regulatory
+        citation in a compliance artifact.
+
+        Simulates a cp1252 host by forcing that encoding on any text-mode open
+        that does not name one, so the test fails on UTF-8 platforms too.
+        """
+        real_open = io.open
+
+        def cp1252_default_open(
+            file, mode="r", buffering=-1, encoding=None, *args, **kwargs
+        ):
+            # Path.open() resolves an unspecified encoding to the sentinel
+            # "locale" before delegating, so both spellings mean "ambient default".
+            if "b" not in mode and encoding in (None, "locale"):
+                encoding = "cp1252"
+            return real_open(file, mode, buffering, encoding, *args, **kwargs)
+
+        monkeypatch.setattr(io, "open", cp1252_default_open)
+        monkeypatch.setattr(builtins, "open", cp1252_default_open)
+
+        rules = load_rules(MAPPINGS_DIR)
+
+        assert rules, "no rules loaded"
+        # U+2014 mis-decoded through cp1252 surfaces as this three-char sequence.
+        mojibake = [r for r in rules if "â€" in str(r)]
+        assert not mojibake, (
+            f"{len(mojibake)} of {len(rules)} rules decoded as mojibake — "
+            "load_rules is using the platform default encoding"
+        )
+        assert any("—" in str(r) for r in rules), (
+            "expected an em-dash somewhere in the shipped control text"
+        )
+
     def test_rules_have_required_fields(self):
         rules = load_rules(MAPPINGS_DIR)
         for rule in rules:
@@ -831,7 +872,7 @@ class TestPerClassCoverage:
         # The JSON bundle file also must not have a top-level coverage_pct
         json_path = result.get("json_path")
         assert json_path, "json_path missing from result"
-        bundle = json.loads(Path(json_path).read_text())
+        bundle = json.loads(Path(json_path).read_text(encoding="utf-8"))
         assert "coverage_pct" not in bundle, (
             "JSON bundle must not contain a top-level blended coverage_pct."
         )
@@ -1197,7 +1238,7 @@ class TestExportEvidenceBundle:
             "output_dir": str(tmp_path / "bundles"),
         }
         result = await export_evidence_bundle(params, "agent-1")
-        bundle = json.loads(Path(result["json_path"]).read_text())
+        bundle = json.loads(Path(result["json_path"]).read_text(encoding="utf-8"))
         for field in [
             "version", "tool_version", "generated_at", "chain_head_hash",
             "chain_intact", "coverage", "total_events",
@@ -1215,7 +1256,7 @@ class TestExportEvidenceBundle:
             "output_dir": str(tmp_path / "bundles"),
         }
         result = await export_evidence_bundle(params, "agent-1")
-        bundle = json.loads(Path(result["json_path"]).read_text())
+        bundle = json.loads(Path(result["json_path"]).read_text(encoding="utf-8"))
         assert "coverage_pct" not in bundle, (
             "JSON bundle must not have a blended coverage_pct at the top level"
         )
@@ -1467,7 +1508,7 @@ class TestEndToEndWorkflow:
             "output_dir": output_dir,
         }, "test-agent")
         assert export_result["chain_intact"] is True
-        bundle = json.loads(Path(export_result["json_path"]).read_text())
+        bundle = json.loads(Path(export_result["json_path"]).read_text(encoding="utf-8"))
         assert "coverage_pct" not in bundle  # No blended metric in JSON bundle
         assert bundle["coverage"]["observed"]["total_events"] == 3
 

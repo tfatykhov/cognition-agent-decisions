@@ -52,7 +52,7 @@ def create_reviewed_decision(
     }
 
     file_path = year_dir / f"2026-02-05-decision-{decision_id}.yaml"
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f)
 
 

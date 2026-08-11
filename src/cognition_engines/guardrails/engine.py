@@ -341,7 +341,7 @@ class GuardrailEngine:
 
     def load_from_file(self, path: Path) -> int:
         """Load guardrails from YAML file."""
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         return self.load_from_yaml(content)
 
     def load_from_directory(self, directory: Path) -> int:
@@ -359,7 +359,7 @@ class GuardrailEngine:
 
     def _load_from_file_dedup(self, path: Path, existing_ids: set) -> int:
         """Load guardrails from file, skipping duplicates."""
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         data = None
 
         try:

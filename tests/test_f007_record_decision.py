@@ -179,7 +179,7 @@ class TestRecordDecisionEndpoint:
 
         # Read the file and verify agent_id
         import yaml
-        with open(response.result["path"]) as f:
+        with open(response.result["path"], encoding="utf-8") as f:
             data = yaml.safe_load(f)
         assert data.get("recorded_by") == "my-agent-id"
 

@@ -662,7 +662,7 @@ class TestSetPreserve:
             "category": "architecture",
             "status": "reviewed",
         }
-        with open(decision_file, "w") as f:
+        with open(decision_file, "w", encoding="utf-8") as f:
             yaml.dump(data, f)
 
         # Patch DECISIONS_PATH
@@ -681,7 +681,7 @@ class TestSetPreserve:
             assert resp.preserve is True
 
             # Verify file updated
-            with open(decision_file) as f:
+            with open(decision_file, encoding="utf-8") as f:
                 updated = yaml.safe_load(f)
             assert updated["preserve"] is True
         finally:
@@ -721,7 +721,7 @@ class TestSetPreserve:
             "summary": "Test",
             "preserve": True,
         }
-        with open(decision_file, "w") as f:
+        with open(decision_file, "w", encoding="utf-8") as f:
             yaml.dump(data, f)
 
         old_path = ds.DECISIONS_PATH
@@ -732,7 +732,7 @@ class TestSetPreserve:
             assert resp.success is True
             assert resp.preserve is False
 
-            with open(decision_file) as f:
+            with open(decision_file, encoding="utf-8") as f:
                 updated = yaml.safe_load(f)
             assert "preserve" not in updated
         finally:

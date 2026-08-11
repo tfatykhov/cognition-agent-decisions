@@ -359,7 +359,7 @@ async def set_preserve(
             dir=file_path.parent,
         )
         try:
-            with os.fdopen(temp_fd, "w") as f:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             os.replace(temp_path, file_path)
         except Exception:

@@ -52,7 +52,7 @@ def _write_decision(tmp_dir: Path, decision_id: str, data: dict) -> None:
     year_dir = tmp_dir / "2026" / "02"
     year_dir.mkdir(parents=True, exist_ok=True)
     filepath = year_dir / f"2026-02-08-decision-{decision_id}.yaml"
-    with open(filepath, "w") as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         yaml.dump(data, f)
 
 

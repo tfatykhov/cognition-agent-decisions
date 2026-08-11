@@ -44,7 +44,7 @@ def _load_gemini_key() -> str:
     for path in _get_secrets_paths():
         gemini_env = path / "gemini.env"
         if gemini_env.exists():
-            for line in gemini_env.read_text().splitlines():
+            for line in gemini_env.read_text(encoding="utf-8").splitlines():
                 if line.startswith("GEMINI_API_KEY="):
                     _cached_api_key = line.split("=", 1)[1].strip().strip('"').strip("'")
                     return _cached_api_key

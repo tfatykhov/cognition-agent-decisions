@@ -762,7 +762,7 @@ def write_decision_file(
     filename = f"{now.strftime('%Y-%m-%d')}-decision-{decision_id}.yaml"
     file_path = year_month_dir / filename
 
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(decision_data, f, default_flow_style=False, sort_keys=False)
 
     return str(file_path)
@@ -842,7 +842,7 @@ async def get_decision(request: GetDecisionRequest) -> GetDecisionResponse:
     # Read the first match
     yaml_file = matches[0]
     try:
-        with open(yaml_file) as f:
+        with open(yaml_file, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         if not data:
@@ -1167,7 +1167,7 @@ async def find_decision(
     # Search pattern: decisions/YYYY/MM/*-decision-{id}.yaml
     for yaml_file in base.rglob(f"*-decision-{decision_id}.yaml"):
         try:
-            with open(yaml_file) as f:
+            with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
             return (yaml_file, data)
         except Exception as e:
@@ -1339,7 +1339,7 @@ async def update_decision(
 
     # Write back
     try:
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
@@ -1404,7 +1404,7 @@ async def append_thought(
 
     # Write back
     try:
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
@@ -1481,7 +1481,7 @@ async def review_decision(
             dir=path.parent,
         )
         try:
-            with os.fdopen(temp_fd, "w") as f:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             os.replace(temp_path, path)
         except Exception:

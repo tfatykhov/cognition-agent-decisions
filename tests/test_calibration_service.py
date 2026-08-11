@@ -51,7 +51,7 @@ def create_decision(
     }
 
     file_path = year_dir / f"2026-02-05-decision-{decision_id}.yaml"
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f)
 
 
@@ -402,5 +402,5 @@ def create_decision_with_project(
         data["feature"] = feature
 
     file_path = year_dir / f"2026-02-05-decision-{decision_id}.yaml"
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         yaml.dump(data, f)

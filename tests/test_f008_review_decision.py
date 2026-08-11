@@ -120,7 +120,7 @@ class TestReviewDecision:
         assert review_response.status == "reviewed"
 
         # Verify file was updated
-        with open(review_response.path) as f:
+        with open(review_response.path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         assert data["status"] == "reviewed"
@@ -164,7 +164,7 @@ class TestReviewDecision:
 
         assert review_response.success is True
 
-        with open(review_response.path) as f:
+        with open(review_response.path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         assert data["affected_kpis"]["latency"] == -0.3
