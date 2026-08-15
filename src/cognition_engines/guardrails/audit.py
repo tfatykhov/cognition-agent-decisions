@@ -117,7 +117,7 @@ class AuditLog:
         filename = f"{date_str}-{record.decision_id}.json"
 
         path = self.log_dir / filename
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(record.to_dict(), f, indent=2)
 
     def query_violations(
@@ -144,7 +144,7 @@ class AuditLog:
                 continue  # Skip files older than cutoff
 
             try:
-                with open(path) as f:
+                with open(path, encoding="utf-8") as f:
                     record = json.load(f)
 
                 for eval in record.get("evaluations", []):
@@ -178,7 +178,7 @@ class AuditLog:
 
         for path in self.log_dir.glob("*.json"):
             try:
-                with open(path) as f:
+                with open(path, encoding="utf-8") as f:
                     record = json.load(f)
 
                 total_decisions += 1

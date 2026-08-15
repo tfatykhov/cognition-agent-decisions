@@ -109,7 +109,7 @@ class TestJsonlPersistence:
 
     def test_load_empty_file(self, tmp_path: Path) -> None:
         path = tmp_path / "empty.jsonl"
-        path.write_text("")
+        path.write_text("", encoding="utf-8")
         loaded = load_edges_from_jsonl(path)
         assert loaded == []
 
@@ -118,7 +118,8 @@ class TestJsonlPersistence:
         path.write_text(
             '{"source_id": "a", "target_id": "b", "edge_type": "relates_to"}\n'
             "not json\n"
-            '{"source_id": "c", "target_id": "d", "edge_type": "depends_on"}\n'
+            '{"source_id": "c", "target_id": "d", "edge_type": "depends_on"}\n',
+            encoding="utf-8",
         )
         loaded = load_edges_from_jsonl(path)
         assert len(loaded) == 2

@@ -52,6 +52,26 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 | [F045](/specs/f045-graph-storage-layer) | Decision Graph Storage Layer |
 | [F048](/specs/f048-multi-vectordb) | Multi-Vector-DB Support (P1: ABCs + MemoryStore) |
 
+## Shipped (v0.14.0)
+
+| Spec | Feature |
+|------|---------|
+| [F041](/specs/f041-memory-compaction) | Memory Compaction |
+
+::: info
+F049 (Live Deliberation Viewer) also shipped in v0.14.0, and F050 (SQLite Storage Layer) in v0.15.0. Both were implementation plans in `docs/features/` rather than published specs — see the [changelog](/changelog) for details.
+:::
+
+## Shipped (v0.16.0 — unreleased)
+
+Merged to `main`; no tag has been cut yet.
+
+| Spec | Feature |
+|------|---------|
+| [F030](/specs/f030-circuit-breaker-guardrails) | Circuit Breaker Guardrails |
+| [F054](/specs/f054-cel-guardrails) | CEL Expression Guardrails |
+| [F055](/specs/f055-decision-provenance) | Decision Provenance & Control Evidence |
+
 ## Roadmap
 
 ### Research & Observability
@@ -60,7 +80,6 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 |------|---------|
 | [F020](/specs/f020-reasoning-traces) | Structured Reasoning Traces |
 | [F029](/specs/f029-task-router) | Task Router |
-| [F030](/specs/f030-circuit-breaker-guardrails) | Circuit Breaker Guardrails |
 | [F031](/specs/f031-source-trust-scoring) | Source Trust Scoring |
 | [F032](/specs/f032-error-amplification-tracking) | Error Amplification Tracking |
 
@@ -86,9 +105,9 @@ F014–F017 (Hybrid Retrieval, Temporal Decay, Reason Diversity, Bridge Search) 
 | Spec | Feature |
 |------|---------|
 | [F040](/specs/f040-task-decision-graph) | Task-Decision Graph |
-| [F041](/specs/f041-memory-compaction) | Memory Compaction |
-| [F042](/specs/f042-decision-dependencies) | Decision Dependencies |
+| [F042](/specs/f042-decision-dependencies) | Decision Dependencies — *partial: the `depends_on` edge type landed with F045* |
 | [F043](/specs/f043-distributed-merge) | Distributed Merge |
+
 ### Infrastructure
 
 *F048 Multi-Vector-DB shipped in v0.12.0. Weaviate and pgvector backends planned as P2.*

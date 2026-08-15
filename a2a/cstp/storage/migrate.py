@@ -32,7 +32,7 @@ def _parse_yaml_decision(yaml_file: Path) -> tuple[str, dict[str, Any]] | None:
         Tuple of (decision_id, data_dict) or None if parsing fails.
     """
     try:
-        with open(yaml_file) as f:
+        with open(yaml_file, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         if not data or not isinstance(data, dict):

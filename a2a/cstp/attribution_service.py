@@ -106,7 +106,7 @@ async def find_pending_decisions(
 
     for yaml_file in base.rglob("*-decision-*.yaml"):
         try:
-            with open(yaml_file) as f:
+            with open(yaml_file, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
             if not data:
@@ -195,7 +195,7 @@ async def update_decision_outcome(
         return True
 
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         data["status"] = "reviewed"
@@ -207,7 +207,7 @@ async def update_decision_outcome(
         # Atomic write
         temp_fd, temp_path = tempfile.mkstemp(suffix=".yaml", dir=path.parent)
         try:
-            with os.fdopen(temp_fd, "w") as f:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             os.replace(temp_path, path)
             return True

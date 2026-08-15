@@ -147,7 +147,7 @@ class Config:
         if not path.exists():
             return cls()
 
-        content = path.read_text()
+        content = path.read_text(encoding="utf-8")
         data = yaml.safe_load(content)
         if not data:
             return cls()

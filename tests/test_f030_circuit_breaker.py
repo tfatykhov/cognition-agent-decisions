@@ -382,7 +382,7 @@ class TestPersistence:
         await mgr.record_outcome(_ctx(), "failure")
 
         assert jsonl.exists()
-        lines = jsonl.read_text().strip().split("\n")
+        lines = jsonl.read_text(encoding="utf-8").strip().split("\n")
         assert len(lines) >= 1
         data = json.loads(lines[-1])
         assert data["scope"] == "global"
@@ -442,7 +442,7 @@ class TestPersistence:
             "last_notification": None,
             "last_activity": 1001.0,
         })
-        jsonl.write_text(f"{valid1}\nNOT VALID JSON\n{valid2}\n")
+        jsonl.write_text(f"{valid1}\nNOT VALID JSON\n{valid2}\n", encoding="utf-8")
 
         configs = {"global": _config()}
         breakers = _load_breakers_from_jsonl(jsonl, configs)
@@ -481,7 +481,7 @@ class TestPersistence:
         }
         _save_all_breakers(breakers, jsonl)
 
-        lines = jsonl.read_text().strip().split("\n")
+        lines = jsonl.read_text(encoding="utf-8").strip().split("\n")
         assert len(lines) == 2
         scopes = {json.loads(line)["scope"] for line in lines}
         assert scopes == {"global", "category:arch"}
@@ -915,7 +915,8 @@ class TestConfigLoading:
             "    cooldown_ms: 3600000\n"
             "    notify: true\n"
             "  - scope: 'global'\n"
-            "    failure_threshold: 10\n"
+            "    failure_threshold: 10\n",
+            encoding="utf-8",
         )
 
         configs = load_breaker_configs(yaml_file)
@@ -942,7 +943,8 @@ class TestConfigLoading:
             "  - scope: 'global'\n"
             "    failure_threshold: 5\n"
             "  - 'not a dict'\n"
-            "  - scope: 'stakes:high'\n"
+            "  - scope: 'stakes:high'\n",
+            encoding="utf-8",
         )
 
         configs = load_breaker_configs(yaml_file)
@@ -954,7 +956,7 @@ class TestConfigLoading:
 
     def test_empty_yaml_file(self, tmp_path: Path) -> None:
         yaml_file = tmp_path / "empty.yaml"
-        yaml_file.write_text("")
+        yaml_file.write_text("", encoding="utf-8")
         configs = load_breaker_configs(yaml_file)
         assert configs == []
 

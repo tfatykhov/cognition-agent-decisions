@@ -74,6 +74,101 @@ condition_decision_type: strategy_change
 | Less/equal | `field: "<= value"` | `condition_confidence: "<= 0.3"` |
 | Greater/equal | `field: ">= value"` | `condition_confidence: ">= 0.9"` |
 
+### CEL Expressions (F054) {#cel-expressions}
+
+The `condition` key accepts a [CEL](https://github.com/google/cel-spec) expression. This is the
+preferred format: it reaches any field, supports full boolean logic, and — unlike the flat
+`condition_*` keys — can read the caller-supplied `context` dict.
+
+```yaml
+# As a plain string
+- id: require-architecture-review
+  description: Architecture decisions require an architecture review
+  condition: "action.category == 'architecture' && !action.context.architecture_review"
+  action: block
+  message: "Architecture decisions require architecture_review: true"
+
+# Or as an explicit dict
+- id: no-high-stakes-low-confidence
+  description: High-stakes decisions require minimum confidence
+  condition:
+    cel: "action.stakes == 'high' && action.confidence < 0.5"
+  action: block
+  message: "High-stakes decisions require ≥50% confidence"
+```
+
+#### Activation Fields
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `action.description` | string | Defaults to `""` |
+| `action.stakes` | string | Defaults to `"medium"` |
+| `action.confidence` | double | Coerced to `0.0` when absent or null |
+| `action.category` | string | Defaults to `""` |
+| `action.tags` | list | Defaults to `[]` |
+| `action.reason_count` | int | Defaults to `0` |
+| `action.pattern` | string | Defaults to `""` |
+| `action.quality_score` | double | Defaults to `0.0` |
+| `action.has_tags` | bool | Derived from `tags` |
+| `action.has_pattern` | bool | Derived from `pattern` |
+| `action.phase`, `action.scope`, `action.project` | string | Present when the caller supplies them |
+| `action.deliberation_inputs_count`, `action.has_deliberation`, `action.has_reasoning` | — | Deliberation state |
+| `action.context.*` | any | **Everything else the caller passed.** This is the escape hatch — no schema change needed for a new field |
+
+Defaults are applied before evaluation, so comparisons never blow up on a missing field.
+
+#### More Examples
+
+```yaml
+# Require 2+ reasons for high-stakes decisions
+condition: "action.stakes == 'high' && action.reason_count < 2"
+
+# Untagged, unpatterned, and not low-stakes
+condition: "!action.has_tags && !action.has_pattern && action.stakes != 'low'"
+
+# Category-specific confidence floor
+condition: "action.category == 'security' && action.confidence < 0.7"
+
+# Substring match on the description plus a caller-supplied flag
+condition: "action.description.contains('trading') && !action.context.backtest_completed"
+
+# Membership test
+condition: "size(action.tags) == 0 && action.stakes in ['high', 'critical']"
+```
+
+#### Legacy Auto-Conversion
+
+A `condition:` dict without a `cel` key is converted to CEL automatically at load time. Existing
+guardrail files keep working with no migration:
+
+| Legacy key | Generated CEL |
+|------------|---------------|
+| `stakes: high` | `action.stakes == 'high'` |
+| `confidence_lt: 0.5` | `action.confidence < 0.5` |
+| `reason_count_lt: 1` | `action.reason_count < 1` |
+| `quality_lt: 0.5` | `action.quality_score < 0.5` |
+| `category: tooling` | `action.category == 'tooling'` |
+
+Suffixes `_lt`, `_gt`, `_lte`, and `_gte` map to `<`, `>`, `<=`, and `>=`. Keys that are not
+recognized activation fields resolve to `action.context.<key>`. Multiple keys are joined with `&&`.
+
+::: warning A `condition:` key disables the flat format
+When `condition:` is present, the guardrail is evaluated **only** through CEL — sibling
+`condition_*` and `requires_*` keys are ignored. Use the nested `requires:` dict (which is always
+parsed) or fold the requirement into the expression as `!action.context.<field>`.
+:::
+
+::: tip Fails open
+An expression that fails to compile, or raises at runtime, is skipped and a warning is logged —
+it never blocks. A broken rule silently stops enforcing, so check server logs for
+`CEL compile error` / `CEL eval error` after editing. The same applies if `cel-python` is not
+installed: every CEL guardrail is skipped.
+:::
+
+CEL evaluation runs only in `cstp.checkGuardrails` (and the `pre_action` path that calls it). It is
+not in the `queryDecisions` or `recordDecision` hot path. Programs are compiled once and cached per
+expression string.
+
 ### V2 Conditions (Advanced)
 
 For more complex scenarios, use the v2 structured condition format:

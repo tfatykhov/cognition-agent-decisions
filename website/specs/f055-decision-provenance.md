@@ -1,6 +1,6 @@
 # F055: Decision Provenance & Control Evidence
 
-**Status:** Shipped (v0.16.0)
+**Status:** Shipped on `main`, unreleased (targets v0.16.0)
 **Priority:** High
 **Category:** Compliance & Auditability
 
@@ -263,17 +263,32 @@ and `tail_check` is `false`.
 
 ## Hash Chain
 
-The observed evidence store uses a SHA-256 hash chain. Hash preimage (UTF-8):
+The observed evidence store uses a SHA-256 hash chain. **Chain format version 2.** The preimage
+is the canonical JSON (sorted keys, no whitespace, UTF-8) of a six-field object:
 
+```json
+{"evidence_class":"…","event_type":"…","payload":{…},"prev_hash":"…","seq":1,"ts":"…"}
 ```
-{seq}\n{ts}\n{event_type}\n{evidence_class}\n{canonical_json(payload)}\n{prev_hash}
-```
+
+JSON-encoding every field makes the preimage injective: no two distinct
+`(seq, ts, event_type, evidence_class, payload, prev_hash)` tuples produce the same byte
+string, and embedded delimiters in string values cannot be used to forge a collision.
+
+::: warning Breaking change
+Format version 1 used a newline-delimited preimage
+(`{seq}\n{ts}\n{event_type}\n{evidence_class}\n{canonical_json(payload)}\n{prev_hash}`),
+which allowed collisions on embedded newlines. Any store written under version 1 will fail
+`verify_chain` and must be re-ingested. F055 is unreleased, so no migration path is provided.
+:::
 
 Note that `evidence_class` is included in the preimage. Reclassifying an event from
 `observed` to `attested` (or vice versa) breaks the chain at that record.
 
 `source` is intentionally excluded — it identifies the ingest origin but does not affect
 tamper-evidence.
+
+Writes use `BEGIN IMMEDIATE` with an explicit `seq`, so concurrent writers are serialized and
+cannot collide on a sequence number.
 
 ## Control Framework Mappings
 
@@ -319,8 +334,13 @@ The provenance DB is a SQLite WAL file at `$PROVENANCE_DB` (default:
 `~/.cstp/provenance.db`), separate from the decision store. Schema:
 
 ```sql
+CREATE TABLE schema_metadata (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE events (
-    seq            INTEGER PRIMARY KEY AUTOINCREMENT,
+    seq            INTEGER PRIMARY KEY,
     ts             TEXT NOT NULL,
     source         TEXT NOT NULL,
     event_type     TEXT NOT NULL,
@@ -333,10 +353,18 @@ CREATE TABLE events (
 CREATE TABLE bundle_metadata (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     generated_at TEXT NOT NULL,
+    head_seq     INTEGER NOT NULL DEFAULT 0,
     head_hash    TEXT NOT NULL,
     format       TEXT NOT NULL
 );
 ```
+
+`seq` is assigned explicitly rather than via `AUTOINCREMENT` so it can be allocated inside the
+`BEGIN IMMEDIATE` transaction that computes the chain hash.
+
+The `db_path` RPC parameter described in earlier drafts was removed: the service always resolves
+to the server-configured `PROVENANCE_DB`, so an authenticated caller cannot redirect reads or
+writes to an arbitrary file.
 
 ## Out of Scope
 

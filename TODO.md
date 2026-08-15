@@ -67,13 +67,45 @@ Semantic decay for old resolved decisions.
 - [x] MCP tool registration for graph endpoints — PR #130
 - Spec: `docs/features/F045-graph-storage-layer.md`
 
-### F030: Circuit Breaker Guardrails
+### F030: Circuit Breaker Guardrails ✅
 Adaptive guardrails that trip based on outcome patterns.
-- [ ] Track failure counts per category/pattern
-- [ ] Auto-trip after N failures in a window
-- [ ] `cstp.listBreakers` endpoint
-- [ ] Manual reset via `cstp.resetBreaker`
+- [x] Track failure counts per category/pattern
+- [x] Auto-trip after N failures in a window
+- [x] `cstp.listBreakers` endpoint
+- [x] `cstp.getCircuitState` endpoint
+- [x] Manual reset via `cstp.resetCircuit` (named `resetBreaker` in the original spec)
+- [x] `get_circuit_state` / `list_breakers` MCP tools
 - Spec: `docs/features/F030-circuit-breaker-guardrails.md`
+
+### F054: CEL Expression Guardrails ✅
+Replace rigid JSONB condition matching with CEL expressions.
+- [x] `CelGuardrailEvaluator` with per-expression program caching
+- [x] `condition` accepts a CEL string or `{"cel": "..."}` dict
+- [x] Legacy key/value conditions auto-convert to CEL at load time
+- [x] `action.context.*` reachable from expressions — closes the MCP guardrail gap
+- [x] Fail-open on compile/eval errors
+- [x] `cel-python>=0.4,<1.0` added to core dependencies
+- Spec: `docs/features/F054-cel-guardrails.md`
+
+### F055: Decision Provenance & Control Evidence ✅
+Hash-chained audit evidence mapped to SR 11-7 and NIST AI RMF.
+- [x] Two-class evidence model (`observed` / `attested`), never blended
+- [x] `cstp.ingestEvidence`, `cstp.linkEvidence`, `cstp.mapControls`
+- [x] `cstp.exportEvidenceBundle` (JSON; PDF via the `pdf` extra)
+- [x] `cstp.verifyEvidenceChain` with tail-truncation detection
+- [x] YAML rules for SR 11-7, NIST AI RMF 1.0, CSTP-attested
+- [x] Security hardening — 13 findings resolved (chain format v2, `db_path` escape removed, fail-closed bot approvals)
+- [ ] P2: PDF bundle improvements — executive sign-off, regulatory citations, per-model grouping
+- [ ] P3: EU AI Act Annex III mapping (needs legal review per rule)
+- [ ] P4: Streaming ingest webhook for real-time GitHub events
+- [ ] MCP tool wrappers (currently JSON-RPC only)
+- Spec: `website/specs/f055-decision-provenance.md`
+
+### F054-b: Decision Admission Gate
+Reject status updates and conversational fragments before they pollute the decision store.
+- [ ] Structural scoring + embedding classifier + LLM tiebreaker
+- [ ] Renumber off the colliding `F054` ID
+- Spec: `docs/features/F054-decision-admission-gate.md`
 
 ### Weaviate backend (F048 P2)
 - [ ] Implement `vectordb/weaviate.py` with native hybrid search

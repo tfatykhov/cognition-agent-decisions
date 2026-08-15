@@ -43,7 +43,7 @@ def decisions_dir():
         }
 
         filepath = month_dir / "2026-02-08-decision-abc12345.yaml"
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             yaml.dump(decision_data, f, default_flow_style=False)
 
         # Write another decision
@@ -59,7 +59,7 @@ def decisions_dir():
         }
 
         filepath_2 = month_dir / "2026-02-07-decision-def67890.yaml"
-        with open(filepath_2, "w") as f:
+        with open(filepath_2, "w", encoding="utf-8") as f:
             yaml.dump(decision_data_2, f, default_flow_style=False)
 
         yield tmpdir

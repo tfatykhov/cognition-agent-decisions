@@ -450,7 +450,7 @@ def _load_guardrails_from_paths(paths: list[Path]) -> list[Guardrail]:
             continue
         for yaml_path in dir_path.glob("*.yaml"):
             try:
-                content = yaml_path.read_text()
+                content = yaml_path.read_text(encoding="utf-8")
 
                 # Use PyYAML if available (preferred)
                 try:

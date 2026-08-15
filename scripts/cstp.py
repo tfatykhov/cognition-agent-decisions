@@ -35,7 +35,7 @@ def load_config() -> tuple[str, str]:
     """Load CSTP config from .secrets/cstp.env."""
     env_path = Path(__file__).parent.parent / ".secrets" / "cstp.env"
     if env_path.exists():
-        for line in env_path.read_text().splitlines():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.startswith("#"):
                 key, value = line.split("=", 1)
                 os.environ.setdefault(key.strip(), value.strip())

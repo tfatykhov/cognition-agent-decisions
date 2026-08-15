@@ -34,6 +34,14 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | F044 | Agent Work Discovery | v0.12.0 | `F044-agent-work-discovery.md` |
 | F045 | Decision Graph Storage Layer | v0.12.0 | `F045-graph-storage-layer.md` |
 | F048 | Multi-Vector-DB Support | v0.12.0 | `F048-multi-vectordb.md` |
+| F049 | Live Deliberation Viewer | v0.14.0 | *(in changelog, no standalone spec)* |
+| F050 | SQLite Storage Layer | v0.15.0 | `F050-*` |
+| F030 | Circuit Breaker Guardrails | v0.16.0 (unreleased) | `F030-circuit-breaker-guardrails.md` |
+| F051 | Docker-Compose Full Stack Demo | v0.16.0 (unreleased) | `F051-docker-compose-demo.md` |
+| F054 | CEL Expression Guardrails | v0.16.0 (unreleased) | `F054-cel-guardrails.md` |
+| F055 | Decision Provenance & Control Evidence | v0.16.0 (unreleased) | `../../website/specs/f055-decision-provenance.md` |
+
+*v0.16.0 features are merged to `main`; `pyproject.toml` still reports `0.15.0` and no tag has been cut.*
 
 ## Roadmap
 
@@ -41,7 +49,7 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 |----|---------|--------|------|
 | F020 | Structured Reasoning Traces | Internal | `F020-reasoning-traces.md` |
 | F029 | Task Router | MIT/Google Scaling Research | `F029-task-router.md` |
-| F030 | Circuit Breaker Guardrails | AutoGPT + ai16z | `F030-circuit-breaker-guardrails.md` |
+| ~~F030~~ | ~~Circuit Breaker Guardrails~~ | ~~AutoGPT + ai16z~~ | *Shipped in v0.16.0 (unreleased)* |
 | F031 | Source Trust Scoring | ai16z Trust Scores | `F031-source-trust-scoring.md` |
 | F032 | Error Amplification Tracking | MIT 17.2x Error Finding | `F032-error-amplification-tracking.md` |
 | F033 | Censor Layer | Minsky Ch 27 | `F033-censor-layer.md` |
@@ -62,9 +70,18 @@ All feature specs live in `docs/features/`. One file per feature, consistent nam
 | ~~F048~~ | ~~Multi-Vector-DB Support~~ | ~~Infrastructure~~ | *Shipped in v0.12.0* |
 | ~~F049~~ | ~~Live Deliberation Viewer~~ | ~~Dashboard + debugTracker~~ | *Shipped in v0.14.0* |
 | ~~F050~~ | ~~SQLite Storage Layer~~ | ~~Infrastructure~~ | *Shipped in v0.15.0* |
-| F051 | Docker-Compose Full Stack Demo | Adoption | `F051-docker-compose-demo.md` |
+| ~~F051~~ | ~~Docker-Compose Full Stack Demo~~ | ~~Adoption~~ | *Shipped in v0.16.0 (unreleased)* |
 | F052 | Pre-Built Decision Quality Dashboard | Observability | `F052-dashboard-export.md` |
 | F053 | Query Deduplication Cache | Performance | `F053-query-deduplication.md` |
+| ~~F054~~ | ~~CEL Expression Guardrails~~ | ~~Acteon Action Gateway~~ | *Shipped in v0.16.0 (unreleased)* |
+| F054-b | Decision Admission Gate | Decision logging pollution | `F054-decision-admission-gate.md` |
+| ~~F055~~ | ~~Decision Provenance & Control Evidence~~ | ~~SR 11-7 / NIST AI RMF~~ | *Shipped in v0.16.0 (unreleased)* |
+
+## ID Conflicts
+
+| ID | Note |
+|----|------|
+| F054 | Two specs claim this number: `F054-cel-guardrails.md` (shipped) and `F054-decision-admission-gate.md` (draft). The latter is tracked as **F054-b** until renumbered — same convention used previously for F031-b. |
 
 ## Retired IDs
 

@@ -312,7 +312,7 @@ async def test_cel_string_blocks(tmp_path):
   action: block
   message: High stakes blocked
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result = await evaluate_guardrails({"stakes": "high"}, guardrails_dir=tmp_path)
     assert not result.allowed
@@ -328,7 +328,7 @@ async def test_cel_string_allows_when_not_triggered(tmp_path):
   condition: "action.stakes == 'high'"
   action: block
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result = await evaluate_guardrails({"stakes": "medium"}, guardrails_dir=tmp_path)
     assert result.allowed
@@ -346,7 +346,7 @@ async def test_cel_dict_condition(tmp_path):
   action: warn
   message: Low confidence warning
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result = await evaluate_guardrails({"confidence": 0.3}, guardrails_dir=tmp_path)
     assert result.allowed  # warn does not block
@@ -366,7 +366,7 @@ async def test_legacy_jsonb_dict_auto_converts(tmp_path):
   action: block
   message: Legacy JSONB converted
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     # Should block: high stakes + low confidence
     result = await evaluate_guardrails(
@@ -391,7 +391,7 @@ async def test_context_dict_via_cel(tmp_path):
   action: block
   message: Architecture review required
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     # No review → blocked
     result = await evaluate_guardrails(
@@ -418,7 +418,7 @@ async def test_invalid_cel_fails_open(tmp_path):
   action: block
   message: Should not appear
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result = await evaluate_guardrails({"stakes": "high"}, guardrails_dir=tmp_path)
     assert result.allowed  # fail open
@@ -436,7 +436,7 @@ async def test_legacy_flat_format_still_works(tmp_path):
   action: block
   message: Legacy flat blocked
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result = await evaluate_guardrails(
         {"stakes": "high", "confidence": 0.3}, guardrails_dir=tmp_path
@@ -456,7 +456,7 @@ async def test_legacy_requires_still_works(tmp_path):
   action: block
   message: Code review required
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     # code_review missing → blocked
     result = await evaluate_guardrails({"category": "tooling"}, guardrails_dir=tmp_path)
@@ -478,7 +478,7 @@ async def test_mcp_context_forwarded_to_cel(tmp_path):
   condition: "action.category == 'architecture' && !action.context.architecture_review"
   action: block
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     # Simulate how _handle_check_action builds the flat context:
     # context dict items merged at top level
@@ -503,7 +503,7 @@ async def test_warn_action_does_not_block(tmp_path):
   action: warn
   message: High stakes warning
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result = await evaluate_guardrails({"stakes": "high"}, guardrails_dir=tmp_path)
     assert result.allowed  # warn doesn't block
@@ -519,7 +519,7 @@ async def test_complex_in_expression(tmp_path):
   condition: "action.stakes in ['high', 'critical']"
   action: block
 """
-    (tmp_path / "test.yaml").write_text(yaml_content)
+    (tmp_path / "test.yaml").write_text(yaml_content, encoding="utf-8")
 
     result_high = await evaluate_guardrails({"stakes": "high"}, guardrails_dir=tmp_path)
     assert not result_high.allowed

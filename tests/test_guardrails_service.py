@@ -177,7 +177,7 @@ class TestEvaluateGuardrails:
   condition_confidence: "< 0.5"
   action: block
   message: High stakes decisions require confidence >= 0.5
-""")
+""", encoding="utf-8")
 
         # Should pass with high confidence
         result = await evaluate_guardrails(

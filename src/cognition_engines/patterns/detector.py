@@ -133,7 +133,7 @@ class PatternDetector:
 
         for path in yaml_files:
             try:
-                content = path.read_text()
+                content = path.read_text(encoding="utf-8")
                 data = self._parse_yaml(content)
                 if data and isinstance(data, dict):
                     if "decision" in data or "title" in data:

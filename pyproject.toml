@@ -85,5 +85,9 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+# PLW1514 (text IO must name an encoding) is preview-gated; explicit-preview-rules
+# keeps it opt-in without enabling the rest of the preview ruleset.
+preview = true
+explicit-preview-rules = true
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "PLW1514"]
 ignore = ["E501", "SIM108", "I001", "UP045", "SIM110", "SIM105", "SIM102"]  # Ignore style rules that require refactoring

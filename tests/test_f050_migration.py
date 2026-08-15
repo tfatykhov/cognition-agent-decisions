@@ -34,7 +34,7 @@ def _write_yaml_decision(
     subdir.mkdir(parents=True, exist_ok=True)
     filename = f"{date}-decision-{decision_id}.yaml"
     filepath = subdir / filename
-    filepath.write_text(yaml.dump(data, default_flow_style=False))
+    filepath.write_text(yaml.dump(data, default_flow_style=False), encoding="utf-8")
     return filepath
 
 
@@ -102,12 +102,12 @@ class TestParseYamlDecision:
 
     def test_returns_none_for_empty_file(self, tmp_path: Path) -> None:
         empty = tmp_path / "2026-02-18-decision-empty123.yaml"
-        empty.write_text("")
+        empty.write_text("", encoding="utf-8")
         assert _parse_yaml_decision(empty) is None
 
     def test_returns_none_for_invalid_yaml(self, tmp_path: Path) -> None:
         bad = tmp_path / "2026-02-18-decision-bad12345.yaml"
-        bad.write_text(": : : invalid yaml [[[")
+        bad.write_text(": : : invalid yaml [[[", encoding="utf-8")
         # Should not raise, returns None
         result = _parse_yaml_decision(bad)
         # yaml.safe_load may parse this oddly or return None
@@ -116,7 +116,7 @@ class TestParseYamlDecision:
 
     def test_returns_none_for_non_dict(self, tmp_path: Path) -> None:
         scalar = tmp_path / "2026-02-18-decision-scalar1.yaml"
-        scalar.write_text("just a string")
+        scalar.write_text("just a string", encoding="utf-8")
         assert _parse_yaml_decision(scalar) is None
 
 
@@ -162,7 +162,7 @@ class TestMigrateYamlToStore:
     async def test_skips_malformed_files(self, decisions_dir: Path) -> None:
         # Add a malformed file
         bad = decisions_dir / "2026" / "02" / "2026-02-18-decision-bad00000.yaml"
-        bad.write_text("")
+        bad.write_text("", encoding="utf-8")
 
         store = MemoryDecisionStore()
         await store.initialize()

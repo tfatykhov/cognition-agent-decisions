@@ -133,12 +133,19 @@ export default defineConfig({
           ]
         },
         {
+          text: 'v0.16.0 (F030, F054–F055)',
+          items: [
+            { text: 'F030 - Circuit Breaker Guardrails', link: '/specs/f030-circuit-breaker-guardrails' },
+            { text: 'F054 - CEL Expression Guardrails', link: '/specs/f054-cel-guardrails' },
+            { text: 'F055 - Decision Provenance', link: '/specs/f055-decision-provenance' },
+          ]
+        },
+        {
           text: 'Roadmap: Research',
           collapsed: true,
           items: [
             { text: 'F020 - Reasoning Traces', link: '/specs/f020-reasoning-traces' },
             { text: 'F029 - Task Router', link: '/specs/f029-task-router' },
-            { text: 'F030 - Circuit Breaker Guardrails', link: '/specs/f030-circuit-breaker-guardrails' },
             { text: 'F031 - Source Trust Scoring', link: '/specs/f031-source-trust-scoring' },
             { text: 'F032 - Error Amplification', link: '/specs/f032-error-amplification-tracking' },
           ]
