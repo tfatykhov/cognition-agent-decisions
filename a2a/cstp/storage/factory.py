@@ -56,27 +56,31 @@ def create_decision_store(storage_config: Any | None = None) -> DecisionStore:
     no WAL, no FTS5, and no concurrent-write protection, so it warns loudly.
     """
     backend, db_path = resolve_backend(storage_config)
-    match backend:
-        case "sqlite":
-            from .sqlite import SQLiteDecisionStore
+    # if/elif rather than match: static analysers do not treat `case _` as proving
+    # exhaustiveness, so a match here reads as a function that can fall through and
+    # implicitly return None.
+    if backend == "sqlite":
+        from .sqlite import SQLiteDecisionStore
 
-            return SQLiteDecisionStore(db_path)
-        case "yaml":
-            from .yaml_fs import YAMLFileSystemStore
+        return SQLiteDecisionStore(db_path)
 
-            logger.warning(
-                "CSTP_STORAGE=yaml: the flat-file store has no WAL, no FTS5, and no "
-                "concurrent-write protection. Suitable for single-user local use only "
-                "— set CSTP_STORAGE=sqlite for any shared or multi-agent deployment."
-            )
-            return YAMLFileSystemStore()
-        case "memory":
-            from .memory import MemoryDecisionStore
+    if backend == "yaml":
+        from .yaml_fs import YAMLFileSystemStore
 
-            return MemoryDecisionStore()
-        case _:
-            msg = f"Unknown storage backend: {backend}"
-            raise ValueError(msg)
+        logger.warning(
+            "CSTP_STORAGE=yaml: the flat-file store has no WAL, no FTS5, and no "
+            "concurrent-write protection. Suitable for single-user local use only "
+            "— set CSTP_STORAGE=sqlite for any shared or multi-agent deployment."
+        )
+        return YAMLFileSystemStore()
+
+    if backend == "memory":
+        from .memory import MemoryDecisionStore
+
+        return MemoryDecisionStore()
+
+    msg = f"Unknown storage backend: {backend}"
+    raise ValueError(msg)
 
 
 def get_decision_store(storage_config: Any | None = None) -> DecisionStore:

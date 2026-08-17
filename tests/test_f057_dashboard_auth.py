@@ -22,16 +22,17 @@ _dashboard_dir = str(Path(__file__).resolve().parent.parent / "dashboard")
 if _dashboard_dir not in sys.path:
     sys.path.insert(0, _dashboard_dir)
 
+# Single import style: CodeQL flags a module reached by both `import x` and
+# `from x import y`, and the lockout tests need module attributes anyway.
 import auth  # noqa: E402
-from auth import (  # noqa: E402
-    LOCKOUT_SECONDS,
-    MAX_FAILED_ATTEMPTS,
-    check_auth,
-    is_locked_out,
-    record_failure,
-    reset_failures,
-)
 from config import Config, enforce_security_config  # noqa: E402
+
+LOCKOUT_SECONDS = auth.LOCKOUT_SECONDS
+MAX_FAILED_ATTEMPTS = auth.MAX_FAILED_ATTEMPTS
+check_auth = auth.check_auth
+is_locked_out = auth.is_locked_out
+record_failure = auth.record_failure
+reset_failures = auth.reset_failures
 
 
 class TestSecurityConfigEnforcement:

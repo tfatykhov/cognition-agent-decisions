@@ -73,7 +73,10 @@ asyncio_mode = "auto"
 # All three trees are collected. `tests/` is the main suite; the other two were
 # previously orphaned from CI despite being green (F056).
 testpaths = ["tests", "a2a/cstp/tests", "dashboard/tests"]
-addopts = "-v --cov=a2a --cov-report=term-missing --cov-fail-under=80"
+# No --cov-fail-under here: addopts applies to every invocation, so a global floor
+# would fail documented focused runs like `pytest tests/test_guardrails.py`, where
+# one file cannot cover 80% of the package. CI passes the floor explicitly.
+addopts = "-v --cov=a2a --cov-report=term-missing"
 
 [tool.mypy]
 python_version = "3.11"

@@ -34,9 +34,12 @@ jobs:
       # No path argument: `testpaths` in pyproject.toml selects all three trees
       # (tests/, a2a/cstp/tests/, dashboard/tests/). Passing `tests/` here would
       # override testpaths and re-orphan the other two — that was the F056 bug.
+      # The coverage floor lives here rather than in addopts: a global floor would
+      # also apply to focused runs like `pytest tests/test_guardrails.py`, which
+      # cannot cover 80% of the package no matter how green they are.
       - name: Run tests
         run: |
-          pytest -v --tb=short
+          pytest -v --tb=short --cov-fail-under=80
         env:
           PYTHONPATH: src
 
