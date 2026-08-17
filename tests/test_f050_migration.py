@@ -38,6 +38,19 @@ def _write_yaml_decision(
     return filepath
 
 
+
+def _record_request(text: str) -> Any:
+    """Minimal RecordDecisionRequest for store-failure tests."""
+    from a2a.cstp.decision_service import RecordDecisionRequest
+
+    return RecordDecisionRequest(
+        decision=text,
+        confidence=0.8,
+        category="architecture",
+        stakes="low",
+    )
+
+
 @pytest.fixture
 def decisions_dir(tmp_path: Path) -> Path:
     """Create a temp directory with sample YAML decisions."""
@@ -198,25 +211,44 @@ class TestAutoMigrateIfEmpty:
         assert count == 3
 
     @pytest.mark.asyncio
-    async def test_skips_when_not_empty(self, decisions_dir: Path) -> None:
+    async def test_skips_when_all_yaml_already_present(self, decisions_dir: Path) -> None:
+        """A completed migration must not re-run on every startup."""
         store = MemoryDecisionStore()
         await store.initialize()
 
-        # Pre-populate with one decision
-        await store.save("existing1", {
-            "decision": "Already here",
+        first = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert first == 3
+
+        second = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert second == 0
+        assert await store.count() == 3
+
+    @pytest.mark.asyncio
+    async def test_resumes_after_interrupted_migration(self, decisions_dir: Path) -> None:
+        """Regression: a partial migration must resume, not be skipped forever.
+
+        The gate used to be "only run when the store is empty". Since
+        migrate_yaml_to_store commits one record at a time with no surrounding
+        transaction, a crash after the first save left a non-empty store — and
+        every later startup skipped migration, stranding the remaining YAML
+        decisions where no read path could see them.
+        """
+        store = MemoryDecisionStore()
+        await store.initialize()
+
+        # Simulate a run that died after importing one of the three files.
+        await store.save("partial1", {
+            "decision": "Imported before the crash",
             "confidence": 0.5,
             "category": "test",
             "stakes": "low",
             "status": "pending",
         })
+        assert await store.count() == 1
 
         count = await auto_migrate_if_empty(store, str(decisions_dir))
-        assert count == 0  # Skipped because store not empty
-
-        # Only the pre-existing decision
-        total = await store.count()
-        assert total == 1
+        assert count == 3, "migration should resume rather than skip"
+        assert await store.count() == 4  # 3 migrated + the partial record
 
     @pytest.mark.asyncio
     async def test_returns_zero_for_no_yaml_files(self, tmp_path: Path) -> None:
@@ -224,6 +256,14 @@ class TestAutoMigrateIfEmpty:
         await store.initialize()
 
         count = await auto_migrate_if_empty(store, str(tmp_path))
+        assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_missing_directory_is_not_an_error(self, tmp_path: Path) -> None:
+        store = MemoryDecisionStore()
+        await store.initialize()
+
+        count = await auto_migrate_if_empty(store, str(tmp_path / "nope"))
         assert count == 0
 
 
@@ -271,3 +311,67 @@ class TestPreservesData:
         d = await store.get("aaa11111")
         assert d is not None
         assert d.get("context") == "YAML doesn't scale for queries"
+
+
+class TestRecordDecisionStoreIsAuthoritative:
+    """Regression: a failed store write must not be acknowledged as success.
+
+    listDecisions, getStats, and calibration all read from the DecisionStore.
+    record_decision used to log a store failure and still return success=True,
+    so with SQLite as the read path a transient write error produced a decision
+    the caller believed was saved and no query could ever return.
+    """
+
+    @pytest.mark.asyncio
+    async def test_raising_store_fails_the_call(self, tmp_path: Path) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.decision_service import record_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        store.save = AsyncMock(side_effect=OSError("disk gone"))  # type: ignore[method-assign]
+        set_decision_store(store)
+
+        response = await record_decision(
+            _record_request("Store raises"), decisions_path=str(tmp_path)
+        )
+
+        assert response.success is False
+        assert "disk gone" in (response.error or "")
+
+    @pytest.mark.asyncio
+    async def test_store_returning_false_fails_the_call(self, tmp_path: Path) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.decision_service import record_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        store.save = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        set_decision_store(store)
+
+        response = await record_decision(
+            _record_request("Store rejects"), decisions_path=str(tmp_path)
+        )
+
+        assert response.success is False
+        assert "rejected" in (response.error or "").lower()
+
+    @pytest.mark.asyncio
+    async def test_healthy_store_still_succeeds(self, tmp_path: Path) -> None:
+        from a2a.cstp.decision_service import record_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+
+        response = await record_decision(
+            _record_request("Store healthy"), decisions_path=str(tmp_path)
+        )
+
+        assert response.success is True
+        assert await store.get(response.id) is not None

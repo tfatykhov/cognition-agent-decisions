@@ -112,34 +112,68 @@ async def migrate_yaml_to_store(
     return imported
 
 
-async def auto_migrate_if_empty(
+async def auto_migrate_if_incomplete(
     store: DecisionStore,
     decisions_dir: str | None = None,
 ) -> int:
-    """Auto-migrate YAML decisions into store if it's empty.
+    """Auto-migrate YAML decisions into store if any are still missing.
 
-    Called during server startup. Only runs migration if the store
-    contains zero decisions (fresh SQLite DB).
+    Called during server startup.
+
+    Resumability matters here. The previous gate was "only run when the store is
+    empty", but `migrate_yaml_to_store` commits one record at a time with no
+    surrounding transaction. A crash after the first save left a non-empty store,
+    so the next startup skipped migration permanently and the remaining YAML
+    decisions became invisible to every read path. Comparing the store count to
+    the number of YAML files instead means an interrupted run simply resumes; the
+    saves are upserts, so re-importing is harmless.
+
+    Note: if some YAML files are unparseable the count can never reach the file
+    total, so this re-runs each startup. That is idempotent and logged, and the
+    per-file parse warnings say which files are the problem.
 
     Args:
         store: Initialized DecisionStore to check and populate.
         decisions_dir: Path to decisions directory.
 
     Returns:
-        Number of decisions imported (0 if store already had data).
+        Number of decisions imported (0 if nothing was missing).
     """
+    base = Path(decisions_dir or DECISIONS_PATH)
+    if not base.exists():
+        logger.info("Decisions directory %s does not exist, nothing to migrate", base)
+        return 0
+
+    yaml_files = list(base.rglob("*-decision-*.yaml"))
+    if not yaml_files:
+        logger.info("No YAML decision files found in %s", base)
+        return 0
+
     try:
         count = await store.count()
     except Exception:
         logger.warning("Could not check store count, skipping auto-migration", exc_info=True)
         return 0
 
-    if count > 0:
-        logger.info("Store already has %d decisions, skipping auto-migration", count)
+    if count >= len(yaml_files):
+        logger.info(
+            "Store has %d decisions for %d YAML files, skipping auto-migration",
+            count,
+            len(yaml_files),
+        )
         return 0
 
-    logger.info("Store is empty, starting auto-migration from YAML files...")
+    logger.info(
+        "Store has %d of %d YAML decisions, running auto-migration...",
+        count,
+        len(yaml_files),
+    )
     return await migrate_yaml_to_store(store, decisions_dir)
+
+
+# Back-compat alias: the gate is no longer "is the store empty", but callers
+# outside this module may still import the old name.
+auto_migrate_if_empty = auto_migrate_if_incomplete
 
 
 # ---------------------------------------------------------------------------

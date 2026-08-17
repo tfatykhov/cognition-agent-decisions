@@ -79,9 +79,9 @@ async def lifespan(app: FastAPI):
         from .cstp.storage.sqlite import SQLiteDecisionStore
 
         if isinstance(decision_store, SQLiteDecisionStore):
-            from .cstp.storage.migrate import auto_migrate_if_empty
+            from .cstp.storage.migrate import auto_migrate_if_incomplete
 
-            migrated = await auto_migrate_if_empty(decision_store)
+            migrated = await auto_migrate_if_incomplete(decision_store)
             if migrated > 0:
                 logger.info("Auto-migrated %d decisions from YAML to SQLite", migrated)
     except Exception:

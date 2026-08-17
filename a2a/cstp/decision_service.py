@@ -991,12 +991,41 @@ async def record_decision(
             error=f"Failed to write decision file: {e}",
         )
 
-    # F050: Dual-write to DecisionStore
+    # F050: write to the DecisionStore. This is authoritative, not best-effort:
+    # listDecisions, getStats, and calibration all read from the store, so a
+    # swallowed failure here would acknowledge a decision that no query can ever
+    # return. The YAML file is left in place — it is the only remaining copy and
+    # a later migration can still pick it up — but the call reports failure.
     try:
         store = get_decision_store()
-        await store.save(decision_id, decision_data)
+        saved = await store.save(decision_id, decision_data)
     except Exception as e:
-        logger.warning("DecisionStore save failed (YAML write succeeded): %s", e)
+        logger.error("DecisionStore save failed for %s: %s", decision_id, e)
+        return RecordDecisionResponse(
+            success=False,
+            id=decision_id,
+            path=file_path,
+            indexed=False,
+            timestamp=now.isoformat(),
+            error=(
+                f"Failed to persist decision to store: {e}. "
+                f"The YAML file at {file_path} was written and can be re-imported."
+            ),
+        )
+
+    if saved is False:
+        logger.error("DecisionStore rejected save for %s", decision_id)
+        return RecordDecisionResponse(
+            success=False,
+            id=decision_id,
+            path=file_path,
+            indexed=False,
+            timestamp=now.isoformat(),
+            error=(
+                "Decision store rejected the write. "
+                f"The YAML file at {file_path} was written and can be re-imported."
+            ),
+        )
 
     # Index to ChromaDB
     embedding_text = build_embedding_text(request)
