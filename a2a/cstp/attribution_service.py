@@ -194,6 +194,13 @@ async def update_decision_outcome(
     if dry_run:
         return True
 
+    # Tracked outside the try so the handler knows whether there is anything to
+    # undo: any failure after the file has been flipped to `reviewed` must put it
+    # back, or the outcome is stranded forever — later attribution runs skip a
+    # non-pending file and migration skips a decision whose store row exists.
+    original_bytes: bytes | None = None
+    yaml_written = False
+
     try:
         original_bytes = path.read_bytes()
 
@@ -212,6 +219,7 @@ async def update_decision_outcome(
             with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             os.replace(temp_path, path)
+            yaml_written = True
         except Exception:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
@@ -242,23 +250,38 @@ async def update_decision_outcome(
             notes=reason,
         )
         if updated is False:
-            # Roll the YAML back to pending. Leaving it marked reviewed would
-            # strand the outcome permanently: the next attributeOutcomes run
-            # skips it because find_pending_decisions() no longer sees it as
-            # pending, and startup migration skips it because the stale store
-            # row already exists.
             logger.error(
                 "Decision store rejected auto-attributed outcome for %s; "
                 "rolling back the YAML so the attribution can be retried",
                 decision_id,
             )
-            path.write_bytes(original_bytes)
+            _rollback(path, original_bytes)
             return False
         return True
 
     except Exception as e:
+        # Covers a raising store as well as a raising write. SQLite surfaces some
+        # failures as exceptions rather than a False return, so restoring only on
+        # the False path would still strand the outcome.
         logger.warning("Failed to update decision %s: %s", path, e)
+        if yaml_written:
+            _rollback(path, original_bytes)
         return False
+
+
+def _rollback(path: Path, original_bytes: bytes | None) -> None:
+    """Restore a decision file to its pre-attribution contents."""
+    if original_bytes is None:
+        return
+    try:
+        path.write_bytes(original_bytes)
+    except Exception as e:  # pragma: no cover - only on a second, disk-level failure
+        logger.error(
+            "Could not roll back %s after a failed attribution: %s — the file may "
+            "now be marked reviewed without a matching store record",
+            path,
+            e,
+        )
 
 
 async def attribute_outcomes(

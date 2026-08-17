@@ -651,3 +651,67 @@ class TestFailedStoreWritesAreRetrySafe:
         reloaded = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert reloaded["status"] == "pending"
         assert "outcome" not in reloaded
+
+    @pytest.mark.asyncio
+    async def test_attribution_rollback_when_store_raises(self, tmp_path: Path) -> None:
+        """Round 7: rollback must also cover a raising store, not just a False return.
+
+        SQLite surfaces some failures as exceptions, and those were caught by the
+        outer handler which returned False without restoring the file.
+        """
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.attribution_service import update_decision_outcome
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+
+        path = _write_yaml_decision(tmp_path, "eee55555", {
+            "id": "eee55555",
+            "decision": "Awaiting attribution",
+            "confidence": 0.7,
+            "category": "process",
+            "stakes": "low",
+            "status": "pending",
+        })
+        await store.save("eee55555", yaml.safe_load(path.read_text(encoding="utf-8")))
+
+        store.update_outcome = AsyncMock(  # type: ignore[method-assign]
+            side_effect=OSError("db unreachable")
+        )
+        assert await update_decision_outcome(path, "success", "PR merged") is False
+
+        reloaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert reloaded["status"] == "pending"
+        assert "outcome" not in reloaded
+
+    @pytest.mark.asyncio
+    async def test_attribution_rollback_when_store_get_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """The existence probe itself can raise on a transient read failure."""
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.attribution_service import update_decision_outcome
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+
+        path = _write_yaml_decision(tmp_path, "fff66666", {
+            "id": "fff66666",
+            "decision": "Awaiting attribution",
+            "confidence": 0.7,
+            "category": "process",
+            "stakes": "low",
+            "status": "pending",
+        })
+
+        store.get = AsyncMock(side_effect=OSError("read failed"))  # type: ignore[method-assign]
+        assert await update_decision_outcome(path, "success", "PR merged") is False
+
+        reloaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert reloaded["status"] == "pending"
