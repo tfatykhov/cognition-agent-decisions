@@ -19,15 +19,22 @@ _store: DecisionStore | None = None
 _initialized: bool = False
 
 
+DEFAULT_BACKEND = "sqlite"
+
+
 def create_decision_store() -> DecisionStore:
     """Create a DecisionStore based on CSTP_STORAGE env var.
 
     Supported values:
-        - "yaml" (default): YAML filesystem store (legacy).
-        - "sqlite": SQLite with WAL mode and FTS5.
+        - "sqlite" (default): SQLite with WAL mode and FTS5.
+        - "yaml": YAML filesystem store (legacy, single-user/dev only).
         - "memory": In-memory store for testing.
+
+    The default is sqlite because the vector, graph, and BM25 subsystems all
+    assume a queryable, crash-safe decision store underneath them. YAML offers
+    no WAL, no FTS5, and no concurrent-write protection, so it warns loudly.
     """
-    backend = os.getenv("CSTP_STORAGE", "yaml")
+    backend = os.getenv("CSTP_STORAGE", DEFAULT_BACKEND)
     match backend:
         case "sqlite":
             from .sqlite import SQLiteDecisionStore
@@ -36,6 +43,11 @@ def create_decision_store() -> DecisionStore:
         case "yaml":
             from .yaml_fs import YAMLFileSystemStore
 
+            logger.warning(
+                "CSTP_STORAGE=yaml: the flat-file store has no WAL, no FTS5, and no "
+                "concurrent-write protection. Suitable for single-user local use only "
+                "— set CSTP_STORAGE=sqlite for any shared or multi-agent deployment."
+            )
             return YAMLFileSystemStore()
         case "memory":
             from .memory import MemoryDecisionStore

@@ -614,12 +614,25 @@ class TestFactory:
         from a2a.cstp.storage.factory import set_decision_store
         set_decision_store(None)
 
-    def test_factory_default_yaml(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Default CSTP_STORAGE creates YAMLFileSystemStore."""
+    def test_factory_default_sqlite(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Default CSTP_STORAGE creates SQLiteDecisionStore (F058).
+
+        The default was yaml until F058. The flat-file store has no WAL, no FTS5,
+        and no concurrent-write protection, so it is now explicit opt-in.
+        """
+        from a2a.cstp.storage.factory import create_decision_store
+        from a2a.cstp.storage.sqlite import SQLiteDecisionStore
+
+        monkeypatch.delenv("CSTP_STORAGE", raising=False)
+        store = create_decision_store()
+        assert isinstance(store, SQLiteDecisionStore)
+
+    def test_factory_yaml_opt_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """CSTP_STORAGE=yaml still selects the legacy store, explicitly."""
         from a2a.cstp.storage.factory import create_decision_store
         from a2a.cstp.storage.yaml_fs import YAMLFileSystemStore
 
-        monkeypatch.delenv("CSTP_STORAGE", raising=False)
+        monkeypatch.setenv("CSTP_STORAGE", "yaml")
         store = create_decision_store()
         assert isinstance(store, YAMLFileSystemStore)
 

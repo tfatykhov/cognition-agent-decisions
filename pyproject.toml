@@ -70,8 +70,10 @@ packages = ["src/cognition_engines", "a2a"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
-addopts = "-v --cov=a2a --cov-report=term-missing"
+# All three trees are collected. `tests/` is the main suite; the other two were
+# previously orphaned from CI despite being green (F056).
+testpaths = ["tests", "a2a/cstp/tests", "dashboard/tests"]
+addopts = "-v --cov=a2a --cov-report=term-missing --cov-fail-under=80"
 
 [tool.mypy]
 python_version = "3.11"

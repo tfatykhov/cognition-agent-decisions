@@ -508,3 +508,58 @@ class TestNetworkXGraphStore:
         nodes, edges = await store.get_subgraph("missing", depth=1)
         assert nodes == []
         assert edges == []
+
+
+# ---------------------------------------------------------------------------
+# F058: atomic full-rewrite persistence
+# ---------------------------------------------------------------------------
+
+
+class TestAtomicSave:
+    """save_edges_to_jsonl must never leave a truncated file behind.
+
+    Before F058 it opened the destination with mode "w", which truncates on open:
+    a crash partway through serialization destroyed every previously persisted
+    edge, not just the in-flight one.
+    """
+
+    def _edge(self, source: str, target: str) -> GraphEdge:
+        return GraphEdge(source_id=source, target_id=target, edge_type="relates_to")
+
+    def test_roundtrip(self, tmp_path: Path) -> None:
+        path = tmp_path / "edges.jsonl"
+        edges = [self._edge("a", "b"), self._edge("c", "d")]
+        save_edges_to_jsonl(edges, path)
+
+        loaded = load_edges_from_jsonl(path)
+        assert [(e.source_id, e.target_id) for e in loaded] == [("a", "b"), ("c", "d")]
+
+    def test_failure_midwrite_preserves_previous_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "edges.jsonl"
+        original = [self._edge(f"n{i}", f"n{i + 1}") for i in range(5)]
+        save_edges_to_jsonl(original, path)
+        before = path.read_text(encoding="utf-8")
+
+        # Blow up during serialization of the replacement set.
+        import a2a.cstp.graphdb.persistence as persistence
+
+        real = persistence._edge_to_json
+        calls = {"n": 0}
+
+        def exploding(edge: GraphEdge) -> str:
+            calls["n"] += 1
+            if calls["n"] > 2:
+                raise OSError("simulated disk failure")
+            return real(edge)
+
+        monkeypatch.setattr(persistence, "_edge_to_json", exploding)
+
+        with pytest.raises(OSError):
+            save_edges_to_jsonl([self._edge("x", "y")] * 10, path)
+
+        # The original file is untouched, and no temp files are left behind.
+        assert path.read_text(encoding="utf-8") == before
+        assert len(load_edges_from_jsonl(path)) == 5
+        assert list(tmp_path.iterdir()) == [path]

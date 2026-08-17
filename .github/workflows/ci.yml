@@ -9,15 +9,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -28,26 +28,56 @@ jobs:
           pip install fastapi uvicorn httpx pydantic
           # F054: CEL expression guardrails
           pip install "cel-python>=0.4,<1.0"
-      
+          # F056: dashboard suite (dashboard/tests) — see dashboard/requirements.txt
+          pip install flask flask-wtf
+
+      # No path argument: `testpaths` in pyproject.toml selects all three trees
+      # (tests/, a2a/cstp/tests/, dashboard/tests/). Passing `tests/` here would
+      # override testpaths and re-orphan the other two — that was the F056 bug.
       - name: Run tests
         run: |
-          pytest tests/ -v --tb=short
+          pytest -v --tb=short
         env:
           PYTHONPATH: src
 
   lint:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install ruff
         run: pip install ruff
-      
+
       - name: Run ruff
         run: ruff check src/ tests/ a2a/ --output-format=github
+
+  typecheck:
+    runs-on: ubuntu-latest
+    # Non-blocking on first landing: `mypy --strict` reports 184 pre-existing
+    # errors across 29 files. The step exists so the count is visible per-PR and
+    # can be ratcheted down; flip continue-on-error off once it reaches zero.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy pyyaml networkx fastapi pydantic types-PyYAML
+
+      - name: Run mypy
+        run: mypy src/ a2a/
+        env:
+          PYTHONPATH: src

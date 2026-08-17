@@ -3,8 +3,10 @@
 server:
   host: "0.0.0.0"
   port: 8100
-  cors_origins:
-    - "*"
+  # Deny by default (F057). CORS middleware is only installed when this list is
+  # non-empty. Add your browser origins explicitly; avoid "*", which makes
+  # Starlette reflect the caller's Origin and disables credentialed requests.
+  cors_origins: []
 
 agent:
   name: "cognition-engines"

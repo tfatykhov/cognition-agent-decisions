@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased — CI Truth, Dashboard Auth & Durability (F056–F058)
+
+### F056: CI Truth & Supply Chain
+
+- **112 previously-invisible tests now run.** `testpaths` covered only `tests/`, and CI passed an explicit `pytest tests/` path on top of that. `a2a/cstp/tests/` (47 tests, all green) and `dashboard/tests/` (65 tests) were excluded from every CI run and from the reported coverage number. Total: 1329 → 1460 tests; coverage 78% → 82%
+- **Dashboard tests were uncollectable, not merely excluded** — `ModuleNotFoundError: No module named 'auth'`. `dashboard/conftest.py` now puts the dashboard directory on `sys.path`, matching how the Dockerfile loads the app, so the suite exercises production's import wiring
+- **`uv.lock` deleted.** It pinned the package at 0.7.0 (eight minor versions stale) and contained no entries at all for `rank-bm25`, `networkx`, or `cel-python` — three required core dependencies. `uv sync --locked` produced an environment where BM25 retrieval, the decision graph, and CEL guardrails all failed to import. Nothing consumed it; CI installs directly
+- **Coverage floor** — `--cov-fail-under=80`
+- **mypy runs in CI**, non-blocking: `--strict` reports 184 pre-existing errors across 29 files. The step makes the count visible per-PR so it can be ratcheted down
+- **Dependabot, CodeQL, and Trivy container scanning added** — there was no dependency or static security scanning of any kind
+
+### F057: Dashboard Authentication
+
+- **Empty-password bypass closed.** `config.validate()` — the only check rejecting an unset `DASHBOARD_PASS` — ran in `main()`, but `dashboard/Dockerfile` runs `gunicorn app:app`, which imports the module and never calls `main()`. The guard did not execute in any containerized deployment. Enforcement moved to import time via `enforce_security_config()`, which raises rather than warns
+- **Constant-time credential comparison** — `secrets.compare_digest` on both fields, both always evaluated so no timing signal remains. An empty configured password never matches, independent of the startup guard
+- **Login throttling** — 10 failed attempts per client per 5 minutes, then `429`. Process-local, so under `gunicorn -w N` the effective cap is N times that
+- **Werkzeug debugger no longer default.** `app.run(debug=True)` on `0.0.0.0` is now `debug=False` on `127.0.0.1` unless `DASHBOARD_DEBUG` / `DASHBOARD_HOST` say otherwise. This path is dev-only — gunicorn never reached it — so this is defence in depth, not the fix
+- **CORS denies by default.** `cors_origins` was `["*"]` with `allow_credentials=True`; Starlette reflects the caller's `Origin` in that combination, meaning any origin with credentials. The middleware is now installed only for a non-empty allow-list, and credentials are enabled only when that list has no wildcard
+
+### F058: Durability
+
+- **Graph persistence is atomic.** `save_edges_to_jsonl` opened the destination with mode `"w"`, truncating it before the first byte was written — a crash mid-write destroyed **every** persisted edge, not just the in-flight one. It now writes to a temp file in the same directory, fsyncs, and `os.replace()`s
+- **`CSTP_STORAGE` defaults to `sqlite`.** The default was `yaml`, which has no WAL, no FTS5, and no concurrent-write protection — while the vector, graph, and BM25 subsystems all assume a queryable, crash-safe store underneath. `yaml` remains available as explicit opt-in and logs a startup warning
+- **Multi-worker refused rather than silently broken.** `DeliberationTracker` keeps session state in a process-local dict, so `preAction` → `recordThought` → `ready` must land on one process. `CSTP_WORKERS > 1` now exits with an explanation instead of losing deliberation state on whichever requests hit the wrong worker
+
 ## v0.16.0 - Provenance, CEL Guardrails & Circuit Breakers
 *Unreleased — merged to `main`*
 

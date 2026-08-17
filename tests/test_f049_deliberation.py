@@ -39,6 +39,9 @@ _mock_config.dashboard_user = "admin"
 _mock_config.dashboard_pass = "testpass"
 _mock_config.dashboard_port = 8080
 _mock_config.validate.return_value = []
+# app.py calls enforce_security_config() at import; without this the MagicMock
+# returns a truthy stub and the import aborts.
+_mock_config.security_errors.return_value = []
 
 with patch.dict(sys.modules, {}):
     pass  # ensure clean state

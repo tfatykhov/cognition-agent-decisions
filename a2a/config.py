@@ -93,11 +93,13 @@ class StorageConfig:
     """Decision storage configuration.
 
     Attributes:
-        backend: Storage backend (yaml, sqlite, memory).
+        backend: Storage backend (sqlite, yaml, memory). Defaults to sqlite —
+            yaml has no WAL, no FTS5, and no concurrent-write protection, so it
+            is opt-in for local single-user use only.
         db_path: Path to SQLite database file.
     """
 
-    backend: str = "yaml"
+    backend: str = "sqlite"
     db_path: str = "data/decisions.db"
 
 
@@ -113,7 +115,12 @@ class ServerConfig:
 
     host: str = "0.0.0.0"
     port: int = 8100
-    cors_origins: list[str] = field(default_factory=lambda: ["*"])
+    # Deny by default. The API is bearer-token authenticated and has no browser
+    # client of its own, so a wildcard buys nothing and ships an insecure default:
+    # Starlette reflects the caller's Origin when allow_credentials is set, which
+    # turns "*" into "any origin, with credentials". Operators who need browser
+    # access allow-list their own origins explicitly.
+    cors_origins: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -195,7 +202,7 @@ class Config:
                 consumed_history_size=int(os.getenv("CSTP_TRACKER_HISTORY_SIZE", "50")),
             ),
             storage=StorageConfig(
-                backend=os.getenv("CSTP_STORAGE", "yaml"),
+                backend=os.getenv("CSTP_STORAGE", "sqlite"),
                 db_path=os.getenv("CSTP_DB_PATH", "data/decisions.db"),
             ),
         )
