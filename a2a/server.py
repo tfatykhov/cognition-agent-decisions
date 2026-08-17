@@ -67,7 +67,9 @@ async def lifespan(app: FastAPI):
             set_decision_store,
         )
 
-        decision_store = get_decision_store()
+        # Pass the loaded StorageConfig so a `--config` YAML that names a backend
+        # or db_path is honoured; env still wins over both.
+        decision_store = get_decision_store(getattr(app.state.config, "storage", None))
         await decision_store.initialize()
         mark_store_initialized()
         app.state.decision_store = decision_store

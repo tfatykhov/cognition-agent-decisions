@@ -22,6 +22,15 @@ _dashboard_dir = str(Path(__file__).resolve().parent.parent / "dashboard")
 if _dashboard_dir not in sys.path:
     sys.path.insert(0, _dashboard_dir)
 
+import auth  # noqa: E402
+from auth import (  # noqa: E402
+    LOCKOUT_SECONDS,
+    MAX_FAILED_ATTEMPTS,
+    check_auth,
+    is_locked_out,
+    record_failure,
+    reset_failures,
+)
 from config import Config, enforce_security_config  # noqa: E402
 
 
@@ -62,8 +71,6 @@ class TestSecurityConfigEnforcement:
 
 class TestCheckAuth:
     def test_correct_credentials_accepted(self) -> None:
-        from auth import check_auth
-
         cfg = Config(dashboard_user="admin", dashboard_pass="hunter2")
         assert check_auth("admin", "hunter2", cfg) is True
 
@@ -78,15 +85,11 @@ class TestCheckAuth:
         ],
     )
     def test_bad_credentials_rejected(self, user: str | None, password: str | None) -> None:
-        from auth import check_auth
-
         cfg = Config(dashboard_user="admin", dashboard_pass="hunter2")
         assert check_auth(user, password, cfg) is False
 
     def test_empty_configured_password_never_matches(self) -> None:
         """Defence in depth for the exact bypass F057 closes."""
-        from auth import check_auth
-
         cfg = Config(dashboard_user="admin", dashboard_pass="")
         assert check_auth("admin", "", cfg) is False
         assert check_auth("admin", None, cfg) is False
@@ -94,39 +97,92 @@ class TestCheckAuth:
 
 class TestLockout:
     def setup_method(self) -> None:
-        import auth
-
         auth._failed.clear()
 
     def test_locks_out_after_threshold(self) -> None:
-        from auth import MAX_FAILED_ATTEMPTS, is_locked_out, record_failure
-
         for _ in range(MAX_FAILED_ATTEMPTS):
             assert not is_locked_out("1.2.3.4")
             record_failure("1.2.3.4")
         assert is_locked_out("1.2.3.4")
 
     def test_lockout_is_per_client(self) -> None:
-        from auth import MAX_FAILED_ATTEMPTS, is_locked_out, record_failure
-
         for _ in range(MAX_FAILED_ATTEMPTS):
             record_failure("1.2.3.4")
         assert is_locked_out("1.2.3.4")
         assert not is_locked_out("5.6.7.8")
 
     def test_window_expiry_clears_lockout(self) -> None:
-        from auth import LOCKOUT_SECONDS, MAX_FAILED_ATTEMPTS, is_locked_out, record_failure
-
         for _ in range(MAX_FAILED_ATTEMPTS):
             record_failure("1.2.3.4", now=1000.0)
         assert is_locked_out("1.2.3.4", now=1000.0)
         assert not is_locked_out("1.2.3.4", now=1000.0 + LOCKOUT_SECONDS + 1)
 
     def test_success_resets_counter(self) -> None:
-        from auth import MAX_FAILED_ATTEMPTS, is_locked_out, record_failure, reset_failures
-
         for _ in range(MAX_FAILED_ATTEMPTS - 1):
             record_failure("1.2.3.4")
         reset_failures("1.2.3.4")
         record_failure("1.2.3.4")
         assert not is_locked_out("1.2.3.4")
+
+
+class TestProxyAwareClientKey:
+    """Codex review: behind a reverse proxy every request carries the proxy's
+    address, so one attacker's ten failures would lock out every user sharing it.
+    """
+
+    def _key_with(self, monkeypatch: pytest.MonkeyPatch, *, proxies: int,
+                  remote: str, xff: str | None) -> str:
+        from flask import Flask
+
+        monkeypatch.setattr(auth, "TRUSTED_PROXIES", proxies)
+        headers = {"X-Forwarded-For": xff} if xff is not None else {}
+        app = Flask(__name__)
+        with app.test_request_context("/", environ_base={"REMOTE_ADDR": remote},
+                                      headers=headers):
+            return auth._client_key()
+
+    def test_ignores_forwarded_header_when_no_trusted_proxies(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Untrusted XFF must not be honoured: a caller could spoof a fresh
+        bucket per request and skip throttling entirely."""
+        key = self._key_with(monkeypatch, proxies=0, remote="10.0.0.1",
+                             xff="1.1.1.1, 2.2.2.2")
+        assert key == "10.0.0.1"
+
+    def test_uses_client_entry_behind_one_proxy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # One proxy appends the peer it received from — the client — so the
+        # chain holds the client alone and remote_addr is the proxy.
+        key = self._key_with(monkeypatch, proxies=1, remote="10.0.0.1",
+                             xff="203.0.113.9")
+        assert key == "203.0.113.9"
+
+    def test_counts_hops_from_the_right(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Only the rightmost hops were appended by infrastructure we control."""
+        key = self._key_with(monkeypatch, proxies=2, remote="10.0.0.1",
+                             xff="spoofed, 203.0.113.9, 10.0.0.1")
+        assert key == "203.0.113.9"
+
+    def test_falls_back_when_chain_shorter_than_hop_count(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        key = self._key_with(monkeypatch, proxies=3, remote="10.0.0.1",
+                             xff="203.0.113.9")
+        assert key == "10.0.0.1"
+
+    def test_distinct_clients_get_distinct_buckets_behind_proxy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The actual regression: two users behind one proxy must not share a bucket."""
+        a = self._key_with(monkeypatch, proxies=1, remote="10.0.0.1",
+                           xff="198.51.100.1")
+        b = self._key_with(monkeypatch, proxies=1, remote="10.0.0.1",
+                           xff="198.51.100.2")
+        assert a != b
+        # Before the fix both would have been the shared proxy address.
+        assert a == "198.51.100.1"
+        assert b == "198.51.100.2"

@@ -9,6 +9,7 @@ from a2a.cstp.graphdb import GraphEdge, GraphNode, VALID_EDGE_TYPES
 from a2a.cstp.graphdb.factory import create_graph_store, get_graph_store, set_graph_store
 from a2a.cstp.graphdb.memory import MemoryGraphStore
 from a2a.cstp.graphdb.networkx_store import NetworkXGraphStore
+from a2a.cstp.graphdb import persistence
 from a2a.cstp.graphdb.persistence import load_edges_from_jsonl, save_edges_to_jsonl
 
 
@@ -543,8 +544,6 @@ class TestAtomicSave:
         before = path.read_text(encoding="utf-8")
 
         # Blow up during serialization of the replacement set.
-        import a2a.cstp.graphdb.persistence as persistence
-
         real = persistence._edge_to_json
         calls = {"n": 0}
 

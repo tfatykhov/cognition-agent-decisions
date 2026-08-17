@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import sys
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1090,3 +1091,49 @@ class TestRegressionPR162:
         assert listed["reasons"][0]["type"] == got["reasons"][0]["type"]
         # Date
         assert listed.get("date") == got.get("date", got.get("created_at", ""))[:10]
+
+
+class TestStorageConfigPrecedence:
+    """Codex review: with the F058 sqlite default, a YAML config that explicitly
+    asks for the legacy backend must not be silently overridden.
+    """
+
+    def test_yaml_config_backend_is_honoured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from a2a.config import StorageConfig
+        from a2a.cstp.storage.factory import create_decision_store
+        from a2a.cstp.storage.yaml_fs import YAMLFileSystemStore
+
+        monkeypatch.delenv("CSTP_STORAGE", raising=False)
+        store = create_decision_store(StorageConfig(backend="yaml"))
+        assert isinstance(store, YAMLFileSystemStore)
+
+    def test_env_overrides_yaml_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Env beats config so a container can override a baked-in file."""
+        from a2a.config import StorageConfig
+        from a2a.cstp.storage.factory import create_decision_store
+        from a2a.cstp.storage.sqlite import SQLiteDecisionStore
+
+        monkeypatch.setenv("CSTP_STORAGE", "sqlite")
+        store = create_decision_store(StorageConfig(backend="yaml"))
+        assert isinstance(store, SQLiteDecisionStore)
+
+    def test_config_db_path_is_honoured(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from a2a.config import StorageConfig
+        from a2a.cstp.storage.factory import create_decision_store
+
+        monkeypatch.delenv("CSTP_STORAGE", raising=False)
+        monkeypatch.delenv("CSTP_DB_PATH", raising=False)
+        target = tmp_path / "custom.db"
+        store = create_decision_store(
+            StorageConfig(backend="sqlite", db_path=str(target))
+        )
+        assert store._db_path == target
+
+    def test_no_config_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from a2a.cstp.storage.factory import DEFAULT_BACKEND, resolve_backend
+
+        monkeypatch.delenv("CSTP_STORAGE", raising=False)
+        backend, _ = resolve_backend(None)
+        assert backend == DEFAULT_BACKEND

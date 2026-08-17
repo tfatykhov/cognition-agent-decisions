@@ -3,6 +3,7 @@ import secrets
 import time
 from collections.abc import Callable
 from functools import wraps
+from os import environ
 from threading import Lock
 from typing import Any
 
@@ -18,12 +19,32 @@ from config import Config
 MAX_FAILED_ATTEMPTS = 10
 LOCKOUT_SECONDS = 300
 
+# Number of trusted reverse proxies in front of the dashboard. Behind a proxy
+# every request carries the proxy's address in `remote_addr`, so all users would
+# share one throttle bucket and ten failures by a single attacker would lock out
+# everyone. Set DASHBOARD_TRUSTED_PROXIES to the hop count to key on the real
+# client instead. Left at 0 the header is ignored entirely — trusting an
+# unvalidated X-Forwarded-For would let any caller spoof a fresh bucket per
+# request and skip throttling altogether.
+TRUSTED_PROXIES = int(environ.get("DASHBOARD_TRUSTED_PROXIES", "0"))
+
 _failed: dict[str, tuple[int, float]] = {}
 _failed_lock = Lock()
 
 
 def _client_key() -> str:
-    """Identify the caller for throttling purposes."""
+    """Identify the caller for throttling purposes.
+
+    Uses `remote_addr` unless DASHBOARD_TRUSTED_PROXIES says a known number of
+    proxies sit in front, in which case the corresponding X-Forwarded-For entry
+    is taken instead — counting from the right, since only the rightmost hops
+    were appended by infrastructure we control.
+    """
+    if TRUSTED_PROXIES > 0:
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        chain = [part.strip() for part in forwarded.split(",") if part.strip()]
+        if len(chain) >= TRUSTED_PROXIES:
+            return chain[-TRUSTED_PROXIES]
     return request.remote_addr or "unknown"
 
 
