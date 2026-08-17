@@ -2,6 +2,7 @@
 import contextlib
 import logging
 from datetime import UTC, datetime, timedelta
+from os import environ
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -10,8 +11,12 @@ from flask_wtf import CSRFProtect
 from flask_wtf.csrf import CSRFError
 
 from auth import requires_auth
-from config import config
+from config import config, enforce_security_config
 from cstp_client import CSTPClient, CSTPError
+
+# Fail closed at import, not in main(): gunicorn imports `app:app` without ever
+# calling main(), so a guard placed there does not run in any deployment we ship.
+enforce_security_config()
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -663,8 +668,12 @@ def main() -> None:
         for error in errors:
             print(f"Config error: {error}")
         return
-    
-    app.run(host="0.0.0.0", port=config.dashboard_port, debug=True)
+
+    # Werkzeug's debugger is an RCE vector on any reachable interface, so it is
+    # opt-in rather than the default even on this dev-only path.
+    debug = environ.get("DASHBOARD_DEBUG", "").lower() in {"1", "true", "yes"}
+    host = environ.get("DASHBOARD_HOST", "127.0.0.1")
+    app.run(host=host, port=config.dashboard_port, debug=debug)
 
 
 if __name__ == "__main__":

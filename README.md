@@ -217,9 +217,13 @@ Returns active tracker sessions with composite keys, input counts, thought text,
 Decision storage uses SQLite (WAL mode, FTS5) by default. Vector search uses ChromaDB.
 
 ```bash
-# Decision storage (default: sqlite)
+# Decision storage (default: sqlite since F058)
 CSTP_STORAGE=sqlite
 CSTP_DB_PATH=data/decisions.db
+
+# Legacy flat-file store — explicit opt-in, local single-user only.
+# No WAL, no FTS5, no concurrent-write protection; logs a startup warning.
+# CSTP_STORAGE=yaml
 
 # Vector storage (default: chromadb)
 VECTOR_BACKEND=chromadb

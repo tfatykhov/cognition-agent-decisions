@@ -1,0 +1,62 @@
+name: Container Scan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'dashboard/Dockerfile'
+      - 'pyproject.toml'
+      - 'dashboard/requirements.txt'
+      - '.github/workflows/container-scan.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'dashboard/Dockerfile'
+      - 'pyproject.toml'
+      - 'dashboard/requirements.txt'
+      - '.github/workflows/container-scan.yml'
+  schedule:
+    # Weekly: base-image CVEs land without either Dockerfile changing.
+    - cron: '41 4 * * 1'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cstp-server
+            dockerfile: Dockerfile
+            context: .
+          - name: dashboard
+            dockerfile: dashboard/Dockerfile
+            context: dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ${{ matrix.name }} image
+        run: docker build -f ${{ matrix.dockerfile }} -t cad-scan-${{ matrix.name }}:ci ${{ matrix.context }}
+
+      - name: Scan ${{ matrix.name }} image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: cad-scan-${{ matrix.name }}:ci
+          format: sarif
+          output: trivy-${{ matrix.name }}.sarif
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.name }}.sarif
+          category: trivy-${{ matrix.name }}

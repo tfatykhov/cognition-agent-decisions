@@ -112,34 +112,96 @@ async def migrate_yaml_to_store(
     return imported
 
 
-async def auto_migrate_if_empty(
+async def auto_migrate_if_incomplete(
     store: DecisionStore,
     decisions_dir: str | None = None,
 ) -> int:
-    """Auto-migrate YAML decisions into store if it's empty.
+    """Auto-migrate YAML decisions into store if any are still missing.
 
-    Called during server startup. Only runs migration if the store
-    contains zero decisions (fresh SQLite DB).
+    Called during server startup.
+
+    Resumability matters here. The original gate was "only run when the store is
+    empty", but `migrate_yaml_to_store` commits one record at a time with no
+    surrounding transaction. A crash after the first save left a non-empty store,
+    so the next startup skipped migration permanently and the remaining YAML
+    decisions became invisible to every read path.
+
+    The check is per-ID rather than a count comparison. Aggregate counts are not
+    sound: a store holding decisions recorded *after* an interrupted import can
+    match or exceed the YAML file total while specific YAML IDs are still
+    missing, which would strand exactly the files the resume exists to recover.
 
     Args:
         store: Initialized DecisionStore to check and populate.
         decisions_dir: Path to decisions directory.
 
     Returns:
-        Number of decisions imported (0 if store already had data).
+        Number of decisions imported (0 if nothing was missing).
     """
+    base = Path(decisions_dir or DECISIONS_PATH)
+    if not base.exists():
+        logger.info("Decisions directory %s does not exist, nothing to migrate", base)
+        return 0
+
+    yaml_files = list(base.rglob("*-decision-*.yaml"))
+    if not yaml_files:
+        logger.info("No YAML decision files found in %s", base)
+        return 0
+
+    # IDs come from the filename (YYYY-MM-DD-decision-XXXXXXXX.yaml), so the common
+    # case — everything already imported — costs one directory walk and one lookup
+    # per file, with no YAML parsing at all.
+    by_id: dict[str, Path] = {}
+    for f in yaml_files:
+        stem = f.stem
+        if "-decision-" in stem:
+            by_id[stem.rsplit("-decision-", 1)[1]] = f
+
     try:
-        count = await store.count()
+        absent = [
+            decision_id
+            for decision_id in sorted(by_id)
+            if await store.get(decision_id) is None
+        ]
     except Exception:
-        logger.warning("Could not check store count, skipping auto-migration", exc_info=True)
+        logger.warning("Could not inspect store contents, skipping auto-migration", exc_info=True)
         return 0
 
-    if count > 0:
-        logger.info("Store already has %d decisions, skipping auto-migration", count)
+    # A file that cannot be parsed can never be imported, so counting it as
+    # missing would make the gate permanently unsatisfiable and re-run the whole
+    # migration on every restart. Parsing happens only for absent IDs, so a fully
+    # migrated store still parses nothing.
+    missing = [
+        decision_id
+        for decision_id in absent
+        if _parse_yaml_decision(by_id[decision_id]) is not None
+    ]
+    unparseable = len(absent) - len(missing)
+    if unparseable:
+        logger.warning(
+            "%d YAML decision file(s) could not be parsed and will not be migrated",
+            unparseable,
+        )
+
+    if not missing:
+        logger.info(
+            "All importable YAML decisions (%d file(s)) are present in the store, "
+            "skipping auto-migration",
+            len(by_id),
+        )
         return 0
 
-    logger.info("Store is empty, starting auto-migration from YAML files...")
+    logger.info(
+        "%d of %d YAML decisions missing from the store, running auto-migration...",
+        len(missing),
+        len(by_id),
+    )
     return await migrate_yaml_to_store(store, decisions_dir)
+
+
+# Back-compat alias: the gate is no longer "is the store empty", but callers
+# outside this module may still import the old name.
+auto_migrate_if_empty = auto_migrate_if_incomplete
 
 
 # ---------------------------------------------------------------------------

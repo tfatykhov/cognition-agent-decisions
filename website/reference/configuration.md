@@ -189,7 +189,11 @@ GUARDRAILS_PATHS=/app/guardrails:/app/custom-guardrails:/shared/company-guardrai
 
 ## CORS Configuration
 
-Configure allowed origins for the CSTP API:
+**Default: deny.** `cors_origins` is empty out of the box, and the CORS middleware is
+only installed when it is non-empty. The CSTP API is bearer-token authenticated and has
+no browser client of its own, so no origin needs access unless you add one.
+
+Configure allowed origins explicitly:
 
 ```yaml
 cors_origins:
@@ -198,12 +202,12 @@ cors_origins:
   - "https://your-domain.com"
 ```
 
-Or allow all origins (development only):
-
-```yaml
-cors_origins:
-  - "*"
-```
+::: warning Avoid `"*"`
+Starlette's `CORSMiddleware` reflects the caller's `Origin` header when origins is `"*"`,
+which combined with credentialed requests means "any origin, with credentials." The server
+therefore refuses to send credentials when `"*"` is present — `allow_credentials` is
+enabled only for an explicit allow-list.
+:::
 
 ---
 

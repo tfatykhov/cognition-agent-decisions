@@ -24,6 +24,62 @@ DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
 logger = logging.getLogger(__name__)
 
 
+def _restore_yaml(file_path: Any, original_bytes: bytes) -> str:
+    """Put a decision file back the way it was after a failed store write.
+
+    Used by the non-idempotent mutation paths, where leaving the YAML changed
+    would make a retry either duplicate work or be skipped entirely.
+
+    Returns a short note describing what happened, for the error payload.
+    """
+    try:
+        file_path.write_bytes(original_bytes)
+    except Exception as e:
+        logger.error("Rollback of %s failed: %s", file_path, e)
+        return (
+            f"The YAML file at {file_path} was modified and could not be rolled "
+            f"back ({e}); it may now disagree with the store."
+        )
+    return f"The YAML file at {file_path} was rolled back; the call is safe to retry."
+
+
+async def _persist_store_mutation(
+    decision_id: str,
+    what: str,
+    coro: Any,
+) -> str | None:
+    """Await a DecisionStore mutation and return an error string, or None on success.
+
+    Since F050 the store — not the YAML file — is what listDecisions, getStats,
+    queryDecisions, and calibration read. A mutation that only reaches YAML is
+    therefore invisible to every read path, so acknowledging one as success
+    reports a change the caller can never observe.
+
+    Both failure modes matter. Backends raise on some errors, and
+    SQLiteDecisionStore converts others into a `False` return, so checking only
+    for exceptions misses half of them.
+
+    Args:
+        decision_id: Decision being mutated, for the log line.
+        what: Short description of the mutation, used in the error message.
+        coro: Awaitable performing the store write.
+
+    Returns:
+        An error message suitable for a response payload, or None if it landed.
+    """
+    try:
+        result = await coro
+    except Exception as e:
+        logger.error("DecisionStore %s failed for %s: %s", what, decision_id, e)
+        return f"Failed to persist {what} to store: {e}"
+
+    if result is False:
+        logger.error("DecisionStore rejected %s for %s", what, decision_id)
+        return f"Decision store rejected the {what}."
+
+    return None
+
+
 @dataclass
 class Reason:
     """A reason supporting a decision."""
@@ -991,12 +1047,35 @@ async def record_decision(
             error=f"Failed to write decision file: {e}",
         )
 
-    # F050: Dual-write to DecisionStore
-    try:
-        store = get_decision_store()
-        await store.save(decision_id, decision_data)
-    except Exception as e:
-        logger.warning("DecisionStore save failed (YAML write succeeded): %s", e)
+    # F050: write to the DecisionStore. This is authoritative, not best-effort:
+    # listDecisions, getStats, and calibration all read from the store, so a
+    # swallowed failure here would acknowledge a decision that no query can ever
+    # return. The YAML file is left in place — it is the only remaining copy and
+    # a later migration can still pick it up — but the call reports failure.
+    store_error = await _persist_store_mutation(
+        decision_id,
+        "decision",
+        get_decision_store().save(decision_id, decision_data),
+    )
+    if store_error:
+        # Discard the file we just created. A retry mints a fresh decision_id, so
+        # keeping this one would leave an orphan that a later migration imports as
+        # a second, phantom copy of the same decision. Nothing is lost: the record
+        # was never acknowledged, and the caller still holds the payload.
+        try:
+            Path(file_path).unlink(missing_ok=True)
+            note = "The partial YAML file was removed; the call is safe to retry."
+        except Exception as e:
+            logger.error("Could not remove orphaned decision file %s: %s", file_path, e)
+            note = f"An orphaned YAML file remains at {file_path} ({e})."
+        return RecordDecisionResponse(
+            success=False,
+            id=decision_id,
+            path="",
+            indexed=False,
+            timestamp=now.isoformat(),
+            error=f"{store_error} {note}",
+        )
 
     # Index to ChromaDB
     embedding_text = build_embedding_text(request)
@@ -1344,12 +1423,23 @@ async def update_decision(
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
 
-    # F050: Dual-write to DecisionStore
-    try:
-        store = get_decision_store()
-        await store.update_fields(decision_id, **{k: updates[k] for k in applied})
-    except Exception as e:
-        logger.warning("DecisionStore update_fields failed: %s", e)
+    # F050: authoritative — the store is the read path (see _persist_store_mutation).
+    store_error = await _persist_store_mutation(
+        decision_id,
+        "field update",
+        get_decision_store().update_fields(
+            decision_id, **{k: updates[k] for k in applied}
+        ),
+    )
+    if store_error:
+        return {
+            "success": False,
+            "id": decision_id,
+            "error": (
+                f"{store_error} The YAML file at {file_path} was updated "
+                "and can be re-imported."
+            ),
+        }
 
     # Re-index
     indexed = await reindex_decision(decision_id, data, str(file_path))
@@ -1402,19 +1492,34 @@ async def append_thought(
     delib["steps"] = steps
     data["deliberation"] = delib
 
-    # Write back
+    # Appending is not idempotent, so the YAML mutation has to be undone if the
+    # store write fails — otherwise a client retrying after a transient failure
+    # rereads the already-appended YAML and adds the same thought again at the
+    # next step number, duplicating it in the trace once the store recovers.
+    try:
+        original_bytes = file_path.read_bytes()
+    except Exception as e:
+        return {"success": False, "error": f"Failed to read for rollback: {e}"}
+
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
 
-    # F050: Dual-write deliberation to DecisionStore
-    try:
-        store = get_decision_store()
-        await store.update_fields(decision_id, deliberation=delib)
-    except Exception as e:
-        logger.warning("DecisionStore deliberation update failed: %s", e)
+    # F050: authoritative — the store is the read path (see _persist_store_mutation).
+    store_error = await _persist_store_mutation(
+        decision_id,
+        "deliberation update",
+        get_decision_store().update_fields(decision_id, deliberation=delib),
+    )
+    if store_error:
+        rollback_note = _restore_yaml(file_path, original_bytes)
+        return {
+            "success": False,
+            "decision_id": decision_id,
+            "error": f"{store_error} {rollback_note}",
+        }
 
     return {
         "success": True,
@@ -1500,10 +1605,15 @@ async def review_decision(
             error=f"Failed to write updated decision: {e}",
         )
 
-    # F050: Dual-write outcome to DecisionStore
+    # F050: write the outcome to the DecisionStore. Authoritative for the same
+    # reason as record_decision: calibration and listDecisions read the store, so
+    # a swallowed failure here leaves an acknowledged review that never affects
+    # any Brier score. SQLiteDecisionStore.update_outcome() converts database
+    # errors into a False return, so the return value matters as much as the
+    # exception.
     try:
         store = get_decision_store()
-        await store.update_outcome(
+        updated = await store.update_outcome(
             decision_id=request.id,
             outcome=request.outcome,
             result=request.actual_result,
@@ -1511,7 +1621,34 @@ async def review_decision(
             notes=request.notes,
         )
     except Exception as e:
-        logger.warning("DecisionStore update_outcome failed: %s", e)
+        logger.error("DecisionStore update_outcome failed for %s: %s", request.id, e)
+        return ReviewDecisionResponse(
+            success=False,
+            id=request.id,
+            path=str(path),
+            status="store_write_failed",
+            reviewed_at=now.isoformat(),
+            reindexed=False,
+            error=(
+                f"Failed to persist outcome to store: {e}. "
+                f"The YAML file at {path} was updated and can be re-imported."
+            ),
+        )
+
+    if updated is False:
+        logger.error("DecisionStore rejected outcome update for %s", request.id)
+        return ReviewDecisionResponse(
+            success=False,
+            id=request.id,
+            path=str(path),
+            status="store_write_failed",
+            reviewed_at=now.isoformat(),
+            reindexed=False,
+            error=(
+                "Decision store rejected the outcome update. "
+                f"The YAML file at {path} was updated and can be re-imported."
+            ),
+        )
 
     # Re-index with outcome metadata
     reindexed = await reindex_decision(request.id, data, str(path))

@@ -12,6 +12,12 @@ services:
       - .env
     environment:
       - CHROMA_URL=http://chromadb:8000
+      # CSTP_STORAGE defaults to sqlite (F058). Keep the database inside the
+      # already-persistent decisions volume: the default path is /app/data, which
+      # is NOT mounted, so decisions would live in the container layer and vanish
+      # on recreate. Co-locating it with the YAML files also lets the startup
+      # YAML→SQLite auto-migration find them.
+      - CSTP_DB_PATH=${CSTP_DB_PATH:-/app/decisions/decisions.db}
     volumes:
       - ./config:/app/config:ro
       - ./guardrails:/app/guardrails:ro

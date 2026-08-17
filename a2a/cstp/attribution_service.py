@@ -194,7 +194,16 @@ async def update_decision_outcome(
     if dry_run:
         return True
 
+    # Tracked outside the try so the handler knows whether there is anything to
+    # undo: any failure after the file has been flipped to `reviewed` must put it
+    # back, or the outcome is stranded forever — later attribution runs skip a
+    # non-pending file and migration skips a decision whose store row exists.
+    original_bytes: bytes | None = None
+    yaml_written = False
+
     try:
+        original_bytes = path.read_bytes()
+
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
@@ -210,15 +219,79 @@ async def update_decision_outcome(
             with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             os.replace(temp_path, path)
-            return True
+            yaml_written = True
         except Exception:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise
 
+        # F050: the store is what calibration and listDecisions read, so a YAML-only
+        # attribution would never reach a Brier score. This path previously wrote no
+        # store record at all.
+        decision_id = data.get("id") or path.stem.rsplit("-decision-", 1)[-1]
+        from .storage.factory import get_decision_store
+
+        store = get_decision_store()
+        if await store.get(decision_id) is None:
+            # Not yet migrated. Insert the full record — already carrying the
+            # outcome — rather than deferring to the next startup migration.
+            # Returning True without it would be the worst of both: the YAML is no
+            # longer pending so attribution never revisits it, while list and
+            # calibration reads stay blind to the decision until a restart.
+            logger.info(
+                "Decision %s absent from store; inserting it with the attribution",
+                decision_id,
+            )
+            inserted = await store.save(decision_id, data)
+            if inserted is False:
+                logger.error(
+                    "Decision store rejected insert of %s; rolling back the YAML",
+                    decision_id,
+                )
+                _rollback(path, original_bytes)
+                return False
+            return True
+
+        updated = await store.update_outcome(
+            decision_id=decision_id,
+            outcome=outcome,
+            result=None,
+            lessons=None,
+            notes=reason,
+        )
+        if updated is False:
+            logger.error(
+                "Decision store rejected auto-attributed outcome for %s; "
+                "rolling back the YAML so the attribution can be retried",
+                decision_id,
+            )
+            _rollback(path, original_bytes)
+            return False
+        return True
+
     except Exception as e:
+        # Covers a raising store as well as a raising write. SQLite surfaces some
+        # failures as exceptions rather than a False return, so restoring only on
+        # the False path would still strand the outcome.
         logger.warning("Failed to update decision %s: %s", path, e)
+        if yaml_written:
+            _rollback(path, original_bytes)
         return False
+
+
+def _rollback(path: Path, original_bytes: bytes | None) -> None:
+    """Restore a decision file to its pre-attribution contents."""
+    if original_bytes is None:
+        return
+    try:
+        path.write_bytes(original_bytes)
+    except Exception as e:  # pragma: no cover - only on a second, disk-level failure
+        logger.error(
+            "Could not roll back %s after a failed attribution: %s — the file may "
+            "now be marked reviewed without a matching store record",
+            path,
+            e,
+        )
 
 
 async def attribute_outcomes(

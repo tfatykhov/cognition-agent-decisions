@@ -5,6 +5,7 @@ and MCP tools via Streamable HTTP transport.
 """
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -66,7 +67,9 @@ async def lifespan(app: FastAPI):
             set_decision_store,
         )
 
-        decision_store = get_decision_store()
+        # Pass the loaded StorageConfig so a `--config` YAML that names a backend
+        # or db_path is honoured; env still wins over both.
+        decision_store = get_decision_store(getattr(app.state.config, "storage", None))
         await decision_store.initialize()
         mark_store_initialized()
         app.state.decision_store = decision_store
@@ -76,9 +79,9 @@ async def lifespan(app: FastAPI):
         from .cstp.storage.sqlite import SQLiteDecisionStore
 
         if isinstance(decision_store, SQLiteDecisionStore):
-            from .cstp.storage.migrate import auto_migrate_if_empty
+            from .cstp.storage.migrate import auto_migrate_if_incomplete
 
-            migrated = await auto_migrate_if_empty(decision_store)
+            migrated = await auto_migrate_if_incomplete(decision_store)
             if migrated > 0:
                 logger.info("Auto-migrated %d decisions from YAML to SQLite", migrated)
     except Exception:
@@ -173,15 +176,18 @@ def create_app(config: Config | None = None) -> FastAPI:
     if config:
         app.state.config = config
 
-    # Configure CORS
-    cors_origins = config.server.cors_origins if config else ["*"]
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Configure CORS. Credentials are only allowed alongside an explicit origin
+    # allow-list: with allow_origins=["*"] Starlette reflects the request's Origin
+    # header, so pairing the two would mean "any origin, with credentials".
+    cors_origins = config.server.cors_origins if config else []
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials="*" not in cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     # Register routes
     _register_routes(app)
@@ -339,6 +345,20 @@ def run_server(
     # Override with CLI arguments if provided
     config.server.host = host
     config.server.port = port
+
+    # DeliberationTracker state lives in a process-local dict, so a client's
+    # preAction → recordThought → ready sequence must land on the same process.
+    # Refuse to start multi-worker rather than silently losing session state on
+    # whichever requests get load-balanced to the wrong worker.
+    workers = int(os.getenv("CSTP_WORKERS", "1"))
+    if workers > 1:
+        msg = (
+            f"CSTP_WORKERS={workers} is not supported: DeliberationTracker keeps "
+            "session state in process memory, so deliberation would be split across "
+            "workers and silently lost. Run a single worker until the tracker is "
+            "backed by shared storage."
+        )
+        raise SystemExit(msg)
 
     app = create_app(config)
     uvicorn.run(app, host=host, port=port)

@@ -9,15 +9,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -28,26 +28,67 @@ jobs:
           pip install fastapi uvicorn httpx pydantic
           # F054: CEL expression guardrails
           pip install "cel-python>=0.4,<1.0"
-      
+          # F056: dashboard suite (dashboard/tests) — see dashboard/requirements.txt
+          pip install flask flask-wtf
+
+      # No path argument: `testpaths` in pyproject.toml selects all three trees
+      # (tests/, a2a/cstp/tests/, dashboard/tests/). Passing `tests/` here would
+      # override testpaths and re-orphan the other two — that was the F056 bug.
+      # The coverage floor lives here rather than in addopts: a global floor would
+      # also apply to focused runs like `pytest tests/test_guardrails.py`, which
+      # cannot cover 80% of the package no matter how green they are.
       - name: Run tests
         run: |
-          pytest tests/ -v --tb=short
+          pytest -v --tb=short --cov-fail-under=80
         env:
           PYTHONPATH: src
 
   lint:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install ruff
         run: pip install ruff
-      
+
       - name: Run ruff
         run: ruff check src/ tests/ a2a/ --output-format=github
+
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy pyyaml networkx fastapi pydantic types-PyYAML
+
+      # Reporting-only for now: `mypy --strict` has a backlog of 184 pre-existing
+      # errors across 29 files, so failing the build would just make the check
+      # permanently red and teach everyone to ignore it. Publishing the count to
+      # the job summary each run makes the backlog visible and ratchetable —
+      # drop the `|| true` and add a threshold once it is near zero.
+      - name: Run mypy (reporting only)
+        run: |
+          set -o pipefail
+          mypy src/ a2a/ --no-error-summary 2>&1 | tee mypy.log || true
+          COUNT=$(grep -c ': error:' mypy.log || true)
+          echo "### mypy: ${COUNT} errors (baseline 184, non-blocking)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$COUNT" -gt 184 ]; then
+            echo "::warning::mypy errors rose above the 184 baseline to ${COUNT}"
+          fi
+        env:
+          PYTHONPATH: src
