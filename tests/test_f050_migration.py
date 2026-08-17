@@ -715,3 +715,63 @@ class TestFailedStoreWritesAreRetrySafe:
 
         reloaded = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert reloaded["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_attribution_inserts_decision_absent_from_store(
+        self, tmp_path: Path
+    ) -> None:
+        """Round 8: a not-yet-migrated decision must be inserted, not deferred.
+
+        Returning True without writing would leave the YAML non-pending — so
+        attribution never revisits it — while list and calibration reads stayed
+        blind to the decision until a restart happened to rerun migration.
+        """
+        from a2a.cstp.attribution_service import update_decision_outcome
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+
+        path = _write_yaml_decision(tmp_path, "ggg77777", {
+            "id": "ggg77777",
+            "decision": "Never migrated",
+            "confidence": 0.7,
+            "category": "process",
+            "stakes": "low",
+            "status": "pending",
+        })
+        assert await store.get("ggg77777") is None
+
+        assert await update_decision_outcome(path, "success", "PR merged") is True
+
+        stored = await store.get("ggg77777")
+        assert stored is not None, "attribution must insert the missing row"
+        assert stored["outcome"] == "success"
+        assert stored["status"] == "reviewed"
+
+    @pytest.mark.asyncio
+    async def test_attribution_rolls_back_when_insert_rejected(
+        self, tmp_path: Path
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.attribution_service import update_decision_outcome
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        store.save = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        set_decision_store(store)
+
+        path = _write_yaml_decision(tmp_path, "hhh88888", {
+            "id": "hhh88888",
+            "decision": "Never migrated",
+            "confidence": 0.7,
+            "category": "process",
+            "stakes": "low",
+            "status": "pending",
+        })
+
+        assert await update_decision_outcome(path, "success", "PR merged") is False
+        assert yaml.safe_load(path.read_text(encoding="utf-8"))["status"] == "pending"

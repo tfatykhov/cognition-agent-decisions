@@ -233,13 +233,23 @@ async def update_decision_outcome(
 
         store = get_decision_store()
         if await store.get(decision_id) is None:
-            # Not a write failure: the decision exists in YAML but has not been
-            # imported yet. The YAML update stands and migration will carry the
-            # outcome across, so don't report the attribution as failed.
+            # Not yet migrated. Insert the full record — already carrying the
+            # outcome — rather than deferring to the next startup migration.
+            # Returning True without it would be the worst of both: the YAML is no
+            # longer pending so attribution never revisits it, while list and
+            # calibration reads stay blind to the decision until a restart.
             logger.info(
-                "Decision %s not in store (pending migration); attributed in YAML only",
+                "Decision %s absent from store; inserting it with the attribution",
                 decision_id,
             )
+            inserted = await store.save(decision_id, data)
+            if inserted is False:
+                logger.error(
+                    "Decision store rejected insert of %s; rolling back the YAML",
+                    decision_id,
+                )
+                _rollback(path, original_bytes)
+                return False
             return True
 
         updated = await store.update_outcome(
