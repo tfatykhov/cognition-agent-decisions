@@ -50,13 +50,20 @@ class TestCalculateConfidenceStats:
         assert stats.bucket_counts["0.9-1.0"] == 1
 
     def test_std_dev_calculation(self) -> None:
-        """Test standard deviation calculation."""
+        """Test standard deviation calculation.
+
+        Identical inputs give zero variance mathematically, but summing
+        squared deviations of 0.85 leaves floating-point residue on the order
+        of 1e-16 — the exact value depends on the platform's libm and the
+        summation order, so an `== 0.0` assertion is not portable. Compare with
+        a tolerance instead.
+        """
         # All same value - std_dev should be 0
         decisions = [{"confidence": 0.85} for _ in range(10)]
         stats = calculate_confidence_stats(decisions)
 
         assert stats is not None
-        assert stats.std_dev == 0.0
+        assert stats.std_dev == pytest.approx(0.0, abs=1e-12)
 
     def test_varied_std_dev(self) -> None:
         """Test std dev with varied values."""
