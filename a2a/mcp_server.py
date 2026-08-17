@@ -1165,15 +1165,33 @@ async def _handle_list_breakers_mcp(arguments: dict[str, Any]) -> list[TextConte
 
 
 async def run_stdio() -> None:
-    """Run the MCP server with stdio transport."""
+    """Run the MCP server with stdio transport.
+
+    Owns the decision store lifecycle. The HTTP server gets this from the FastAPI
+    lifespan hook, but this entrypoint (`cstp-mcp`) never enters it, so without
+    the setup below SQLiteDecisionStore would serve every request with `_conn is
+    None`. Since store writes are authoritative, that failure would propagate to
+    the caller — and record_decision would delete the YAML file it had just
+    written, on the assumption the write never landed.
+    """
     logger.info("Starting CSTP MCP server (stdio transport)")
 
-    async with stdio_server() as (read_stream, write_stream):
-        await mcp_app.run(
-            read_stream,
-            write_stream,
-            mcp_app.create_initialization_options(),
-        )
+    from .cstp.storage.factory import get_decision_store, mark_initialized
+
+    store = get_decision_store()
+    await store.initialize()
+    mark_initialized()
+    logger.info("Decision store initialized (backend=%s)", type(store).__name__)
+
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            await mcp_app.run(
+                read_stream,
+                write_stream,
+                mcp_app.create_initialization_options(),
+            )
+    finally:
+        await store.close()
 
 
 def main() -> None:
