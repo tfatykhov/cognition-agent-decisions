@@ -555,3 +555,99 @@ class TestMalformedFilesDoNotRetriggerMigration:
         again = await auto_migrate_if_empty(store, str(decisions_dir))
         assert again == 3
         assert await store.get("bbb22222") is not None
+
+
+class TestFailedStoreWritesAreRetrySafe:
+    """Round 6: a store failure is detected only after YAML has been mutated.
+
+    Leaving that mutation in place breaks the retry in a different way for each
+    path — duplicated thoughts, permanently skipped attributions, phantom
+    duplicate decisions — so each one is undone.
+    """
+
+    @pytest.mark.asyncio
+    async def test_record_removes_orphan_file_so_retry_is_clean(
+        self, tmp_path: Path
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.decision_service import record_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        store.save = AsyncMock(side_effect=OSError("db down"))  # type: ignore[method-assign]
+        set_decision_store(store)
+
+        response = await record_decision(
+            _record_request("Never persisted"), decisions_path=str(tmp_path)
+        )
+        assert response.success is False
+        # No orphan left to be imported later as a phantom second copy.
+        assert list(tmp_path.rglob("*-decision-*.yaml")) == []
+
+    @pytest.mark.asyncio
+    async def test_append_thought_rolls_back_so_retry_does_not_duplicate(
+        self, tmp_path: Path
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.decision_service import append_thought, record_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+
+        recorded = await record_decision(
+            _record_request("Has a trace"), decisions_path=str(tmp_path)
+        )
+        assert recorded.success is True
+
+        healthy = store.update_fields
+        store.update_fields = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        failed = await append_thought(recorded.id, "first thought", str(tmp_path))
+        assert failed["success"] is False
+
+        # Retry against a healthy store must yield exactly one copy of the thought.
+        store.update_fields = healthy  # type: ignore[method-assign]
+        ok = await append_thought(recorded.id, "first thought", str(tmp_path))
+        assert ok["success"] is True
+        assert ok["step_number"] == 1, "rolled-back attempt must not consume a step"
+
+        stored = await store.get(recorded.id)
+        assert stored is not None
+        steps = (stored.get("deliberation") or {}).get("steps") or []
+        assert [s["thought"] for s in steps] == ["first thought"]
+
+    @pytest.mark.asyncio
+    async def test_attribution_rollback_keeps_decision_pending(
+        self, tmp_path: Path
+    ) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.attribution_service import update_decision_outcome
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+
+        path = _write_yaml_decision(tmp_path, "ddd44444", {
+            "id": "ddd44444",
+            "decision": "Awaiting attribution",
+            "confidence": 0.7,
+            "category": "process",
+            "stakes": "low",
+            "status": "pending",
+        })
+        await store.save("ddd44444", yaml.safe_load(path.read_text(encoding="utf-8")))
+
+        store.update_outcome = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        ok = await update_decision_outcome(path, "success", "PR merged")
+        assert ok is False
+
+        # Still pending, so the next attributeOutcomes run picks it up again.
+        reloaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert reloaded["status"] == "pending"
+        assert "outcome" not in reloaded

@@ -24,6 +24,25 @@ DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
 logger = logging.getLogger(__name__)
 
 
+def _restore_yaml(file_path: Any, original_bytes: bytes) -> str:
+    """Put a decision file back the way it was after a failed store write.
+
+    Used by the non-idempotent mutation paths, where leaving the YAML changed
+    would make a retry either duplicate work or be skipped entirely.
+
+    Returns a short note describing what happened, for the error payload.
+    """
+    try:
+        file_path.write_bytes(original_bytes)
+    except Exception as e:
+        logger.error("Rollback of %s failed: %s", file_path, e)
+        return (
+            f"The YAML file at {file_path} was modified and could not be rolled "
+            f"back ({e}); it may now disagree with the store."
+        )
+    return f"The YAML file at {file_path} was rolled back; the call is safe to retry."
+
+
 async def _persist_store_mutation(
     decision_id: str,
     what: str,
@@ -1033,35 +1052,29 @@ async def record_decision(
     # swallowed failure here would acknowledge a decision that no query can ever
     # return. The YAML file is left in place — it is the only remaining copy and
     # a later migration can still pick it up — but the call reports failure.
-    try:
-        store = get_decision_store()
-        saved = await store.save(decision_id, decision_data)
-    except Exception as e:
-        logger.error("DecisionStore save failed for %s: %s", decision_id, e)
+    store_error = await _persist_store_mutation(
+        decision_id,
+        "decision",
+        get_decision_store().save(decision_id, decision_data),
+    )
+    if store_error:
+        # Discard the file we just created. A retry mints a fresh decision_id, so
+        # keeping this one would leave an orphan that a later migration imports as
+        # a second, phantom copy of the same decision. Nothing is lost: the record
+        # was never acknowledged, and the caller still holds the payload.
+        try:
+            Path(file_path).unlink(missing_ok=True)
+            note = "The partial YAML file was removed; the call is safe to retry."
+        except Exception as e:
+            logger.error("Could not remove orphaned decision file %s: %s", file_path, e)
+            note = f"An orphaned YAML file remains at {file_path} ({e})."
         return RecordDecisionResponse(
             success=False,
             id=decision_id,
-            path=file_path,
+            path="",
             indexed=False,
             timestamp=now.isoformat(),
-            error=(
-                f"Failed to persist decision to store: {e}. "
-                f"The YAML file at {file_path} was written and can be re-imported."
-            ),
-        )
-
-    if saved is False:
-        logger.error("DecisionStore rejected save for %s", decision_id)
-        return RecordDecisionResponse(
-            success=False,
-            id=decision_id,
-            path=file_path,
-            indexed=False,
-            timestamp=now.isoformat(),
-            error=(
-                "Decision store rejected the write. "
-                f"The YAML file at {file_path} was written and can be re-imported."
-            ),
+            error=f"{store_error} {note}",
         )
 
     # Index to ChromaDB
@@ -1479,7 +1492,15 @@ async def append_thought(
     delib["steps"] = steps
     data["deliberation"] = delib
 
-    # Write back
+    # Appending is not idempotent, so the YAML mutation has to be undone if the
+    # store write fails — otherwise a client retrying after a transient failure
+    # rereads the already-appended YAML and adds the same thought again at the
+    # next step number, duplicating it in the trace once the store recovers.
+    try:
+        original_bytes = file_path.read_bytes()
+    except Exception as e:
+        return {"success": False, "error": f"Failed to read for rollback: {e}"}
+
     try:
         with open(file_path, "w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
@@ -1493,13 +1514,11 @@ async def append_thought(
         get_decision_store().update_fields(decision_id, deliberation=delib),
     )
     if store_error:
+        rollback_note = _restore_yaml(file_path, original_bytes)
         return {
             "success": False,
             "decision_id": decision_id,
-            "error": (
-                f"{store_error} The YAML file at {file_path} was updated "
-                "and can be re-imported."
-            ),
+            "error": f"{store_error} {rollback_note}",
         }
 
     return {

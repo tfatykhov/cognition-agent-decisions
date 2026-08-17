@@ -195,6 +195,8 @@ async def update_decision_outcome(
         return True
 
     try:
+        original_bytes = path.read_bytes()
+
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
@@ -240,9 +242,17 @@ async def update_decision_outcome(
             notes=reason,
         )
         if updated is False:
+            # Roll the YAML back to pending. Leaving it marked reviewed would
+            # strand the outcome permanently: the next attributeOutcomes run
+            # skips it because find_pending_decisions() no longer sees it as
+            # pending, and startup migration skips it because the stale store
+            # row already exists.
             logger.error(
-                "Decision store rejected auto-attributed outcome for %s", decision_id
+                "Decision store rejected auto-attributed outcome for %s; "
+                "rolling back the YAML so the attribution can be retried",
+                decision_id,
             )
+            path.write_bytes(original_bytes)
             return False
         return True
 
