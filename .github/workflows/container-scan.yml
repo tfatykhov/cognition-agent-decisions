@@ -46,7 +46,7 @@ jobs:
         run: docker build -f ${{ matrix.dockerfile }} -t cad-scan-${{ matrix.name }}:ci ${{ matrix.context }}
 
       - name: Scan ${{ matrix.name }} image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: cad-scan-${{ matrix.name }}:ci
           format: sarif

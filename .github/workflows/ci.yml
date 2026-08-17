@@ -59,10 +59,6 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    # Non-blocking on first landing: `mypy --strict` reports 184 pre-existing
-    # errors across 29 files. The step exists so the count is visible per-PR and
-    # can be ratcheted down; flip continue-on-error off once it reaches zero.
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +73,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install mypy pyyaml networkx fastapi pydantic types-PyYAML
 
-      - name: Run mypy
-        run: mypy src/ a2a/
+      # Reporting-only for now: `mypy --strict` has a backlog of 184 pre-existing
+      # errors across 29 files, so failing the build would just make the check
+      # permanently red and teach everyone to ignore it. Publishing the count to
+      # the job summary each run makes the backlog visible and ratchetable —
+      # drop the `|| true` and add a threshold once it is near zero.
+      - name: Run mypy (reporting only)
+        run: |
+          set -o pipefail
+          mypy src/ a2a/ --no-error-summary 2>&1 | tee mypy.log || true
+          COUNT=$(grep -c ': error:' mypy.log || true)
+          echo "### mypy: ${COUNT} errors (baseline 184, non-blocking)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$COUNT" -gt 184 ]; then
+            echo "::warning::mypy errors rose above the 184 baseline to ${COUNT}"
+          fi
         env:
           PYTHONPATH: src
