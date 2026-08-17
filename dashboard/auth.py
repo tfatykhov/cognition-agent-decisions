@@ -1,6 +1,7 @@
 """Basic authentication for Flask routes."""
 import secrets
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from functools import wraps
 from os import environ
@@ -28,12 +29,19 @@ LOCKOUT_SECONDS = 300
 # request and skip throttling altogether.
 TRUSTED_PROXIES = int(environ.get("DASHBOARD_TRUSTED_PROXIES", "0"))
 
-# Sweep expired entries once the failure table reaches this size. Chosen well
-# above any plausible number of simultaneously-failing legitimate clients, so
-# normal operation never pays for the scan.
-_SWEEP_THRESHOLD = 1024
+# Hard capacity for the failure table. Sweeping expired entries alone is not
+# enough: an attacker presenting many distinct client keys inside one window has
+# nothing expired to reclaim, so the table would keep growing and every insert
+# past the sweep point would also rescan it — memory growth plus CPU
+# amplification. At capacity the oldest entry is evicted instead.
+#
+# Eviction can in principle discard a real lockout, but that is inherent to any
+# bounded cache and is strictly better than unbounded growth: an attacker able
+# to evict entries must already be able to make MAX_TRACKED_CLIENTS distinct
+# failed attempts, which the eviction itself does nothing to help them with.
+MAX_TRACKED_CLIENTS = 4096
 
-_failed: dict[str, tuple[int, float]] = {}
+_failed: OrderedDict[str, tuple[int, float]] = OrderedDict()
 _failed_lock = Lock()
 
 
@@ -71,20 +79,16 @@ def record_failure(key: str, now: float | None = None) -> None:
     """Count a failed authentication attempt against this client."""
     now = time.monotonic() if now is None else now
     with _failed_lock:
-        # Entries are otherwise only evicted when the same key comes back, so an
-        # attacker rotating source addresses (or forwarded addresses behind a
-        # trusted proxy) would grow this dict without bound. Sweep expired keys
-        # once the table gets large rather than on every request.
-        if len(_failed) >= _SWEEP_THRESHOLD:
-            for stale in [
-                k for k, (_, seen) in _failed.items() if now - seen > LOCKOUT_SECONDS
-            ]:
-                del _failed[stale]
-
         count, first_seen = _failed.get(key, (0, now))
         if now - first_seen > LOCKOUT_SECONDS:
             count, first_seen = 0, now
         _failed[key] = (count + 1, first_seen)
+        # Insertion order tracks recency of first failure, so the oldest entry is
+        # the front of the OrderedDict. Evicting one per insert keeps the table at
+        # a fixed ceiling in O(1) — no scan, expired or not.
+        _failed.move_to_end(key)
+        while len(_failed) > MAX_TRACKED_CLIENTS:
+            _failed.popitem(last=False)
 
 
 def reset_failures(key: str) -> None:

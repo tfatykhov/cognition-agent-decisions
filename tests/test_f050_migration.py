@@ -515,3 +515,43 @@ class TestReviewDecisionStoreIsAuthoritative:
         stored = await store.get(decision_id)
         assert stored is not None
         assert stored["status"] == "reviewed"
+
+
+class TestMalformedFilesDoNotRetriggerMigration:
+    """Regression: an unparseable file must not make the gate unsatisfiable.
+
+    IDs are read from filenames, so a malformed file still contributes an ID that
+    can never be imported. Counting it as missing would rerun the full migration
+    on every restart, rewriting every parseable decision each time.
+    """
+
+    @pytest.mark.asyncio
+    async def test_malformed_file_does_not_force_rerun(self, decisions_dir: Path) -> None:
+        bad = decisions_dir / "2026" / "02" / "2026-02-18-decision-bad00000.yaml"
+        bad.write_text("", encoding="utf-8")
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+
+        first = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert first == 3  # the malformed file is not importable
+
+        second = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert second == 0, "malformed file must not retrigger the migration"
+
+    @pytest.mark.asyncio
+    async def test_malformed_file_does_not_mask_a_genuinely_missing_one(
+        self, decisions_dir: Path
+    ) -> None:
+        bad = decisions_dir / "2026" / "02" / "2026-02-18-decision-bad00001.yaml"
+        bad.write_text(": : : not yaml [[[", encoding="utf-8")
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        await auto_migrate_if_empty(store, str(decisions_dir))
+
+        # Drop one real decision; the next run must still notice and re-import it.
+        await store.delete("bbb22222")
+        again = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert again == 3
+        assert await store.get("bbb22222") is not None

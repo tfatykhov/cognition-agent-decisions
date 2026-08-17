@@ -187,3 +187,35 @@ class TestProxyAwareClientKey:
         # Before the fix both would have been the shared proxy address.
         assert a == "198.51.100.1"
         assert b == "198.51.100.2"
+
+
+class TestFailureTableBounded:
+    """Codex: sweeping only expired entries left a high-cardinality attack able to
+    grow the table without bound inside one window — and, past the sweep point,
+    to force a full rescan on every insert.
+    """
+
+    def setup_method(self) -> None:
+        auth._failed.clear()
+
+    def test_capacity_is_enforced_within_one_window(self) -> None:
+        """All keys are fresh, so nothing is expired and eviction must do the work."""
+        for i in range(auth.MAX_TRACKED_CLIENTS + 500):
+            record_failure(f"10.0.{i // 256}.{i % 256}", now=1000.0)
+
+        assert len(auth._failed) == auth.MAX_TRACKED_CLIENTS
+
+    def test_oldest_entries_are_evicted_first(self) -> None:
+        for i in range(auth.MAX_TRACKED_CLIENTS):
+            record_failure(f"key-{i}", now=1000.0)
+        assert "key-0" in auth._failed
+
+        record_failure("newcomer", now=1000.0)
+        assert "key-0" not in auth._failed
+        assert "newcomer" in auth._failed
+
+    def test_repeated_failures_do_not_inflate_the_table(self) -> None:
+        for _ in range(MAX_FAILED_ATTEMPTS * 3):
+            record_failure("1.2.3.4")
+        assert len(auth._failed) == 1
+        assert is_locked_out("1.2.3.4")

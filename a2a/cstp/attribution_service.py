@@ -210,11 +210,41 @@ async def update_decision_outcome(
             with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             os.replace(temp_path, path)
-            return True
         except Exception:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise
+
+        # F050: the store is what calibration and listDecisions read, so a YAML-only
+        # attribution would never reach a Brier score. This path previously wrote no
+        # store record at all.
+        decision_id = data.get("id") or path.stem.rsplit("-decision-", 1)[-1]
+        from .storage.factory import get_decision_store
+
+        store = get_decision_store()
+        if await store.get(decision_id) is None:
+            # Not a write failure: the decision exists in YAML but has not been
+            # imported yet. The YAML update stands and migration will carry the
+            # outcome across, so don't report the attribution as failed.
+            logger.info(
+                "Decision %s not in store (pending migration); attributed in YAML only",
+                decision_id,
+            )
+            return True
+
+        updated = await store.update_outcome(
+            decision_id=decision_id,
+            outcome=outcome,
+            result=None,
+            lessons=None,
+            notes=reason,
+        )
+        if updated is False:
+            logger.error(
+                "Decision store rejected auto-attributed outcome for %s", decision_id
+            )
+            return False
+        return True
 
     except Exception as e:
         logger.warning("Failed to update decision %s: %s", path, e)

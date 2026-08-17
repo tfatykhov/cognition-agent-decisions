@@ -148,35 +148,53 @@ async def auto_migrate_if_incomplete(
         logger.info("No YAML decision files found in %s", base)
         return 0
 
-    # IDs come from the filename (YYYY-MM-DD-decision-XXXXXXXX.yaml), so this
-    # costs one directory walk rather than parsing every file.
-    yaml_ids = {
-        stem.rsplit("-decision-", 1)[1]
-        for f in yaml_files
-        if "-decision-" in (stem := f.stem)
-    }
+    # IDs come from the filename (YYYY-MM-DD-decision-XXXXXXXX.yaml), so the common
+    # case — everything already imported — costs one directory walk and one lookup
+    # per file, with no YAML parsing at all.
+    by_id: dict[str, Path] = {}
+    for f in yaml_files:
+        stem = f.stem
+        if "-decision-" in stem:
+            by_id[stem.rsplit("-decision-", 1)[1]] = f
 
     try:
-        missing = [
+        absent = [
             decision_id
-            for decision_id in sorted(yaml_ids)
+            for decision_id in sorted(by_id)
             if await store.get(decision_id) is None
         ]
     except Exception:
         logger.warning("Could not inspect store contents, skipping auto-migration", exc_info=True)
         return 0
 
+    # A file that cannot be parsed can never be imported, so counting it as
+    # missing would make the gate permanently unsatisfiable and re-run the whole
+    # migration on every restart. Parsing happens only for absent IDs, so a fully
+    # migrated store still parses nothing.
+    missing = [
+        decision_id
+        for decision_id in absent
+        if _parse_yaml_decision(by_id[decision_id]) is not None
+    ]
+    unparseable = len(absent) - len(missing)
+    if unparseable:
+        logger.warning(
+            "%d YAML decision file(s) could not be parsed and will not be migrated",
+            unparseable,
+        )
+
     if not missing:
         logger.info(
-            "All %d YAML decisions are present in the store, skipping auto-migration",
-            len(yaml_ids),
+            "All importable YAML decisions (%d file(s)) are present in the store, "
+            "skipping auto-migration",
+            len(by_id),
         )
         return 0
 
     logger.info(
         "%d of %d YAML decisions missing from the store, running auto-migration...",
         len(missing),
-        len(yaml_ids),
+        len(by_id),
     )
     return await migrate_yaml_to_store(store, decisions_dir)
 

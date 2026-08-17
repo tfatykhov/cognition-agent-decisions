@@ -24,6 +24,43 @@ DECISIONS_PATH = os.getenv("DECISIONS_PATH", "decisions")
 logger = logging.getLogger(__name__)
 
 
+async def _persist_store_mutation(
+    decision_id: str,
+    what: str,
+    coro: Any,
+) -> str | None:
+    """Await a DecisionStore mutation and return an error string, or None on success.
+
+    Since F050 the store — not the YAML file — is what listDecisions, getStats,
+    queryDecisions, and calibration read. A mutation that only reaches YAML is
+    therefore invisible to every read path, so acknowledging one as success
+    reports a change the caller can never observe.
+
+    Both failure modes matter. Backends raise on some errors, and
+    SQLiteDecisionStore converts others into a `False` return, so checking only
+    for exceptions misses half of them.
+
+    Args:
+        decision_id: Decision being mutated, for the log line.
+        what: Short description of the mutation, used in the error message.
+        coro: Awaitable performing the store write.
+
+    Returns:
+        An error message suitable for a response payload, or None if it landed.
+    """
+    try:
+        result = await coro
+    except Exception as e:
+        logger.error("DecisionStore %s failed for %s: %s", what, decision_id, e)
+        return f"Failed to persist {what} to store: {e}"
+
+    if result is False:
+        logger.error("DecisionStore rejected %s for %s", what, decision_id)
+        return f"Decision store rejected the {what}."
+
+    return None
+
+
 @dataclass
 class Reason:
     """A reason supporting a decision."""
@@ -1373,12 +1410,23 @@ async def update_decision(
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
 
-    # F050: Dual-write to DecisionStore
-    try:
-        store = get_decision_store()
-        await store.update_fields(decision_id, **{k: updates[k] for k in applied})
-    except Exception as e:
-        logger.warning("DecisionStore update_fields failed: %s", e)
+    # F050: authoritative — the store is the read path (see _persist_store_mutation).
+    store_error = await _persist_store_mutation(
+        decision_id,
+        "field update",
+        get_decision_store().update_fields(
+            decision_id, **{k: updates[k] for k in applied}
+        ),
+    )
+    if store_error:
+        return {
+            "success": False,
+            "id": decision_id,
+            "error": (
+                f"{store_error} The YAML file at {file_path} was updated "
+                "and can be re-imported."
+            ),
+        }
 
     # Re-index
     indexed = await reindex_decision(decision_id, data, str(file_path))
@@ -1438,12 +1486,21 @@ async def append_thought(
     except Exception as e:
         return {"success": False, "error": f"Failed to write: {e}"}
 
-    # F050: Dual-write deliberation to DecisionStore
-    try:
-        store = get_decision_store()
-        await store.update_fields(decision_id, deliberation=delib)
-    except Exception as e:
-        logger.warning("DecisionStore deliberation update failed: %s", e)
+    # F050: authoritative — the store is the read path (see _persist_store_mutation).
+    store_error = await _persist_store_mutation(
+        decision_id,
+        "deliberation update",
+        get_decision_store().update_fields(decision_id, deliberation=delib),
+    )
+    if store_error:
+        return {
+            "success": False,
+            "decision_id": decision_id,
+            "error": (
+                f"{store_error} The YAML file at {file_path} was updated "
+                "and can be re-imported."
+            ),
+        }
 
     return {
         "success": True,
