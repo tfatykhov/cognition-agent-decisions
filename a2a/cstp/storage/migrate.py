@@ -120,17 +120,16 @@ async def auto_migrate_if_incomplete(
 
     Called during server startup.
 
-    Resumability matters here. The previous gate was "only run when the store is
+    Resumability matters here. The original gate was "only run when the store is
     empty", but `migrate_yaml_to_store` commits one record at a time with no
     surrounding transaction. A crash after the first save left a non-empty store,
     so the next startup skipped migration permanently and the remaining YAML
-    decisions became invisible to every read path. Comparing the store count to
-    the number of YAML files instead means an interrupted run simply resumes; the
-    saves are upserts, so re-importing is harmless.
+    decisions became invisible to every read path.
 
-    Note: if some YAML files are unparseable the count can never reach the file
-    total, so this re-runs each startup. That is idempotent and logged, and the
-    per-file parse warnings say which files are the problem.
+    The check is per-ID rather than a count comparison. Aggregate counts are not
+    sound: a store holding decisions recorded *after* an interrupted import can
+    match or exceed the YAML file total while specific YAML IDs are still
+    missing, which would strand exactly the files the resume exists to recover.
 
     Args:
         store: Initialized DecisionStore to check and populate.
@@ -149,24 +148,35 @@ async def auto_migrate_if_incomplete(
         logger.info("No YAML decision files found in %s", base)
         return 0
 
+    # IDs come from the filename (YYYY-MM-DD-decision-XXXXXXXX.yaml), so this
+    # costs one directory walk rather than parsing every file.
+    yaml_ids = {
+        stem.rsplit("-decision-", 1)[1]
+        for f in yaml_files
+        if "-decision-" in (stem := f.stem)
+    }
+
     try:
-        count = await store.count()
+        missing = [
+            decision_id
+            for decision_id in sorted(yaml_ids)
+            if await store.get(decision_id) is None
+        ]
     except Exception:
-        logger.warning("Could not check store count, skipping auto-migration", exc_info=True)
+        logger.warning("Could not inspect store contents, skipping auto-migration", exc_info=True)
         return 0
 
-    if count >= len(yaml_files):
+    if not missing:
         logger.info(
-            "Store has %d decisions for %d YAML files, skipping auto-migration",
-            count,
-            len(yaml_files),
+            "All %d YAML decisions are present in the store, skipping auto-migration",
+            len(yaml_ids),
         )
         return 0
 
     logger.info(
-        "Store has %d of %d YAML decisions, running auto-migration...",
-        count,
-        len(yaml_files),
+        "%d of %d YAML decisions missing from the store, running auto-migration...",
+        len(missing),
+        len(yaml_ids),
     )
     return await migrate_yaml_to_store(store, decisions_dir)
 

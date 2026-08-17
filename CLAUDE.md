@@ -46,7 +46,7 @@ Run `pytest` with **no path argument** — `testpaths` covers all three trees (`
 `a2a/cstp/tests/`, `dashboard/tests/`). Passing an explicit path overrides `testpaths` and
 silently skips the other two; that was the F056 CI bug.
 
-Pytest config is in `pyproject.toml`: async mode is auto, test paths are `tests/`, `a2a/cstp/tests/`, and `dashboard/tests/`, default flags are `-v --cov=a2a --cov-report=term-missing --cov-fail-under=80`. PYTHONPATH must include `src` (CI sets `PYTHONPATH=src`). Dashboard tests need `flask` and `flask-wtf`; `dashboard/conftest.py` puts the dashboard directory on `sys.path` so its production-style flat imports resolve under pytest.
+Pytest config is in `pyproject.toml`: async mode is auto, test paths are `tests/`, `a2a/cstp/tests/`, and `dashboard/tests/`, default flags are `-v --cov=a2a --cov-report=term-missing`. The 80% coverage floor is applied by CI (`--cov-fail-under=80` on the CI command), not in `addopts` — a global floor would fail focused runs like `pytest tests/test_guardrails.py`, which cannot cover 80% of the package. PYTHONPATH must include `src` (CI sets `PYTHONPATH=src`). Dashboard tests need `flask` and `flask-wtf`; `dashboard/conftest.py` puts the dashboard directory on `sys.path` so its production-style flat imports resolve under pytest.
 
 ## Lint and type check
 

@@ -28,6 +28,11 @@ LOCKOUT_SECONDS = 300
 # request and skip throttling altogether.
 TRUSTED_PROXIES = int(environ.get("DASHBOARD_TRUSTED_PROXIES", "0"))
 
+# Sweep expired entries once the failure table reaches this size. Chosen well
+# above any plausible number of simultaneously-failing legitimate clients, so
+# normal operation never pays for the scan.
+_SWEEP_THRESHOLD = 1024
+
 _failed: dict[str, tuple[int, float]] = {}
 _failed_lock = Lock()
 
@@ -66,6 +71,16 @@ def record_failure(key: str, now: float | None = None) -> None:
     """Count a failed authentication attempt against this client."""
     now = time.monotonic() if now is None else now
     with _failed_lock:
+        # Entries are otherwise only evicted when the same key comes back, so an
+        # attacker rotating source addresses (or forwarded addresses behind a
+        # trusted proxy) would grow this dict without bound. Sweep expired keys
+        # once the table gets large rather than on every request.
+        if len(_failed) >= _SWEEP_THRESHOLD:
+            for stale in [
+                k for k, (_, seen) in _failed.items() if now - seen > LOCKOUT_SECONDS
+            ]:
+                del _failed[stale]
+
         count, first_seen = _failed.get(key, (0, now))
         if now - first_seen > LOCKOUT_SECONDS:
             count, first_seen = 0, now

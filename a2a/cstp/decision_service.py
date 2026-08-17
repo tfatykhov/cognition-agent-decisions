@@ -1529,10 +1529,15 @@ async def review_decision(
             error=f"Failed to write updated decision: {e}",
         )
 
-    # F050: Dual-write outcome to DecisionStore
+    # F050: write the outcome to the DecisionStore. Authoritative for the same
+    # reason as record_decision: calibration and listDecisions read the store, so
+    # a swallowed failure here leaves an acknowledged review that never affects
+    # any Brier score. SQLiteDecisionStore.update_outcome() converts database
+    # errors into a False return, so the return value matters as much as the
+    # exception.
     try:
         store = get_decision_store()
-        await store.update_outcome(
+        updated = await store.update_outcome(
             decision_id=request.id,
             outcome=request.outcome,
             result=request.actual_result,
@@ -1540,7 +1545,34 @@ async def review_decision(
             notes=request.notes,
         )
     except Exception as e:
-        logger.warning("DecisionStore update_outcome failed: %s", e)
+        logger.error("DecisionStore update_outcome failed for %s: %s", request.id, e)
+        return ReviewDecisionResponse(
+            success=False,
+            id=request.id,
+            path=str(path),
+            status="store_write_failed",
+            reviewed_at=now.isoformat(),
+            reindexed=False,
+            error=(
+                f"Failed to persist outcome to store: {e}. "
+                f"The YAML file at {path} was updated and can be re-imported."
+            ),
+        )
+
+    if updated is False:
+        logger.error("DecisionStore rejected outcome update for %s", request.id)
+        return ReviewDecisionResponse(
+            success=False,
+            id=request.id,
+            path=str(path),
+            status="store_write_failed",
+            reviewed_at=now.isoformat(),
+            reindexed=False,
+            error=(
+                "Decision store rejected the outcome update. "
+                f"The YAML file at {path} was updated and can be re-imported."
+            ),
+        )
 
     # Re-index with outcome metadata
     reindexed = await reindex_decision(request.id, data, str(path))

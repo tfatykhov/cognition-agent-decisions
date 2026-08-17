@@ -375,3 +375,143 @@ class TestRecordDecisionStoreIsAuthoritative:
 
         assert response.success is True
         assert await store.get(response.id) is not None
+
+
+class TestMigrationGateUsesIds:
+    """Regression: resumability must be decided per-ID, not by aggregate counts.
+
+    A store can hold decisions recorded *after* an interrupted import, so its
+    total can match or exceed the YAML file count while specific YAML IDs are
+    still absent — stranding exactly the files a resume exists to recover.
+    """
+
+    @pytest.mark.asyncio
+    async def test_migrates_missing_ids_despite_sufficient_count(
+        self, decisions_dir: Path
+    ) -> None:
+        store = MemoryDecisionStore()
+        await store.initialize()
+
+        # Three unrelated decisions: count now equals the YAML file count (3),
+        # but none of the YAML IDs are present.
+        for i in range(3):
+            await store.save(f"unrelated{i}", {
+                "decision": f"Recorded after the interrupted import {i}",
+                "confidence": 0.5,
+                "category": "test",
+                "stakes": "low",
+                "status": "pending",
+            })
+        assert await store.count() == 3
+
+        count = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert count == 3, "count-based gate would have skipped these"
+        for yaml_id in ("aaa11111", "bbb22222", "ccc33333"):
+            assert await store.get(yaml_id) is not None
+
+    @pytest.mark.asyncio
+    async def test_mixed_present_and_missing_ids(self, decisions_dir: Path) -> None:
+        store = MemoryDecisionStore()
+        await store.initialize()
+
+        # One real YAML ID already imported, plus filler that inflates the count.
+        await store.save("aaa11111", {
+            "decision": "Already imported",
+            "confidence": 0.9,
+            "category": "architecture",
+            "stakes": "high",
+            "status": "reviewed",
+        })
+        for i in range(5):
+            await store.save(f"filler{i}", {
+                "decision": f"Unrelated {i}",
+                "confidence": 0.5,
+                "category": "test",
+                "stakes": "low",
+                "status": "pending",
+            })
+        assert await store.count() == 6  # well above the 3 YAML files
+
+        count = await auto_migrate_if_empty(store, str(decisions_dir))
+        assert count == 3
+        assert await store.get("bbb22222") is not None
+        assert await store.get("ccc33333") is not None
+
+
+class TestReviewDecisionStoreIsAuthoritative:
+    """Same class of bug as recordDecision: calibration reads the store, so a
+    swallowed outcome-write leaves an acknowledged review that never lands.
+    """
+
+    async def _recorded_id(self, store: Any, tmp_path: Path) -> str:
+        from a2a.cstp.decision_service import record_decision
+
+        response = await record_decision(
+            _record_request("Decision to review"), decisions_path=str(tmp_path)
+        )
+        assert response.success is True
+        return response.id
+
+    @pytest.mark.asyncio
+    async def test_raising_store_fails_the_review(self, tmp_path: Path) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.decision_service import ReviewDecisionRequest, review_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+        decision_id = await self._recorded_id(store, tmp_path)
+
+        store.update_outcome = AsyncMock(  # type: ignore[method-assign]
+            side_effect=OSError("db unreachable")
+        )
+        response = await review_decision(
+            ReviewDecisionRequest(id=decision_id, outcome="success"),
+            decisions_path=str(tmp_path),
+        )
+
+        assert response.success is False
+        assert "db unreachable" in (response.error or "")
+
+    @pytest.mark.asyncio
+    async def test_store_returning_false_fails_the_review(self, tmp_path: Path) -> None:
+        from unittest.mock import AsyncMock
+
+        from a2a.cstp.decision_service import ReviewDecisionRequest, review_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+        decision_id = await self._recorded_id(store, tmp_path)
+
+        store.update_outcome = AsyncMock(return_value=False)  # type: ignore[method-assign]
+        response = await review_decision(
+            ReviewDecisionRequest(id=decision_id, outcome="success"),
+            decisions_path=str(tmp_path),
+        )
+
+        assert response.success is False
+        assert "rejected" in (response.error or "").lower()
+
+    @pytest.mark.asyncio
+    async def test_healthy_store_review_succeeds(self, tmp_path: Path) -> None:
+        from a2a.cstp.decision_service import ReviewDecisionRequest, review_decision
+        from a2a.cstp.storage.factory import set_decision_store
+
+        store = MemoryDecisionStore()
+        await store.initialize()
+        set_decision_store(store)
+        decision_id = await self._recorded_id(store, tmp_path)
+
+        response = await review_decision(
+            ReviewDecisionRequest(id=decision_id, outcome="success"),
+            decisions_path=str(tmp_path),
+        )
+
+        assert response.success is True
+        stored = await store.get(decision_id)
+        assert stored is not None
+        assert stored["status"] == "reviewed"
