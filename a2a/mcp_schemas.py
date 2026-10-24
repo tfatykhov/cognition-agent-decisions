@@ -124,7 +124,7 @@ class ReasonInput(BaseModel):
         "intuition", "empirical", "elimination", "constraint",
     ] = Field(
         ...,
-        description="Type of reasoning: authority, analogy, analysis, pattern, intuition, empirical, elimination, or constraint",
+        description="Type of reason: authority, analogy, analysis, pattern, intuition, empirical, elimination, or constraint",
     )
     text: str = Field(
         ...,
@@ -171,7 +171,7 @@ class DeliberationStepSchema(BaseModel):
     )
     type: str | None = Field(
         default=None,
-        description="Reasoning type used: analysis, pattern, empirical, etc.",
+        description="Reason type used: analysis, pattern, empirical, etc.",
     )
     conclusion: bool = Field(
         default=False,
@@ -180,7 +180,7 @@ class DeliberationStepSchema(BaseModel):
 
 
 class DeliberationSchema(BaseModel):
-    """Full deliberation trace capturing chain-of-thought."""
+    """Full rationale trace: evidence gathered and the steps that combined it."""
 
     inputs: list[DeliberationInputSchema] | None = Field(
         default=None,
@@ -188,12 +188,12 @@ class DeliberationSchema(BaseModel):
     )
     steps: list[DeliberationStepSchema] | None = Field(
         default=None,
-        description="Reasoning steps showing how inputs were combined",
+        description="Rationale steps showing how inputs were combined",
     )
     total_duration_ms: int | None = Field(
         default=None,
         ge=0,
-        description="Total time spent deliberating in milliseconds",
+        description="Total time spent on this decision in milliseconds",
     )
 
 
@@ -255,11 +255,11 @@ class LogDecisionInput(BaseModel):
     decision_id: str | None = Field(
         default=None,
         description="Decision ID from pre_action to scope deliberation consumption. "
-        "Ensures only thoughts tracked for THIS decision are attached.",
+        "Ensures only notes tracked for THIS decision are attached.",
     )
     deliberation: DeliberationSchema | None = Field(
         default=None,
-        description="Chain-of-thought trace: inputs gathered, reasoning steps, and timing",
+        description="Rationale trace: inputs gathered, steps taken, and timing",
     )
     bridge: "BridgeSchema | None" = Field(
         default=None,
@@ -423,23 +423,23 @@ class RecordThoughtInput(BaseModel):
         ...,
         min_length=1,
         max_length=MAX_TEXT_CHARS,
-        description="Reasoning/chain-of-thought text to record",
+        description="Rationale note text to record",
     )
     agent_id: str | None = Field(
         default=None,
         description=(
             "Label for multi-agent isolation within this connection's token. "
-            "Thoughts from different agent_ids are tracked separately. "
+            "Notes from different agent_ids are tracked separately. "
             "Required when multiple agents share an MCP connection."
         ),
     )
     decision_id: str | None = Field(
         default=None,
         description=(
-            "Decision ID to scope thought to. In post-decision mode "
-            "(decision already recorded), appends to existing deliberation. "
+            "Decision ID to scope the note to. In post-decision mode "
+            "(decision already recorded), appends to the existing rationale trace. "
             "In pre-decision mode, scopes the tracker bucket so only "
-            "recordDecision with matching decision_id consumes these thoughts."
+            "recordDecision with matching decision_id consumes these notes."
         ),
     )
 
