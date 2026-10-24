@@ -265,8 +265,8 @@ async def list_tools() -> list[Tool]:
                 "Analyze which reason types (analysis, pattern, empirical, etc.) "
                 "correlate with better decision outcomes. Shows per-type success "
                 "rates, Brier scores, and diversity analysis (do decisions with "
-                "more diverse reasoning perform better?). Use to improve "
-                "decision-making by understanding which reasoning approaches work."
+                "more diverse reason types perform better?). Use to improve "
+                "decision quality by understanding which kinds of reasons work."
             ),
             inputSchema=_deref_schema(GetReasonStatsInput.model_json_schema()),
         ),
@@ -282,11 +282,11 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="record_thought",
             description=(
-                "Record a reasoning/chain-of-thought step in the deliberation "
-                "trace. In pre-decision mode (no decision_id), thoughts "
-                "accumulate and auto-attach to the next recorded decision. "
-                "In post-decision mode (with decision_id), appends to the "
-                "existing decision's deliberation trace."
+                "Record a short rationale note for the decision log. In "
+                "pre-decision mode (no decision_id), notes accumulate and "
+                "auto-attach to the next recorded decision. In post-decision "
+                "mode (with decision_id), appends to the existing decision's "
+                "rationale trace."
             ),
             inputSchema=_deref_schema(RecordThoughtInput.model_json_schema()),
         ),
@@ -307,7 +307,7 @@ async def list_tools() -> list[Tool]:
             name="get_session_context",
             description=(
                 "PRIMARY - Call at session start or when switching tasks. Returns "
-                "full cognitive context: agent profile (accuracy, Brier score, "
+                "full decision context: agent profile (accuracy, Brier score, "
                 "tendency), relevant past decisions, active guardrails, calibration "
                 "by category, overdue reviews, and confirmed patterns. Available in "
                 "JSON or markdown format for direct system prompt injection."
@@ -318,7 +318,7 @@ async def list_tools() -> list[Tool]:
         Tool(
             name="ready",
             description=(
-                "PRIMARY - Returns prioritized cognitive actions needing attention: "
+                "PRIMARY - Returns prioritized follow-up actions needing attention: "
                 "outcome reviews (overdue decisions), calibration drift (per-category "
                 "degradation), and stale pending decisions. Call during idle periods "
                 "or after completing tasks to discover maintenance work. Filter by "
