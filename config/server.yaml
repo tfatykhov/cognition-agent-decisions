@@ -11,7 +11,7 @@ server:
 agent:
   name: "cognition-engines"
   description: "Decision intelligence for AI agents"
-  version: "0.7.0"
+  # version defaults to the package version (a2a/_version.py); set it here only to override.
   url: "http://localhost:8100"
   contact: null
 

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from a2a._version import __version__
 from a2a.auth import AuthManager, set_auth_manager
 from a2a.config import AgentConfig, AuthConfig, AuthToken, Config, ServerConfig
 from a2a.cstp import get_dispatcher, register_methods
@@ -68,7 +69,7 @@ class TestHealthEndpoint:
         """Health endpoint should return version."""
         response = client.get("/health")
         data = response.json()
-        assert data["version"] == "0.7.0"
+        assert data["version"] == __version__
 
     def test_health_returns_uptime(self, client: TestClient) -> None:
         """Health endpoint should return uptime."""

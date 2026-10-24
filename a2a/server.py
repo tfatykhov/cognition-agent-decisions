@@ -17,6 +17,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from ._version import __version__
 from .auth import AuthManager, get_auth_manager, set_auth_manager, verify_bearer_token
 from .config import Config
 from .cstp import CstpDispatcher, get_dispatcher, register_methods
@@ -172,7 +173,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(
         title="CSTP Server",
         description="Cognition State Transfer Protocol - Decision Intelligence API",
-        version="0.7.0",
+        version=__version__,
         lifespan=lifespan,
     )
 
@@ -278,7 +279,7 @@ def _register_routes(app: FastAPI) -> None:
         uptime = time.monotonic() - start_time if start_time else 0.0
         response = HealthResponse(
             status="healthy",
-            version="0.7.0",
+            version=__version__,
             uptime_seconds=uptime,
             timestamp=datetime.now(UTC),
         )

@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from ._version import __version__
+
 
 @dataclass(slots=True)
 class AuthToken:
@@ -87,7 +89,7 @@ class AgentConfig:
 
     name: str = "cognition-engines"
     description: str = "Decision intelligence for AI agents"
-    version: str = "0.7.0"
+    version: str = __version__
     url: str = "http://localhost:8100"
     contact: str | None = None
 
@@ -214,7 +216,7 @@ class Config:
                 description=os.getenv(
                     "CSTP_AGENT_DESCRIPTION", "Decision intelligence for AI agents"
                 ),
-                version=os.getenv("CSTP_AGENT_VERSION", "0.7.0"),
+                version=os.getenv("CSTP_AGENT_VERSION", __version__),
                 url=os.getenv("CSTP_AGENT_URL", "http://localhost:8100"),
                 contact=os.getenv("CSTP_AGENT_CONTACT"),
             ),
