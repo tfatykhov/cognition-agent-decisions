@@ -40,7 +40,7 @@ jobs:
             context: dashboard
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build ${{ matrix.name }} image
         run: docker build -f ${{ matrix.dockerfile }} -t cad-scan-${{ matrix.name }}:ci ${{ matrix.context }}
