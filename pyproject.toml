@@ -39,7 +39,7 @@ mcp = [
     # Capped below 2: mcp 2.x has no Server.list_tools() decorator, which
     # a2a/mcp_server.py registers its handlers with, so an unpinned image build
     # crashes at startup.
-    "mcp>=1.10.0,<2",
+    "mcp>=1.10.0,<3",
     "pydantic>=2.0.0",
 ]
 dev = [
